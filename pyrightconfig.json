@@ -1,0 +1,22 @@
+{
+  "include": ["alerting_system", "tests"],
+  "exclude": ["build", "dist", "*.egg-info", ".eggs", "__pycache__", ".pytest_cache", ".ruff_cache", ".venv", ".venv.backup"],
+  "typeCheckingMode": "strict",
+  "reportMissingImports": "warning",
+  "reportMissingTypeStubs": "false",
+  "reportMissingModuleSource": "none",
+  "reportAny": "error",
+  "reportUnknownArgumentType": "warning",
+  "reportUnknownMemberType": "warning",
+  "reportUnknownParameterType": "warning",
+  "reportUnknownVariableType": "warning",
+  "reportMissingParameterType": "warning",
+  "reportArgumentType": "error",
+  "reportReturnType": "error",
+  "reportAssignmentType": "error",
+  "reportCallIssue": "error",
+  "reportGeneralTypeIssues": "error",
+  "reportIndexIssue": "error",
+  "reportOptionalMemberAccess": "error",
+  "reportAttributeAccessIssue": "error"
+}

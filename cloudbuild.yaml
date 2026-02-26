@@ -1,0 +1,79 @@
+# Cloud Build for alerting-system
+#
+# ARCHITECTURE: Test the artifact you deploy
+#   1. Pull base image
+#   2. Build Docker image
+#   3. Run quality gates INSIDE the image
+#   4. Push ONLY if tests pass
+#
+steps:
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'configure-docker'
+    args: ['auth', 'configure-docker', 'asia-northeast1-docker.pkg.dev', '--quiet']
+    waitFor: ['-']
+
+  - name: 'gcr.io/cloud-builders/gcloud'
+    id: 'ensure-repo'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud artifacts repositories describe unified-trading-system \
+          --location=asia-northeast1 &>/dev/null || \
+        gcloud artifacts repositories create unified-trading-system \
+          --repository-format=docker \
+          --location=asia-northeast1 \
+          --description="alerting-system and related service Docker images"
+    waitFor: ['-']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'pull-base-image'
+    args: ['pull', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-cloud-services/unified-cloud-services:latest']
+    waitFor: ['configure-docker']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build'
+    args:
+      - 'build'
+      - '-f'
+      - 'Dockerfile'
+      - '--build-arg'
+      - 'PROJECT_ID=$PROJECT_ID'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-system:$SHORT_SHA'
+      - '-t'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-system:latest'
+      - '.'
+    waitFor: ['pull-base-image', 'ensure-repo']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'quality-gates'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        set -e
+        docker run --rm \
+          --entrypoint "" \
+          -e CLOUD_BUILD=true \
+          -e CLOUD_MOCK_MODE=true \
+          -e GCP_PROJECT_ID=$PROJECT_ID \
+          -e GOOGLE_CLOUD_PROJECT=$PROJECT_ID \
+          asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-system:$SHORT_SHA \
+          /bin/bash -c "bash scripts/quality-gates.sh --no-fix --quick"
+    waitFor: ['build']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push'
+    args: ['push', '--all-tags', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-system']
+    waitFor: ['quality-gates']
+
+images:
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-system:$SHORT_SHA'
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-system:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'E2_HIGHCPU_8'
+
+timeout: '600s'

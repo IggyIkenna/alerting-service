@@ -1,0 +1,52 @@
+# See https://pre-commit.com for more information
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: mixed-line-ending
+      - id: detect-private-key
+
+
+  - repo: local
+    hooks:
+      - id: file-size-limit
+        name: Check file size limit
+        entry: bash -c 'find . -name "*.py" -size +500k -exec echo "File {} exceeds 500 lines" \; -exec false \;'
+        language: system
+        pass_filenames: false
+      
+      - id: no-backup-files
+        name: No backup files
+        entry: bash -c '! find . -name "*_backup.py" -o -name "*_original.py" -o -name "*_clean.py" | grep -q .'
+        language: system
+        pass_filenames: false  - repo: local
+    hooks:
+      - id: check-import-patterns
+        name: Check external import patterns
+        entry: python3 .cursor/scripts/check-import-patterns.py
+        language: python
+        files: \.py$
+        pass_filenames: false
+        stages: [commit]
+      - id: fix-import-patterns
+        name: Fix external import patterns (manual)
+        entry: python3 .cursor/scripts/check-import-patterns.py --fix
+        language: python
+        files: \.py$
+        pass_filenames: false
+        stages: [manual]

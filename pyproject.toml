@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "alerting-system"
+version = "0.1.0"
+description = "Multi-channel alerting (Slack, email, PagerDuty) for system health and trading events"
+readme = "README.md"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "api-contracts>=1.0.0,<2.0.0",
+    "unified-cloud-services>=2.0.0,<3.0.0",
+    "unified-events-interface>=1.0.0,<2.0.0",
+    "unified-config-interface>=1.0.0,<2.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=9.0.1,<10.0.0",
+    "pytest-asyncio>=0.25.0,<2.0.0",
+    "pytest-cov>=7.0.0,<8.0.0",
+    "ruff==0.15.0",
+    "pre-commit>=3.5.0",
+]
+
+[tool.uv.sources]
+api-contracts = { path = "../api-contracts" }
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["alerting_system*"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF"]
+ignore = ["E501"]  # line too long handled by formatter
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space" 
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+addopts = "-v --cov=alerting_system --cov-report=term-missing --cov-report=html"
+asyncio_mode = "auto"
+
+
+[tool.coverage.report]
+fail_under = 70  # Standard service
+show_missing = true
+skip_covered = false
+precision = 1
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+    "raise NotImplementedError",
+]
+
+[tool.basedpyright]
+# Enforce no Any/object — use specific types
+reportAny = "warning"
+reportUnknownVariableType = "warning"
+reportUnknownParameterType = "warning"
+reportUnknownMemberType = "warning"
+include = ["alerting_system"]
+exclude = ["tests", "**/__pycache__", ".venv*", "build", "dist"]
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
+reportMissingImports = "error"
+reportUnusedVariable = "warning"
+reportUnusedImport = "warning" 
