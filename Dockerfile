@@ -1,10 +1,10 @@
 # Multi-stage build for alerting-system
 #
-# Uses unified-cloud-services base from Artifact Registry.
+# Uses unified-trading-services base from Artifact Registry.
 # Cloud Build passes PROJECT_ID via --build-arg.
 
 ARG PROJECT_ID
-FROM asia-northeast1-docker.pkg.dev/${PROJECT_ID}/unified-cloud-services/unified-cloud-services:latest AS base
+FROM asia-northeast1-docker.pkg.dev/${PROJECT_ID}/unified-trading-services/unified-trading-services:latest AS base
 
 WORKDIR /app
 
@@ -28,5 +28,9 @@ COPY scripts/ /app/scripts/
 # Run quality gates (tests inside image)
 RUN bash scripts/quality-gates.sh --no-fix --quick
 
+# Create non-root user
+RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
+USER appuser
+
 # Default command
-CMD ["python", "-m", "alerting_system.main"]
+CMD ["python", "-m", "alerting_service.main", "--mode", "batch"]

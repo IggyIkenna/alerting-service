@@ -1,0 +1,103 @@
+Metadata-Version: 2.4
+Name: alerting-service
+Version: 0.1.0
+Summary: Multi-channel alerting (Slack, email, PagerDuty) for system health and trading events
+Requires-Python: <3.14,>=3.13
+Description-Content-Type: text/markdown
+Requires-Dist: unified-trading-library>=0.1.0
+Requires-Dist: unified-events-interface>=0.1.0
+Requires-Dist: unified-config-interface>=0.1.0
+Requires-Dist: unified-internal-contracts>=0.1.0
+Requires-Dist: fastapi<1.0.0,>=0.110.0
+Requires-Dist: uvicorn[standard]<1.0.0,>=0.27.0
+Requires-Dist: sse-starlette<2.0.0,>=1.6.1
+Requires-Dist: aiohttp<4.0.0,>=3.13.2
+Requires-Dist: httpx<1.0.0,>=0.28.1
+Requires-Dist: pyyaml<7.0.0,>=6.0.1
+Requires-Dist: anthropic<1.0.0,>=0.40.0
+Provides-Extra: dev
+Requires-Dist: pytest<10.0.0,>=9.0.1; extra == "dev"
+Requires-Dist: pytest-asyncio<2.0.0,>=0.25.0; extra == "dev"
+Requires-Dist: pytest-cov<8.0.0,>=7.0.0; extra == "dev"
+Requires-Dist: pytest-xdist<4.0.0,>=3.6.0; extra == "dev"
+Requires-Dist: pytest-timeout<3.0.0,>=2.4.0; extra == "dev"
+Requires-Dist: ruff==0.15.0; extra == "dev"
+Requires-Dist: basedpyright<2.0.0,>=1.21.0; extra == "dev"
+Requires-Dist: pip-audit<3.0.0,>=2.7.0; extra == "dev"
+Requires-Dist: bandit<2.0.0,>=1.7.0; extra == "dev"
+Requires-Dist: pre-commit<4.0.0,>=3.0; extra == "dev"
+
+# alerting-system
+
+Multi-channel alerting (Slack, email, PagerDuty) for system health and trading events
+
+## Type
+platform
+
+## Tech Stack
+Python
+
+## Mode Support
+- Batch: ❌
+- Live: ✅
+
+## Upstream Dependencies
+- unified-trading-services
+
+## Deployment
+cloud_run_services
+
+## Priority
+P1-high
+
+## Owner
+Harsh
+
+---
+
+## Development
+
+### Setup
+
+```bash
+# For Python services
+uv pip install -e ".[dev]"
+
+# Install pre-commit hooks
+pre-commit install
+
+# For UI services
+npm install
+```
+
+### Pre-commit Hooks
+
+Install and run pre-commit hooks:
+
+```bash
+# Install hooks (one-time setup)
+pre-commit install
+
+# Run hooks on all files
+pre-commit run --all-files
+
+# Hooks run automatically on commit
+git commit -m "your message"
+```
+
+### Quality Gates
+
+```bash
+bash scripts/quality-gates.sh        # Auto-fix
+bash scripts/quality-gates.sh --no-fix  # Verify
+```
+
+### Quickmerge
+
+```bash
+bash scripts/quickmerge.sh "commit message"
+```
+
+## Codex Reference
+
+See unified-trading-codex for all standards and patterns.

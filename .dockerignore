@@ -1,0 +1,105 @@
+# =============================================================================
+# Docker build exclusions for alerting-service
+# =============================================================================
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Build artifacts
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+.venv/
+.venv*/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Linting / type checking
+.mypy_cache/
+.ruff_cache/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Local development files
+.env
+.env.*
+*.env.local
+*.env.development
+central-element-323112-*.json
+*-credentials.json
+credentials.json
+
+# Logs
+logs/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+
+# Docker (don't nest)
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Node
+node_modules/
+
+# Notebooks
+*.ipynb
+.ipynb_checkpoints/
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.backup

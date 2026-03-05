@@ -1,4 +1,4 @@
-# Cloud Build for alerting-system
+# Cloud Build for alerting-service
 #
 # ARCHITECTURE: Test the artifact you deploy
 #   1. Pull base image
@@ -23,12 +23,12 @@ steps:
         gcloud artifacts repositories create unified-trading-system \
           --repository-format=docker \
           --location=asia-northeast1 \
-          --description="alerting-system and related service Docker images"
+          --description="alerting-service and related service Docker images"
     waitFor: ['-']
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'pull-base-image'
-    args: ['pull', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-cloud-services/unified-cloud-services:latest']
+    args: ['pull', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-library/unified-trading-library:latest']
     waitFor: ['configure-docker']
 
   - name: 'gcr.io/cloud-builders/docker'
@@ -40,9 +40,9 @@ steps:
       - '--build-arg'
       - 'PROJECT_ID=$PROJECT_ID'
       - '-t'
-      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-system:$SHORT_SHA'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:$SHORT_SHA'
       - '-t'
-      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-system:latest'
+      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:latest'
       - '.'
     waitFor: ['pull-base-image', 'ensure-repo']
 
@@ -59,18 +59,18 @@ steps:
           -e CLOUD_MOCK_MODE=true \
           -e GCP_PROJECT_ID=$PROJECT_ID \
           -e GOOGLE_CLOUD_PROJECT=$PROJECT_ID \
-          asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-system:$SHORT_SHA \
+          asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:$SHORT_SHA \
           /bin/bash -c "bash scripts/quality-gates.sh --no-fix --quick"
     waitFor: ['build']
 
   - name: 'gcr.io/cloud-builders/docker'
     id: 'push'
-    args: ['push', '--all-tags', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-system']
+    args: ['push', '--all-tags', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service']
     waitFor: ['quality-gates']
 
 images:
-  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-system:$SHORT_SHA'
-  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-system:latest'
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:$SHORT_SHA'
+  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY
