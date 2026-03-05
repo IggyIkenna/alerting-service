@@ -13,7 +13,7 @@ Python
 - Live: ✅
 
 ## Upstream Dependencies
-- unified-cloud-services
+- unified-trading-services
 
 ## Deployment
 cloud_run_services

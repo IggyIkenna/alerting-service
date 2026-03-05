@@ -18,15 +18,15 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import List, Tuple, Optional, Set
+from typing import List, Optional, Set, Tuple
 
 # External packages that should only use top-level imports
 EXTERNAL_PACKAGES = {
     'unified_config_interface',
     'unified_config_service',
     'unified_events_interface',
-    'unified_domain_services',
-    'unified_cloud_services',
+    'unified_domain_client',
+    'unified_trading_library',
     'unified_market_interface',
     'unified_trade_execution_interface',
     'unified_ml_interface',

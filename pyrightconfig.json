@@ -1,15 +1,28 @@
 {
-  "include": ["alerting_system", "tests"],
-  "exclude": ["build", "dist", "*.egg-info", ".eggs", "__pycache__", ".pytest_cache", ".ruff_cache", ".venv", ".venv.backup"],
+  "include": [
+    "alerting_service",
+    "tests"
+  ],
+  "exclude": [
+    "build",
+    "dist",
+    "*.egg-info",
+    ".eggs",
+    "__pycache__",
+    ".pytest_cache",
+    ".ruff_cache",
+    ".venv",
+    ".venv.backup"
+  ],
   "typeCheckingMode": "strict",
   "reportMissingImports": "warning",
-  "reportMissingTypeStubs": "false",
+  "reportMissingTypeStubs": false,
   "reportMissingModuleSource": "none",
   "reportAny": "error",
   "reportUnknownArgumentType": "warning",
-  "reportUnknownMemberType": "warning",
+  "reportUnknownMemberType": "error",
   "reportUnknownParameterType": "warning",
-  "reportUnknownVariableType": "warning",
+  "reportUnknownVariableType": "error",
   "reportMissingParameterType": "warning",
   "reportArgumentType": "error",
   "reportReturnType": "error",
@@ -18,5 +31,11 @@
   "reportGeneralTypeIssues": "error",
   "reportIndexIssue": "error",
   "reportOptionalMemberAccess": "error",
-  "reportAttributeAccessIssue": "error"
+  "reportAttributeAccessIssue": "error",
+  "venvPath": "..",
+  "venv": ".venv-workspace",
+  "extraPaths": [
+    "../unified-config-interface",
+    "../unified-internal-contracts"
+  ]
 }

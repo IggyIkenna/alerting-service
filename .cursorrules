@@ -36,7 +36,7 @@ Same `ruff==0.15.0` across Local, GitHub Actions, Cloud Build.
 
 ## Dependencies
 
-- **Upstream**: unified-cloud-services
+- **Upstream**: unified-trading-services
 - See: unified-trading-deployment-v2/configs/dependencies.yaml
 - See: unified-trading-codex/11-project-management/service-registry.yaml
 
@@ -102,15 +102,15 @@ See: `.cursor/rules/ssot-alignment-enforcement.mdc` for complete alignment rules
 # ✅ CORRECT - Top-level imports only
 from unified_config_interface import UnifiedCloudConfig, ConfigValidator
 from unified_events_interface import setup_events, log_event
-from unified_domain_services import InstrumentsDomainClient
-from unified_cloud_services import get_storage_client
+from unified_domain_client import InstrumentsDomainClient
+from unified_trading_services import get_storage_client
 from unified_market_interface import get_market_client
 from execution_algo_library import TWAP, VWAP
 
 # ❌ WRONG - Never use deep/nested imports for external libraries
 from unified_config_interface.core.config import UnifiedCloudConfig
 from unified_events_interface.logging.events import log_event
-from unified_domain_services.clients.instruments import InstrumentsDomainClient
+from unified_domain_client.clients.instruments import InstrumentsDomainClient
 ```
 
 ### Auto-Fix Violations
