@@ -1,11 +1,32 @@
+default_install_hook_types:
+  - pre-commit
+  - commit-msg
+
 # See https://pre-commit.com for more information
 repos:
+  # Conventional commit validation (feat:/fix:/chore:/docs:/refactor:/test:/ci:)
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v3.2.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.0
     hooks:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+
+
+# Prettier - TypeScript/JSON/Markdown formatter
+  - repo: https://github.com/pre-commit/mirrors-prettier
+    rev: v4.0.0-alpha.8
+    hooks:
+      - id: prettier
+        name: Format with Prettier
+        types_or: [ts, tsx, javascript, jsx, json, markdown, yaml]
+        additional_dependencies:
+          - prettier@3.6.2
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.6.0
@@ -34,7 +55,9 @@ repos:
         name: No backup files
         entry: bash -c '! find . -name "*_backup.py" -o -name "*_original.py" -o -name "*_clean.py" | grep -q .'
         language: system
-        pass_filenames: false  - repo: local
+        pass_filenames: false
+
+  - repo: local
     hooks:
       - id: check-import-patterns
         name: Check external import patterns
