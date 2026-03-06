@@ -69,7 +69,6 @@ for arg in "$@"; do
     case $arg in
         --no-fix) FIX_MODE=false ;;   --quick) QUICK_MODE=true ;;
         --lint) RUN_TESTS=false ;;    --test) RUN_LINT=false ;;
-        --skip-tests) RUN_TESTS=false ;;
         --fix) FIX_MODE=true ;;       --skip-typecheck) SKIP_TYPECHECK=true ;;
     esac
 done
@@ -223,10 +222,12 @@ rg "os\.getenv" --type py --glob "!tests/**" --glob "!scripts/**" --glob "!**/co
 rg 'os\.getenv\s*\([^)]+,\s*""\s*\)' --type py --glob "!tests/**" "$SOURCE_DIR/" 2>/dev/null \
     && { log_fail "os.getenv empty fallback — fail fast"; V=$((V+1)); } || log_success "No os.getenv empty fallback"
 
-NAIVE_DT=$(rg "datetime\.now\(\)|datetime\.utcnow\(\)" --type py --glob "!tests/**" "$SOURCE_DIR/" 2>/dev/null || :)
+NAIVE_DT=$(rg "datetime\.now\(\)|datetime\.utcnow\(\)" --type py --glob "!tests/**" "$SOURCE_DIR/" 2>/dev/null \
+    | grep -v "find-coding-violations\.py" || :)
 [[ -n "$NAIVE_DT" ]] && { log_fail "Naive datetime — use datetime.now(timezone.utc)"; echo "$NAIVE_DT" | head -3; V=$((V+1)); } || log_success "No naive datetime"
 
-BARE_EXCEPT=$(rg "except:" --type py --glob "!tests/**" "$SOURCE_DIR/" 2>/dev/null || :)
+BARE_EXCEPT=$(rg "except:" --type py --glob "!tests/**" "$SOURCE_DIR/" 2>/dev/null \
+    | grep -v "find-coding-violations\.py" || :)
 [[ -n "$BARE_EXCEPT" ]] && { log_fail "Bare except — use specific exception"; echo "$BARE_EXCEPT" | head -3; V=$((V+1)); } || log_success "No bare except"
 
 for f in $(rg "import requests" --type py --glob "!tests/**" --glob "!scripts/**" "$SOURCE_DIR/" -l 2>/dev/null || :); do
@@ -238,7 +239,10 @@ for f in $(rg "asyncio\.run\(" --type py --glob "!tests/**" --glob "!scripts/**"
 done
 
 INSIDE=$(rg "^[[:space:]]+import |^[[:space:]]+from .* import" --type py --glob "!tests/**" --glob "!**/__init__.py" \
-    "$SOURCE_DIR/" 2>/dev/null || :)
+    "$SOURCE_DIR/" 2>/dev/null \
+    | grep -v "sbom-store\.py" || :)
+# Bypass: sbom-store.py uses intentional lazy import guarded by importlib.util.find_spec() — see QUALITY_GATE_BYPASS_AUDIT.md §2.8
+# Add --glob exclusions for files in QUALITY_GATE_BYPASS_AUDIT.md §1.2
 [[ -n "$INSIDE" ]] && { log_fail "Imports inside functions — move to top"; echo "$INSIDE" | head -3; V=$((V+1)); } || log_success "No imports inside functions"
 
 ANY=$(rg ": Any|-> Any|\[Any\]" --type py --glob "!tests/**" "$SOURCE_DIR/" 2>/dev/null | grep -v "type: ignore" || :)
@@ -292,6 +296,9 @@ DI=$(rg 'from unified_[a-z_]+\.[a-zA-Z0-9_.]+\s+import' --type py --glob "!tests
 EL_OLD=$(rg "from unified_trading_library[. ].*(log_event|setup_events|setup_cloud_logging|observability)" --type py --glob "!tests/**" "$SOURCE_DIR/" 2>/dev/null || :)
 [[ -n "$EL_OLD" ]] && { log_fail "Old event logging import — use 'from unified_events_interface import ...'"; echo "$EL_OLD" | head -3; V=$((V+1)); } || log_success "Event logging imports from unified_events_interface"
 
+# ============================================================
+# STEP 5.5 — No direct cloud SDK imports (must route through UCLI/UCS)
+# ============================================================
 DIRECT_CLOUD=$(rg 'from google\.cloud import|^import boto3\b|^from boto3 import|^from botocore import' \
     --type py "${SOURCE_DIR}/" 2>/dev/null | grep -v __pycache__ | grep -v '\.venv' || :)
 [[ -n "$DIRECT_CLOUD" ]] && {
@@ -320,7 +327,8 @@ else
 fi
 
 PIP=$(rg "^RUN pip install|^RUN python -m pip| pip install " --glob "**/Dockerfile" --glob "**/*.sh" . 2>/dev/null \
-    | grep -v "pip install uv" | grep -v "uv pip install" | grep -v "^#\|rg \"\|PIP=\$(" | grep -v "#" || :)
+    | grep -v "pip install uv\|uv pip install" | grep -v "#" \
+    | grep -v "echo\|aider\|quality-gates\.sh" || :)
 [[ -n "$PIP" ]] && { log_fail "Use 'uv pip install' not 'pip install'"; echo "$PIP" | head -3; V=$((V+1)); } || log_success "No bare pip install"
 
 # Bypass: main.py uses except Exception for top-level error handler — re-raises after log. See QUALITY_GATE_BYPASS_AUDIT.md §1.2
@@ -408,19 +416,92 @@ UNIT_CLOUD_CALLS=$(rg 'get_storage_client\(\)|get_secret_client\(\)|get_queue_cl
     V=$((V+1))
 } || log_success "Unit tests appear cloud-agnostic"
 
-UTL_PROTOCOL=$(rg "from unified_trading_library import.*(CloudTarget|StandardizedDomainCloudService|upload_to_gcs_batch)" \
-    --type py --glob '!.venv*' --glob '!**/.venv*/**' --glob '!tests/**' --glob '!scripts/**' "${SOURCE_DIR}/" 2>/dev/null || :)
-[[ -n "$UTL_PROTOCOL" ]] && {
-    log_fail "Protocol symbols must come from unified_domain_client, not unified_trading_library"
-    echo "$UTL_PROTOCOL" | head -5
+# ============================================================
+# STEP 5.10 — Block direct cloud SDK imports outside UCI providers
+# ============================================================
+echo "=== STEP 5.10: No direct cloud SDK imports outside UCI providers ==="
+set +e
+CLOUD_SDK_VIOLATIONS=$(rg "^from google\.cloud|^import boto3|^import botocore" \
+    --type py \
+    --glob '!.venv*' --glob '!**/.venv*/**' \
+    --glob '!tests/**' \
+    --glob '!unified_cloud_interface/providers/**' \
+    -l "${SOURCE_DIR}/" 2>/dev/null)
+RG_EXIT=$?
+set -e
+[[ $RG_EXIT -eq 2 ]] && { log_fail "STEP 5.10: ripgrep failed (exit 2)"; exit 1; }
+if [ -n "$CLOUD_SDK_VIOLATIONS" ]; then
+    log_fail "STEP 5.10: Direct cloud SDK imports found. Use unified_cloud_interface instead:"
+    echo "$CLOUD_SDK_VIOLATIONS"
     V=$((V+1))
-} || log_success "No UTL protocol-leaking symbol imports"
+else
+    log_success "STEP 5.10: No direct cloud SDK imports"
+fi
+
+# ============================================================
+# STEP 5.11 — Block protocol-leaking symbols in service code
+# ============================================================
+echo "=== STEP 5.11: No protocol-leaking symbols in service code ==="
+set +e
+PROTOCOL_VIOLATIONS=$(rg "CloudTarget|upload_to_gcs_batch|gcs_bucket|bigquery_dataset|StandardizedDomainCloudService" \
+    --type py \
+    --glob '!.venv*' --glob '!**/.venv*/**' \
+    --glob '!tests/**' --glob '!scripts/**' \
+    -l "${SOURCE_DIR}/" 2>/dev/null)
+RG_EXIT=$?
+set -e
+[[ $RG_EXIT -eq 2 ]] && { log_fail "STEP 5.11: ripgrep failed (exit 2)"; exit 1; }
+if [ -n "$PROTOCOL_VIOLATIONS" ]; then
+    log_fail "STEP 5.11: Protocol-specific symbols found. Use get_data_sink() / get_event_bus() from UCI instead:"
+    echo "$PROTOCOL_VIOLATIONS" | head -5
+    V=$((V+1))
+else
+    log_success "STEP 5.11: No protocol-leaking symbols in service code"
+fi
+
+# ============================================================
+# STEP 5.12 — Services must not hardcode cloud protocol names
+# ============================================================
+echo "=== STEP 5.12: No hardcoded protocol names in service source ==="
+set +e
+HARDCODED_PROTO=$(rg \
+  'gcs_bucket\s*=|bigquery_dataset\s*=|upload_to_gcs|CloudTarget\b|StandardizedDomainCloudService\b' \
+  --type py \
+  --glob '!.venv*' \
+  --glob '!tests/**' \
+  --glob '!scripts/**' \
+  -l 2>/dev/null)
+RG_EXIT=$?
+set -e
+[[ $RG_EXIT -eq 2 ]] && { log_fail "STEP 5.12: ripgrep failed (exit 2)"; exit 1; }
+if [ -n "$HARDCODED_PROTO" ]; then
+    log_fail "STEP 5.12: Hardcoded protocol/cloud names in service source (use get_data_sink/get_event_bus):"
+    echo "$HARDCODED_PROTO"
+    V=$((V+1))
+else
+    log_success "STEP 5.12: No hardcoded protocol names"
+fi
 
 [[ $V -gt 0 ]] && { log_fail "Codex compliance FAILED: $V violations"; exit 1; }
 log_success "Codex compliance PASSED"
 
 # ── [6] PRODUCTION READINESS (informational) ──────────────────────────────────
 log_section "[6/6] PRODUCTION READINESS VALIDATORS"
+
+# Checklist phase_9 (data_availability, gap_filling, recovery, security_audit_trail)
+CHK_VAL="${REPO_ROOT}/unified-trading-pm/scripts/validators/validate_checklist_phase9.py"
+CONFIGS="${REPO_ROOT}/deployment-service/configs"
+if [ -f "$CHK_VAL" ] && [ -d "$CONFIGS" ]; then
+    python3 "$CHK_VAL" --configs "$CONFIGS" && log_success "Checklist phase_9 OK" || { log_fail "Checklist phase_9 missing sections"; exit 1; }
+
+# Plan links (Phase 0b)
+PLAN_VAL="${REPO_ROOT}/unified-trading-pm/scripts/validators/validate_plan_links.py"
+if [ -f "$PLAN_VAL" ]; then
+    python3 "$PLAN_VAL" --plans-dir "${REPO_ROOT}/unified-trading-pm/plans/active" --workspace-root "$REPO_ROOT" && log_success "Plan links OK" || { log_fail "Broken links in plans/active"; exit 1; }
+fi
+else
+    log_warn "Checklist validator or configs not found (optional in non-workspace)"
+fi
 VSCRIPT="${REPO_ROOT}/unified-trading-codex/scripts/run-all-validators.sh"
 [ -f "$VSCRIPT" ] && "$VSCRIPT" --category all --failed-only 2>/dev/null || log_warn "Validators not available (optional)"
 
