@@ -9,11 +9,12 @@ Usage:
 import argparse
 import asyncio
 import logging
+import uuid
 from typing import cast
 
 from unified_events_interface import log_event, setup_events
 from unified_internal_contracts import LifecycleEventType
-from unified_trading_library import GracefulShutdownHandler, PubSubEventSink
+from unified_trading_library import GracefulShutdownHandler, PubSubEventSink, start_memory_watchdog
 
 from .config import AlertingSystemConfig
 
@@ -58,15 +59,17 @@ async def main() -> None:
     # Initialize graceful shutdown handler (handles SIGTERM/SIGINT)
     _shutdown_handler = GracefulShutdownHandler()
 
-    log_event(LifecycleEventType.STARTED)
+    correlation_id = str(uuid.uuid4())
+    start_memory_watchdog("alerting-service")
+    log_event(LifecycleEventType.STARTED, details={"correlation_id": correlation_id})
 
     try:
         # TODO: Implement service logic
         pass
 
-        log_event(LifecycleEventType.STOPPED)
+        log_event(LifecycleEventType.STOPPED, details={"correlation_id": correlation_id})
     except (OSError, ValueError, RuntimeError) as e:
-        log_event(LifecycleEventType.FAILED, severity="ERROR", details={"error": str(e)})
+        log_event(LifecycleEventType.FAILED, severity="ERROR", details={"error": str(e), "correlation_id": correlation_id})
         raise
 
 
