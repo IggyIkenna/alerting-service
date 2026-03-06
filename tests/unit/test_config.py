@@ -1,6 +1,6 @@
 """Unit tests for alerting-service config."""
 
-from alerting_service.config import AlertingSystemConfig
+from alerting_system.config import AlertingSystemConfig
 
 
 def test_config_service_name() -> None:

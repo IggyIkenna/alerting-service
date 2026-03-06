@@ -1,13 +1,15 @@
 # Quality Gate Bypass Audit
 
-## Purpose
+This document records all quality gate bypasses (exceptions) for alerting-service.
+Goal: pass with zero bypasses after full library adoption.
 
-This file documents any quality gate bypasses (e.g. reportAny, E501, file size) that are explicitly allowed for this repo. Per strict-quality-gates: all bypasses must be documented here.
+## §1.1 — setup_events with sink (RESOLVED)
 
-## Current Bypasses
+main.py now uses `sink=MockEventSink()` from unified_events_interface. For production batch, consider GCSEventSink from unified-trading-services.
 
-None. All quality gates are enforced.
+## §1.2 — broad except Exception (main.py)
 
-## Audit History
-
-- 2026-03: Initial audit — no bypasses.
+**File:** `alerting_system/main.py`
+**Check:** broad except Exception — document in QUALITY_GATE_BYPASS_AUDIT.md
+**Rationale:** Top-level async main() uses `except Exception` to log FAILED and re-raise; does not swallow.
+**Action:** Consider narrowing to specific exceptions when service logic is implemented.
