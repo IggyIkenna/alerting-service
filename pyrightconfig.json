@@ -32,8 +32,6 @@
   "reportIndexIssue": "error",
   "reportOptionalMemberAccess": "error",
   "reportAttributeAccessIssue": "error",
-  "venvPath": "..",
-  "venv": ".venv-workspace",
   "extraPaths": [
     "../unified-config-interface",
     "../unified-events-interface"
