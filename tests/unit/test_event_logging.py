@@ -7,7 +7,7 @@ from unified_events_interface import log_event, setup_events
 
 def test_lifecycle_events() -> None:
     """Test that all required lifecycle events are logged"""
-    setup_events(service_name="alerting-system", mode="batch")
+    setup_events(service_name="alerting-system", mode="test")
 
     # Test basic lifecycle
     log_event("STARTED")

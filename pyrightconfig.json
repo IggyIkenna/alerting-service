@@ -1,6 +1,6 @@
 {
   "include": [
-    "alerting_service",
+    "alerting_system",
     "tests"
   ],
   "exclude": [
@@ -16,7 +16,7 @@
   ],
   "typeCheckingMode": "strict",
   "reportMissingImports": "warning",
-  "reportMissingTypeStubs": false,
+  "reportMissingTypeStubs": "none",
   "reportMissingModuleSource": "none",
   "reportAny": "error",
   "reportUnknownArgumentType": "warning",
@@ -32,10 +32,8 @@
   "reportIndexIssue": "error",
   "reportOptionalMemberAccess": "error",
   "reportAttributeAccessIssue": "error",
-  "venvPath": "..",
-  "venv": ".venv-workspace",
   "extraPaths": [
     "../unified-config-interface",
-    "../unified-internal-contracts"
+    "../unified-events-interface"
   ]
 }

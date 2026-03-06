@@ -12,17 +12,8 @@ description = "Multi-channel alerting (Slack, email, PagerDuty) for system healt
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "unified-trading-library>=0.1.0",
-    "unified-events-interface>=0.1.0",
-    "unified-config-interface>=0.1.0",
-    "unified-internal-contracts>=0.1.0",
-    "fastapi>=0.110.0,<1.0.0",
-    "uvicorn[standard]>=0.27.0,<1.0.0",
-    "sse-starlette>=1.6.1,<2.0.0",
-    "aiohttp>=3.13.2,<4.0.0",
-    "httpx>=0.28.1,<1.0.0",
-    "pyyaml>=6.0.1,<7.0.0",
-    "anthropic>=0.40.0,<1.0.0",
+    "unified-events-interface>=1.0.0,<2.0.0",
+    "unified-config-interface>=1.0.0,<2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -30,33 +21,25 @@ dev = [
     "pytest>=9.0.1,<10.0.0",
     "pytest-asyncio>=0.25.0,<2.0.0",
     "pytest-cov>=7.0.0,<8.0.0",
-    "pytest-xdist>=3.6.0,<4.0.0",
-    "pytest-timeout>=2.4.0,<3.0.0",
+    "pytest-xdist<4.0.0,>=3.6.0",
+    "pytest-timeout<3.0.0,>=2.4.0",
     "ruff==0.15.0",
-    "basedpyright>=1.21.0,<2.0.0",
-    "pip-audit>=2.7.0,<3.0.0",
-    "bandit>=1.7.0,<2.0.0",
+    "basedpyright<2.0.0,>=1.21.0",
+    "pip-audit<3.0.0,>=2.7.0",
+    "bandit<2.0.0,>=1.7.0",
     "pre-commit>=3.0,<4.0.0",
 ]
 
-[tool.uv.sources.unified-internal-contracts]
-path = "../unified-internal-contracts"
-
-[tool.uv.sources.unified-trading-library]
-path = "../unified-trading-library"
-
-[tool.uv.sources.unified-events-interface]
-path = "../unified-events-interface"
-
-[tool.uv.sources.unified-config-interface]
-path = "../unified-config-interface"
+[tool.uv.sources]
+unified-config-interface = { path = "../unified-config-interface" }
+unified-events-interface = { path = "../unified-events-interface" }
 
 [tool.setuptools.packages.find]
 where = [
     ".",
 ]
 include = [
-    "alerting_service*",
+    "alerting_system*",
 ]
 
 [tool.ruff]
@@ -75,7 +58,6 @@ select = [
     "C4",
     "SIM",
     "RUF",
-    "G",
 ]
 ignore = [
     "E501",
@@ -92,7 +74,7 @@ testpaths = [
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
-addopts = "-v --cov=alerting_service --cov-report=term-missing --cov-report=html"
+addopts = "-v --cov=alerting_system --cov-report=term-missing --cov-report=html"
 asyncio_mode = "auto"
 
 [tool.coverage.report]
@@ -108,23 +90,19 @@ exclude_lines = [
 ]
 
 [tool.basedpyright]
-pythonVersion = "3.13"
-typeCheckingMode = "standard"
 reportAny = "error"
-reportUnknownMemberType = "error"
+reportMissingTypeStubs = "none"
 reportUnknownVariableType = "error"
-reportUnknownArgumentType = "error"
 reportUnknownParameterType = "error"
+reportUnknownMemberType = "error"
 reportMissingTypeArgument = "error"
 reportMissingImports = "error"
 reportUnusedVariable = "warning"
-reportUntypedFunctionDecorator = "none"
-reportUntypedBaseClass = "none"
 reportUnusedImport = "warning"
-venvPath = "."
-venv = ".venv"
+pythonVersion = "3.13"
+typeCheckingMode = "standard"
 include = [
-    "alerting_service",
+    "alerting_system",
 ]
 exclude = [
     "tests",
@@ -132,8 +110,4 @@ exclude = [
     ".venv*",
     "build",
     "dist",
-]
-extraPaths = [
-    "../unified-config-interface",
-    "../unified-internal-contracts",
 ]
