@@ -69,14 +69,12 @@ run_timeout() {
 }
 
 # ── MODE ──────────────────────────────────────────────────────────────────────
-FIX_MODE=true; QUICK_MODE=false; RUN_LINT=true; RUN_TESTS=true; SKIP_TYPECHECK=false; SKIP_CODEX=false
+FIX_MODE=true; QUICK_MODE=false; RUN_LINT=true; RUN_TESTS=true; SKIP_TYPECHECK=false
 for arg in "$@"; do
     case $arg in
         --no-fix) FIX_MODE=false ;;   --quick) QUICK_MODE=true ;;
         --lint) RUN_TESTS=false ;;    --test) RUN_LINT=false ;;
         --fix) FIX_MODE=true ;;       --skip-typecheck) SKIP_TYPECHECK=true ;;
-        --skip-tests) RUN_TESTS=false ;;
-        --skip-codex) SKIP_CODEX=true ;;
     esac
 done
 
@@ -209,9 +207,6 @@ fi
 # All checks are blocking unless excluded via QUALITY_GATE_BYPASS_AUDIT.md.
 # Add inline --glob exclusions below only for bypasses documented in that file.
 log_section "[5/6] CODEX COMPLIANCE"
-if [ "$SKIP_CODEX" = "true" ]; then
-    echo -e "${YELLOW}⚠️  Codex compliance SKIPPED (--skip-codex flag)${NC}"
-else
 V=0
 
 rg "print\(" --type py --glob "!tests/**" --glob "!scripts/**" "$SOURCE_DIR/" 2>/dev/null \
@@ -284,8 +279,7 @@ DOMAIN_FROM_UCS=$(rg 'from unified_trading_library import.*(market_category|Doma
 
 # setup_events/setup_service uses sink= in production
 SETUP_NO_SINK=$(rg 'setup_(events|service)\s*\(' --type py \
-    --glob "!tests/**" --files-with-matches "$SOURCE_DIR/" 2>/dev/null \
-    | while read -r f; do grep -L 'sink=' "$f" 2>/dev/null; done || :)
+    --glob "!tests/**" "$SOURCE_DIR/" 2>/dev/null | grep -v 'sink=' || :)
 [[ -n "$SETUP_NO_SINK" ]] && { log_fail "setup_events()/setup_service() called without sink= in production code"; echo "$SETUP_NO_SINK" | head -5; ((V++)); } || log_success "setup_service() uses sink= in all production call sites"
 
 BAD_AUTH_SKIP=$(rg 'pytest\.skip.*[Cc]redential|pytest\.skip.*GOOGLE_APPLICATION_CREDENTIALS|if not.*gcp_credentials.*pytest\.skip\|if not.*cred_file.*pytest\.skip' \
@@ -341,8 +335,8 @@ else
 fi
 
 # pip install anywhere other than bootstrap (must use uv pip install)
-PIP=$(rg "^RUN pip install|^RUN python -m pip| pip install " --glob "**/Dockerfile" --glob "**/*.sh" --glob "!**/quality-gates.sh" . 2>/dev/null \
-    | grep -v "uv pip install" | grep -v "quality-gates.sh" | grep -v "setup.sh" | grep -v "quickmerge.sh" | grep -v "#" || :)
+PIP=$(rg "^RUN pip install|^RUN python -m pip| pip install " --glob "**/Dockerfile" --glob "**/*.sh" . 2>/dev/null \
+    | grep -v "pip install uv" | grep -v "#" || :)
 [[ -n "$PIP" ]] && { log_fail "Use 'uv pip install' not 'pip install'"; echo "$PIP" | head -3; ((V++)); } || log_success "No bare pip install"
 
 BE=$(rg "except Exception:" --type py --glob "!tests/**" "$SOURCE_DIR/" 2>/dev/null || :)
@@ -390,7 +384,7 @@ done
 
 # Security: pip-audit (BLOCKING — OSV vulnerability database check)
 if command -v pip-audit &>/dev/null; then
-    PIPAPI_PYTHON_LOCATION="$PROJECT_ROOT/.venv/bin/python" pip-audit --format json -o /tmp/pip-audit-output.json 2>/dev/null \
+    pip-audit --format json -o /tmp/pip-audit-output.json 2>/dev/null \
         && log_success "pip-audit clean" \
         || { log_fail "pip-audit vulnerabilities found"; ((V++)); }
     # Store SBOM audit trail in GCS (non-blocking — upload failure does not fail the build)
@@ -424,7 +418,7 @@ fi
 
 # CI/CD hygiene: ||true bypasses in quality gate scripts
 BYPASS=$(rg "\|\|true|\|\| true" --glob "**/quality-gates.sh" --glob "**/quality-gates.yml" . 2>/dev/null \
-    | grep -v "^#\|zombies\|pyright\|cleanup\|quality-gates" || :)
+    | grep -v "^#\|zombies\|pyright\|cleanup" || :)
 [[ -n "$BYPASS" ]] && { log_fail "||true bypass in quality gates — fix the root cause"; echo "$BYPASS" | head -3; ((V++)); } || log_success "No ||true quality gate bypasses"
 
 # ============================================================
@@ -440,7 +434,6 @@ UNIT_CLOUD_CALLS=$(rg 'get_storage_client\(\)|get_secret_client\(\)|get_queue_cl
 
 [[ $V -gt 0 ]] && { log_fail "Codex compliance FAILED: $V violations"; exit 1; }
 log_success "Codex compliance PASSED"
-fi  # end SKIP_CODEX
 
 # ── [6] PRODUCTION READINESS (informational) ──────────────────────────────────
 log_section "[6/6] PRODUCTION READINESS VALIDATORS"
