@@ -1,5 +1,5 @@
 Metadata-Version: 2.4
-Name: alerting-service
+Name: alerting-system
 Version: 0.1.0
 Summary: Multi-channel alerting (Slack, email, PagerDuty) for system health and trading events
 Requires-Python: <3.14,>=3.13
@@ -33,7 +33,7 @@ Python
 - Live: ✅
 
 ## Upstream Dependencies
-- unified-trading-services
+- unified-cloud-services
 
 ## Deployment
 cloud_run_services

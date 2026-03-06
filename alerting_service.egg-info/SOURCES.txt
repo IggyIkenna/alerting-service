@@ -18,3 +18,5 @@ alerting_service/core/__init__.py
 alerting_service/core/alert_store.py
 alerting_service/core/claude_slack_agent.py
 alerting_service/core/slack_dispatcher.py
+alerting_system/config.py
+alerting_system/main.py

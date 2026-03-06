@@ -1,0 +1,10 @@
+README.md
+pyproject.toml
+alerting_system/__init__.py
+alerting_system/config.py
+alerting_system/main.py
+alerting_system.egg-info/PKG-INFO
+alerting_system.egg-info/SOURCES.txt
+alerting_system.egg-info/dependency_links.txt
+alerting_system.egg-info/requires.txt
+alerting_system.egg-info/top_level.txt
