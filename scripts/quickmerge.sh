@@ -47,8 +47,10 @@ FILES_ARG=""
 DEP_BRANCH=""
 SKIP_TESTS=""
 SKIP_TYPECHECK=""
+SKIP_CODEX=""
 QUICK=false
 NO_PR=false
+SKIP_PREFLIGHT=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -68,12 +70,20 @@ while [[ $# -gt 0 ]]; do
       SKIP_TYPECHECK="--skip-typecheck"
       shift
       ;;
+    --skip-codex)
+      SKIP_CODEX="--skip-codex"
+      shift
+      ;;
     --quick)
       QUICK=true
       shift
       ;;
     --no-pr)
       NO_PR=true
+      shift
+      ;;
+    --skip-preflight)
+      SKIP_PREFLIGHT=true
       shift
       ;;
     --unit-only)
@@ -216,23 +226,27 @@ if [ "$REPO_NAME" = "unified-trading-pm" ]; then
 fi
 
 # ============================================================================
-# STAGE 2: PRE-FLIGHT AUDIT (always runs — never skipped)
+# STAGE 2: PRE-FLIGHT AUDIT (skippable with --skip-preflight in multi-agent environments)
 # ============================================================================
 echo "=========================================="
 echo "STAGE 2: Pre-flight Audit"
 echo "=========================================="
 
-PREFLIGHT_SCRIPT="$WORKSPACE_ROOT/unified-trading-pm/scripts/validation/pre-flight-audit.sh"
-if [ -f "$PREFLIGHT_SCRIPT" ]; then
-  if bash "$PREFLIGHT_SCRIPT" "$REPO_NAME"; then
-    echo "[$REPO_NAME] ✅ Pre-flight audit PASSED"
+if [ "$SKIP_PREFLIGHT" = "true" ]; then
+  echo "[$REPO_NAME] ⚠️  Pre-flight audit SKIPPED (--skip-preflight)"
+else
+  PREFLIGHT_SCRIPT="$WORKSPACE_ROOT/unified-trading-pm/scripts/validation/pre-flight-audit.sh"
+  if [ -f "$PREFLIGHT_SCRIPT" ]; then
+    if bash "$PREFLIGHT_SCRIPT" "$REPO_NAME"; then
+      echo "[$REPO_NAME] ✅ Pre-flight audit PASSED"
+    else
+      echo "[$REPO_NAME] ❌ Pre-flight audit FAILED"
+      exit 1
+    fi
   else
-    echo "[$REPO_NAME] ❌ Pre-flight audit FAILED"
+    echo "[$REPO_NAME] ❌ pre-flight-audit.sh not found at $PREFLIGHT_SCRIPT — required"
     exit 1
   fi
-else
-  echo "[$REPO_NAME] ❌ pre-flight-audit.sh not found at $PREFLIGHT_SCRIPT — required"
-  exit 1
 fi
 
 echo ""
@@ -287,7 +301,7 @@ echo ""
 
 if [ -f "scripts/quality-gates.sh" ]; then
   echo "[$REPO_NAME] Phase 1: auto-fix (ruff format + ruff check --fix)..."
-  bash scripts/quality-gates.sh $SKIP_TESTS $SKIP_TYPECHECK
+  bash scripts/quality-gates.sh $SKIP_TESTS $SKIP_TYPECHECK $SKIP_CODEX
 
   echo "[$REPO_NAME] Phase 2: verify (--no-fix mode)..."
   if ! bash scripts/quality-gates.sh --no-fix $SKIP_TESTS $SKIP_TYPECHECK; then

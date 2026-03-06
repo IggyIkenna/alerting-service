@@ -7,16 +7,17 @@
 #   4. Push ONLY if tests pass
 #
 steps:
-  - name: 'gcr.io/cloud-builders/gcloud'
-    id: 'configure-docker'
-    args: ['auth', 'configure-docker', 'asia-northeast1-docker.pkg.dev', '--quiet']
-    waitFor: ['-']
-
-  - name: 'gcr.io/cloud-builders/gcloud'
-    id: 'ensure-repo'
-    entrypoint: 'bash'
+  - name: "gcr.io/cloud-builders/gcloud"
+    id: "configure-docker"
     args:
-      - '-c'
+      ["auth", "configure-docker", "asia-northeast1-docker.pkg.dev", "--quiet"]
+    waitFor: ["-"]
+
+  - name: "gcr.io/cloud-builders/gcloud"
+    id: "ensure-repo"
+    entrypoint: "bash"
+    args:
+      - "-c"
       - |
         gcloud artifacts repositories describe unified-trading-system \
           --location=asia-northeast1 &>/dev/null || \
@@ -24,33 +25,37 @@ steps:
           --repository-format=docker \
           --location=asia-northeast1 \
           --description="alerting-service and related service Docker images"
-    waitFor: ['-']
+    waitFor: ["-"]
 
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'pull-base-image'
-    args: ['pull', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-library/unified-trading-library:latest']
-    waitFor: ['configure-docker']
-
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build'
+  - name: "gcr.io/cloud-builders/docker"
+    id: "pull-base-image"
     args:
-      - 'build'
-      - '-f'
-      - 'Dockerfile'
-      - '--build-arg'
-      - 'PROJECT_ID=$PROJECT_ID'
-      - '-t'
-      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:$SHORT_SHA'
-      - '-t'
-      - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:latest'
-      - '.'
-    waitFor: ['pull-base-image', 'ensure-repo']
+      [
+        "pull",
+        "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-library/unified-trading-library:latest",
+      ]
+    waitFor: ["configure-docker"]
 
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'quality-gates'
-    entrypoint: 'bash'
+  - name: "gcr.io/cloud-builders/docker"
+    id: "build"
     args:
-      - '-c'
+      - "build"
+      - "-f"
+      - "Dockerfile"
+      - "--build-arg"
+      - "PROJECT_ID=$PROJECT_ID"
+      - "-t"
+      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:$SHORT_SHA"
+      - "-t"
+      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:latest"
+      - "."
+    waitFor: ["pull-base-image", "ensure-repo"]
+
+  - name: "gcr.io/cloud-builders/docker"
+    id: "quality-gates"
+    entrypoint: "bash"
+    args:
+      - "-c"
       - |
         set -e
         docker run --rm \
@@ -58,22 +63,27 @@ steps:
           -e CLOUD_BUILD=true \
           -e CLOUD_MOCK_MODE=true \
           -e GCP_PROJECT_ID=$PROJECT_ID \
-          -e GOOGLE_CLOUD_PROJECT=$PROJECT_ID \
+          -e GCP_PROJECT_ID=$PROJECT_ID \
           asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:$SHORT_SHA \
           /bin/bash -c "bash scripts/quality-gates.sh --no-fix --quick"
-    waitFor: ['build']
+    waitFor: ["build"]
 
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'push'
-    args: ['push', '--all-tags', 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service']
-    waitFor: ['quality-gates']
+  - name: "gcr.io/cloud-builders/docker"
+    id: "push"
+    args:
+      [
+        "push",
+        "--all-tags",
+        "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service",
+      ]
+    waitFor: ["quality-gates"]
 
 images:
-  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:$SHORT_SHA'
-  - 'asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:latest'
+  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:$SHORT_SHA"
+  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:latest"
 
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: 'E2_HIGHCPU_8'
+  machineType: "E2_HIGHCPU_8"
 
-timeout: '600s'
+timeout: "600s"
