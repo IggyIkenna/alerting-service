@@ -20,7 +20,10 @@ def build_slack_blocks(event: AlertEvent, dashboard_url: str) -> dict[str, objec
                 "blocks": [
                     {
                         "type": "header",
-                        "text": {"type": "plain_text", "text": f"[{event.severity}] {event.message}"},
+                        "text": {
+                            "type": "plain_text",
+                            "text": f"[{event.severity}] {event.message}",
+                        },
                     },
                     {
                         "type": "section",

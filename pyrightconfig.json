@@ -1,8 +1,5 @@
 {
-  "include": [
-    "alerting_service",
-    "tests"
-  ],
+  "include": ["alerting_service", "tests"],
   "exclude": [
     "build",
     "dist",
@@ -32,10 +29,12 @@
   "reportIndexIssue": "error",
   "reportOptionalMemberAccess": "error",
   "reportAttributeAccessIssue": "error",
-  "venvPath": "..",
-  "venv": ".venv-workspace",
+  "venvPath": ".",
+  "venv": ".venv",
   "extraPaths": [
     "../unified-config-interface",
-    "../unified-internal-contracts"
+    "../unified-events-interface",
+    "../unified-internal-contracts",
+    "../unified-trading-library"
   ]
 }

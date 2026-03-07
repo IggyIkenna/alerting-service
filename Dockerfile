@@ -4,7 +4,7 @@
 # Cloud Build passes PROJECT_ID via --build-arg.
 
 ARG PROJECT_ID
-FROM asia-northeast1-docker.pkg.dev/${PROJECT_ID}/unified-trading-services/unified-trading-services:latest AS base
+FROM asia-northeast1-docker.pkg.dev/${PROJECT_ID}/unified-trading-library/unified-trading-library:latest AS base
 
 WORKDIR /app
 
