@@ -15,7 +15,9 @@ _auth_cfg = UnifiedCloudConfig()
 _disable_auth_raw = _auth_cfg.disable_auth
 _environment = _auth_cfg.environment
 if _disable_auth_raw and _environment == "production":
-    logging.getLogger(__name__).critical("DISABLE_AUTH=true is forbidden in production. Auth remains ENABLED.")
+    logging.getLogger(__name__).critical(
+        "DISABLE_AUTH=true is forbidden in production. Auth remains ENABLED."
+    )
     _disable_auth_raw = False
 DISABLE_AUTH: bool = _disable_auth_raw
 

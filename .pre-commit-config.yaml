@@ -17,8 +17,7 @@ repos:
         args: [--fix]
       - id: ruff-format
 
-
-# Prettier - TypeScript/JSON/Markdown formatter
+  # Prettier - TypeScript/JSON/Markdown formatter
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v4.0.0-alpha.8
     hooks:
@@ -29,19 +28,18 @@ repos:
           - prettier@3.6.2
 
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
       - id: check-json
       - id: check-added-large-files
-        args: ['--maxkb=1000']
+        args: ["--maxkb=1000"]
       - id: check-merge-conflict
       - id: check-case-conflict
       - id: mixed-line-ending
       - id: detect-private-key
-
 
   - repo: local
     hooks:
@@ -50,7 +48,7 @@ repos:
         entry: bash -c 'find . -name "*.py" -size +500k -exec echo "File {} exceeds 500 lines" \; -exec false \;'
         language: system
         pass_filenames: false
-      
+
       - id: no-backup-files
         name: No backup files
         entry: bash -c '! find . -name "*_backup.py" -o -name "*_original.py" -o -name "*_clean.py" | grep -q .'

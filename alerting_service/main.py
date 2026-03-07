@@ -14,7 +14,7 @@ from typing import cast
 
 from unified_events_interface import log_event, setup_events
 from unified_internal_contracts import LifecycleEventType
-from unified_trading_library import GracefulShutdownHandler, PubSubEventSink, start_memory_watchdog
+from unified_trading_library import GracefulShutdownHandler, PubSubEventSink, start_memory_watchdog, setup_tracing
 
 from .config import AlertingSystemConfig
 
@@ -52,9 +52,11 @@ async def main() -> None:
     sink = PubSubEventSink(project_id=config.gcp_project_id, topic_id=f"{config.service_name}-events")
     setup_events(
         service_name=config.service_name,
-        mode=cast(str, args.mode),
+        mode=cast(str, args.mode)
+
         sink=sink,
     )
+    setup_tracing("alerting-service")
 
     # Initialize graceful shutdown handler (handles SIGTERM/SIGINT)
     _shutdown_handler = GracefulShutdownHandler()
