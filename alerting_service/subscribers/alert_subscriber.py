@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 import uuid
 from collections.abc import AsyncIterator
 from typing import cast
@@ -39,6 +40,7 @@ from typing import cast
 from unified_cloud_interface import QueueClient, get_queue_client
 from unified_events_interface import log_event
 
+from ..metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 from ..notifiers.router import route_event
 
 logger = logging.getLogger(__name__)
@@ -181,8 +183,16 @@ class AlertSubscriber:
                         ),
                     )
                     for data, attrs in batch:
-                        event_name, enriched = self._process_message(data, attrs, subscription)
-                        route_event(event_name, enriched)
+                        _start = time.perf_counter()
+                        try:
+                            event_name, enriched = self._process_message(data, attrs, subscription)
+                            route_event(event_name, enriched)
+                            RECORDS_PROCESSED.labels(status="success").inc()
+                        except Exception:
+                            RECORDS_PROCESSED.labels(status="error").inc()
+                            raise
+                        finally:
+                            PROCESSING_LATENCY.observe(time.perf_counter() - _start)
                         yield event_name, enriched
 
                 await asyncio.sleep(self._poll_interval)
