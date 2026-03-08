@@ -1,15 +1,14 @@
 import logging
 
 from fastapi import APIRouter, Depends, FastAPI
-from unified_config_interface import UnifiedCloudConfig
 
 from alerting_service.api.routes.alerts import router as alerts_router
 from alerting_service.api.routes.health import router as health_router
-from alerting_service.auth import verify_api_key
+from alerting_service.auth import _auth_cfg, verify_api_key
 
 logger = logging.getLogger(__name__)
 
-_env = UnifiedCloudConfig().environment
+_env = _auth_cfg.environment
 app = FastAPI(
     title="Alerting System",
     version="1.0.0",

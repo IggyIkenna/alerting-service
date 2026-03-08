@@ -6,6 +6,7 @@ synchronous httpx POST to the webhook endpoint.
 """
 
 import logging
+from functools import lru_cache
 
 import httpx
 from unified_config_interface import UnifiedCloudConfig
@@ -15,6 +16,12 @@ from unified_trading_library import get_secret_client
 logger = logging.getLogger(__name__)
 
 _SECRET_NAME = "alerting-slack-webhook-url"
+
+
+@lru_cache(maxsize=1)
+def _get_cloud_config() -> UnifiedCloudConfig:
+    """Return singleton UnifiedCloudConfig instance."""
+    return UnifiedCloudConfig()
 
 
 def _get_webhook_url(project_id: str) -> str:
@@ -41,7 +48,7 @@ def send_message(
     Returns:
         True when Slack accepted the message (HTTP 200), False otherwise.
     """
-    config = UnifiedCloudConfig()
+    config = _get_cloud_config()
     project_id = config.gcp_project_id
 
     webhook_url = _get_webhook_url(project_id)
