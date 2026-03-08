@@ -14,6 +14,17 @@ which dispatches to PagerDuty and/or Slack according to routing rules.
 
 No direct google.cloud.pubsub_v1 imports — all PubSub access goes
 through get_queue_client() from unified_cloud_interface.
+
+Lifecycle event taxonomy (common events — alerting-service is a router, not a pipeline):
+  SERVICE_EVENT: VALIDATION_STARTED
+  SERVICE_EVENT: VALIDATION_COMPLETED
+  SERVICE_EVENT: VALIDATION_FAILED
+  SERVICE_EVENT: DATA_INGESTION_STARTED
+  SERVICE_EVENT: DATA_INGESTION_COMPLETED
+  SERVICE_EVENT: PROCESSING_STARTED
+  SERVICE_EVENT: PROCESSING_COMPLETED
+  SERVICE_EVENT: PERSISTENCE_STARTED
+  SERVICE_EVENT: PERSISTENCE_COMPLETED
 """
 
 from __future__ import annotations
@@ -115,6 +126,38 @@ class AlertSubscriber:
         """Signal the stream loop to stop after the current poll cycle."""
         self._running = False
 
+    def _process_message(
+        self,
+        data: bytes,
+        attrs: dict[str, str],
+        subscription: str,
+    ) -> tuple[str, dict[str, object]]:
+        """Deserialize one PubSub message and enrich it with tracing metadata.
+
+        Returns (event_name, enriched_details) ready to route and yield.
+        """
+        try:
+            raw: dict[str, object] = cast(dict[str, object], json.loads(data.decode("utf-8")))
+            correlation_id = str(raw.get("correlation_id") or uuid.uuid4())
+        except (json.JSONDecodeError, UnicodeDecodeError):
+            correlation_id = str(uuid.uuid4())
+
+        event_name, details = _deserialize_message(data)
+        enriched: dict[str, object] = {
+            **details,
+            "correlation_id": correlation_id,
+            "source": attrs.get("source", subscription),
+        }
+        log_event(
+            "ALERT_RECEIVED",
+            details={
+                "event_name": event_name,
+                "subscription": subscription,
+                "correlation_id": correlation_id,
+            },
+        )
+        return event_name, enriched
+
     async def stream(self) -> AsyncIterator[tuple[str, dict[str, object]]]:
         """Yield (event_name, details) pairs from all subscribed topics.
 
@@ -138,34 +181,7 @@ class AlertSubscriber:
                         ),
                     )
                     for data, attrs in batch:
-                        correlation_id: str
-                        try:
-                            raw: dict[str, object] = cast(
-                                dict[str, object], json.loads(data.decode("utf-8"))
-                            )
-                            correlation_id = str(raw.get("correlation_id") or uuid.uuid4())
-                        except (json.JSONDecodeError, UnicodeDecodeError):
-                            correlation_id = str(uuid.uuid4())
-
-                        event_name, details = _deserialize_message(data)
-
-                        # Inject correlation_id and source subscription into details
-                        # for downstream tracing — never mutate the original dict.
-                        enriched: dict[str, object] = {
-                            **details,
-                            "correlation_id": correlation_id,
-                            "source": attrs.get("source", subscription),
-                        }
-
-                        log_event(
-                            "ALERT_RECEIVED",
-                            details={
-                                "event_name": event_name,
-                                "subscription": subscription,
-                                "correlation_id": correlation_id,
-                            },
-                        )
-
+                        event_name, enriched = self._process_message(data, attrs, subscription)
                         route_event(event_name, enriched)
                         yield event_name, enriched
 
