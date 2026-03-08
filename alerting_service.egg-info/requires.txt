@@ -4,6 +4,7 @@ unified-config-interface<1.0.0,>=0.1.0
 unified-internal-contracts<1.0.0,>=0.1.0
 fastapi<1.0.0,>=0.110.0
 uvicorn[standard]<1.0.0,>=0.27.0
+prometheus-client<1.0.0,>=0.20.0
 sse-starlette<2.0.0,>=1.6.1
 aiohttp<4.0.0,>=3.13.2
 httpx<1.0.0,>=0.28.1

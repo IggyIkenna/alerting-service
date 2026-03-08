@@ -10,6 +10,7 @@ Requires-Dist: unified-config-interface<1.0.0,>=0.1.0
 Requires-Dist: unified-internal-contracts<1.0.0,>=0.1.0
 Requires-Dist: fastapi<1.0.0,>=0.110.0
 Requires-Dist: uvicorn[standard]<1.0.0,>=0.27.0
+Requires-Dist: prometheus-client<1.0.0,>=0.20.0
 Requires-Dist: sse-starlette<2.0.0,>=1.6.1
 Requires-Dist: aiohttp<4.0.0,>=3.13.2
 Requires-Dist: httpx<1.0.0,>=0.28.1

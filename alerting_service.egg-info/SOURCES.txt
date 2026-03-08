@@ -5,6 +5,7 @@ alerting_service/__main__.py
 alerting_service/auth.py
 alerting_service/config.py
 alerting_service/main.py
+alerting_service/metrics.py
 alerting_service.egg-info/PKG-INFO
 alerting_service.egg-info/SOURCES.txt
 alerting_service.egg-info/dependency_links.txt
