@@ -6,6 +6,7 @@ via a synchronous httpx POST to https://events.pagerduty.com/v2/enqueue.
 """
 
 import logging
+from functools import lru_cache
 from typing import Literal
 
 import httpx
@@ -19,6 +20,12 @@ _PAGERDUTY_ENQUEUE_URL = "https://events.pagerduty.com/v2/enqueue"
 _SECRET_NAME = "alerting-pagerduty-routing-key"
 
 PagerDutySeverity = Literal["critical", "error", "warning", "info"]
+
+
+@lru_cache(maxsize=1)
+def _get_cloud_config() -> UnifiedCloudConfig:
+    """Return singleton UnifiedCloudConfig instance."""
+    return UnifiedCloudConfig()
 
 
 def _get_routing_key(project_id: str) -> str:
@@ -46,7 +53,7 @@ def send_event(
     Returns:
         True when PagerDuty accepted the event (HTTP 202), False otherwise.
     """
-    config = UnifiedCloudConfig()
+    config = _get_cloud_config()
     project_id = config.gcp_project_id
 
     routing_key = _get_routing_key(project_id)
