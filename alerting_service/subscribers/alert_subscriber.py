@@ -188,7 +188,7 @@ class AlertSubscriber:
                             event_name, enriched = self._process_message(data, attrs, subscription)
                             route_event(event_name, enriched)
                             RECORDS_PROCESSED.labels(status="success").inc()
-                        except Exception:
+                        except BaseException:  # cleanup: record metric before re-raise
                             RECORDS_PROCESSED.labels(status="error").inc()
                             raise
                         finally:
