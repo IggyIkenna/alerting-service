@@ -24,6 +24,18 @@ def _make_http_response(status_code: int, text: str = "ok") -> MagicMock:
     return resp
 
 
+def _httpx_post_dispatch(url: str, **kwargs: object) -> MagicMock:
+    """URL-based httpx.post dispatcher — PagerDuty → 202, Slack → 200.
+
+    Both pagerduty.py and slack.py import the SAME httpx module, so patching
+    'pagerduty.httpx.post' and 'slack.httpx.post' separately overwrites the
+    same attribute. Use this single dispatcher + patch("httpx.post") instead.
+    """
+    if "pagerduty.com" in url:
+        return _make_http_response(202)
+    return _make_http_response(200)
+
+
 def _patch_pd_secret(routing_key: str = "integration-routing-key") -> MagicMock:
     """Return a mock secret client pre-configured with a PagerDuty routing key."""
     mock_client = MagicMock()
@@ -87,13 +99,7 @@ class TestKillSwitchRouting:
                 return_value=mock_slack_config,
             ),
             patch("alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret),
-            patch(
-                "alerting_service.notifiers.pagerduty.httpx.post",
-                return_value=_make_http_response(202),
-            ) as mock_pd_post,
-            patch(
-                "alerting_service.notifiers.slack.httpx.post", return_value=_make_http_response(200)
-            ),
+            patch("httpx.post", side_effect=_httpx_post_dispatch) as mock_http_post,
             patch("alerting_service.notifiers.router.log_event"),
             patch("alerting_service.notifiers.pagerduty.log_event"),
             patch("alerting_service.notifiers.slack.log_event"),
@@ -102,10 +108,10 @@ class TestKillSwitchRouting:
                 "KILL_SWITCH_ACTIVATED", {"strategy": "strat-1", "source": "execution-service"}
             )
 
-        mock_pd_post.assert_called_once()
-        pd_call_url = mock_pd_post.call_args[0][0]
-        assert pd_call_url == "https://events.pagerduty.com/v2/enqueue"
-        pd_json: dict[str, object] = mock_pd_post.call_args.kwargs["json"]
+        pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
+        assert pd_calls, "PagerDuty httpx.post was not called"
+        assert pd_calls[0].args[0] == "https://events.pagerduty.com/v2/enqueue"
+        pd_json: dict[str, object] = pd_calls[0].kwargs["json"]
         inner = pd_json["payload"]
         assert isinstance(inner, dict)
         assert inner["severity"] == "critical"
@@ -130,13 +136,7 @@ class TestKillSwitchRouting:
                 return_value=mock_slack_config,
             ),
             patch("alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret),
-            patch(
-                "alerting_service.notifiers.pagerduty.httpx.post",
-                return_value=_make_http_response(202),
-            ),
-            patch(
-                "alerting_service.notifiers.slack.httpx.post", return_value=_make_http_response(200)
-            ) as mock_slack_post,
+            patch("httpx.post", side_effect=_httpx_post_dispatch) as mock_http_post,
             patch("alerting_service.notifiers.router.log_event"),
             patch("alerting_service.notifiers.pagerduty.log_event"),
             patch("alerting_service.notifiers.slack.log_event"),
@@ -145,8 +145,9 @@ class TestKillSwitchRouting:
                 "KILL_SWITCH_ACTIVATED", {"strategy": "strat-1", "source": "execution-service"}
             )
 
-        mock_slack_post.assert_called_once()
-        slack_json: dict[str, object] = mock_slack_post.call_args.kwargs["json"]
+        slack_calls = [c for c in mock_http_post.call_args_list if "slack.com" in c.args[0]]
+        assert slack_calls, "Slack httpx.post was not called"
+        slack_json: dict[str, object] = slack_calls[0].kwargs["json"]
         assert "KILL_SWITCH_ACTIVATED" in str(slack_json["text"])
 
     def test_kill_switch_secrets_fetched_from_secret_manager(
@@ -159,27 +160,24 @@ class TestKillSwitchRouting:
         slack_secret = _patch_slack_secret()
 
         with (
+            # Patch _get_cloud_config directly in both notifiers to bypass
+            # @lru_cache — patching UnifiedCloudConfig alone has no effect
+            # when the lru_cache is already populated by an earlier test.
             patch(
-                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig",
+                "alerting_service.notifiers.pagerduty._get_cloud_config",
                 return_value=mock_pd_config,
             ),
             patch(
                 "alerting_service.notifiers.pagerduty.get_secret_client", return_value=pd_secret
             ) as mock_pd_sm,
             patch(
-                "alerting_service.notifiers.slack.UnifiedCloudConfig",
+                "alerting_service.notifiers.slack._get_cloud_config",
                 return_value=mock_slack_config,
             ),
             patch(
                 "alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret
             ) as mock_slack_sm,
-            patch(
-                "alerting_service.notifiers.pagerduty.httpx.post",
-                return_value=_make_http_response(202),
-            ),
-            patch(
-                "alerting_service.notifiers.slack.httpx.post", return_value=_make_http_response(200)
-            ),
+            patch("httpx.post", side_effect=_httpx_post_dispatch),
             patch("alerting_service.notifiers.router.log_event"),
             patch("alerting_service.notifiers.pagerduty.log_event"),
             patch("alerting_service.notifiers.slack.log_event"),
@@ -212,20 +210,16 @@ class TestKillSwitchRouting:
                 return_value=mock_slack_config,
             ),
             patch("alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret),
-            patch(
-                "alerting_service.notifiers.pagerduty.httpx.post",
-                return_value=_make_http_response(202),
-            ) as mock_pd_post,
-            patch(
-                "alerting_service.notifiers.slack.httpx.post", return_value=_make_http_response(200)
-            ),
+            patch("httpx.post", side_effect=_httpx_post_dispatch) as mock_http_post,
             patch("alerting_service.notifiers.router.log_event"),
             patch("alerting_service.notifiers.pagerduty.log_event"),
             patch("alerting_service.notifiers.slack.log_event"),
         ):
             route_event("KILL_SWITCH_ACTIVATED", {"source": "execution-service"})
 
-        pd_json: dict[str, object] = mock_pd_post.call_args.kwargs["json"]
+        pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
+        assert pd_calls, "PagerDuty httpx.post was not called"
+        pd_json: dict[str, object] = pd_calls[0].kwargs["json"]
         assert pd_json["routing_key"] == routing_key
 
     def test_kill_switch_details_forwarded_to_pagerduty(
@@ -252,20 +246,16 @@ class TestKillSwitchRouting:
                 return_value=mock_slack_config,
             ),
             patch("alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret),
-            patch(
-                "alerting_service.notifiers.pagerduty.httpx.post",
-                return_value=_make_http_response(202),
-            ) as mock_pd_post,
-            patch(
-                "alerting_service.notifiers.slack.httpx.post", return_value=_make_http_response(200)
-            ),
+            patch("httpx.post", side_effect=_httpx_post_dispatch) as mock_http_post,
             patch("alerting_service.notifiers.router.log_event"),
             patch("alerting_service.notifiers.pagerduty.log_event"),
             patch("alerting_service.notifiers.slack.log_event"),
         ):
             route_event("KILL_SWITCH_ACTIVATED", event_details)
 
-        pd_json: dict[str, object] = mock_pd_post.call_args.kwargs["json"]
+        pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
+        assert pd_calls, "PagerDuty httpx.post was not called"
+        pd_json: dict[str, object] = pd_calls[0].kwargs["json"]
         inner = pd_json["payload"]
         assert isinstance(inner, dict)
         assert inner["custom_details"] == event_details
@@ -292,18 +282,16 @@ class TestCircuitBreakerRouting:
                 return_value=mock_pd_config,
             ),
             patch("alerting_service.notifiers.pagerduty.get_secret_client", return_value=pd_secret),
-            patch(
-                "alerting_service.notifiers.pagerduty.httpx.post",
-                return_value=_make_http_response(202),
-            ) as mock_pd_post,
-            patch("alerting_service.notifiers.slack.httpx.post") as mock_slack_post,
+            patch("httpx.post", side_effect=_httpx_post_dispatch) as mock_http_post,
             patch("alerting_service.notifiers.router.log_event"),
             patch("alerting_service.notifiers.pagerduty.log_event"),
         ):
             route_event("CIRCUIT_BREAKER_OPEN", {"venue": "binance", "source": "execution-service"})
 
-        mock_pd_post.assert_called_once()
-        mock_slack_post.assert_not_called()
+        pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
+        slack_calls = [c for c in mock_http_post.call_args_list if "slack.com" in c.args[0]]
+        assert len(pd_calls) == 1, "Expected exactly 1 PagerDuty call"
+        assert len(slack_calls) == 0, "Expected no Slack calls for CIRCUIT_BREAKER_OPEN"
 
     def test_circuit_breaker_pd_payload_severity_critical(
         self,
@@ -317,17 +305,15 @@ class TestCircuitBreakerRouting:
                 return_value=mock_pd_config,
             ),
             patch("alerting_service.notifiers.pagerduty.get_secret_client", return_value=pd_secret),
-            patch(
-                "alerting_service.notifiers.pagerduty.httpx.post",
-                return_value=_make_http_response(202),
-            ) as mock_pd_post,
-            patch("alerting_service.notifiers.slack.httpx.post"),
+            patch("httpx.post", side_effect=_httpx_post_dispatch) as mock_http_post,
             patch("alerting_service.notifiers.router.log_event"),
             patch("alerting_service.notifiers.pagerduty.log_event"),
         ):
             route_event("CIRCUIT_BREAKER_OPEN", {"venue": "kraken"})
 
-        pd_json: dict[str, object] = mock_pd_post.call_args.kwargs["json"]
+        pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
+        assert pd_calls, "PagerDuty httpx.post was not called"
+        pd_json: dict[str, object] = pd_calls[0].kwargs["json"]
         inner = pd_json["payload"]
         assert isinstance(inner, dict)
         assert inner["severity"] == "critical"
@@ -345,17 +331,15 @@ class TestCircuitBreakerRouting:
                 return_value=mock_pd_config,
             ),
             patch("alerting_service.notifiers.pagerduty.get_secret_client", return_value=pd_secret),
-            patch(
-                "alerting_service.notifiers.pagerduty.httpx.post",
-                return_value=_make_http_response(202),
-            ) as mock_pd_post,
-            patch("alerting_service.notifiers.slack.httpx.post"),
+            patch("httpx.post", side_effect=_httpx_post_dispatch) as mock_http_post,
             patch("alerting_service.notifiers.router.log_event"),
             patch("alerting_service.notifiers.pagerduty.log_event"),
         ):
             route_event("CIRCUIT_BREAKER_OPEN", details)
 
-        pd_json: dict[str, object] = mock_pd_post.call_args.kwargs["json"]
+        pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
+        assert pd_calls, "PagerDuty httpx.post was not called"
+        pd_json: dict[str, object] = pd_calls[0].kwargs["json"]
         inner = pd_json["payload"]
         assert isinstance(inner, dict)
         assert inner["custom_details"] == details
