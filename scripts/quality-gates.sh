@@ -415,6 +415,22 @@ if [ -f "cloudbuild.yaml" ] && command -v gcloud &>/dev/null; then
     fi
 fi
 
+# Cloud Build required-steps canary check (WARN 3.14 — canonical template compliance)
+# Canonical template: unified-trading-pm/configs/cloudbuild-service-template.yaml
+# Required steps for service repos: build, quality-gates, push, scan-check
+if [ -f "cloudbuild.yaml" ]; then
+    CB_MISSING=()
+    grep -q 'id:.*"build"' cloudbuild.yaml || CB_MISSING+=("build")
+    grep -q 'id:.*"quality-gates"' cloudbuild.yaml || CB_MISSING+=("quality-gates")
+    grep -q 'id:.*"push"' cloudbuild.yaml || CB_MISSING+=("push")
+    grep -q 'id:.*"scan-check"' cloudbuild.yaml || CB_MISSING+=("scan-check")
+    if [ ${#CB_MISSING[@]} -eq 0 ]; then
+        log_success "cloudbuild.yaml has all required canonical steps (build, quality-gates, push, scan-check)"
+    else
+        log_warn "cloudbuild.yaml missing canonical steps: ${CB_MISSING[*]} — see unified-trading-pm/configs/cloudbuild-service-template.yaml"
+    fi
+fi
+
 # CI/CD hygiene: ||true bypasses in quality gate scripts
 BYPASS=$(rg "\|\|true|\|\| true" --glob "**/quality-gates.sh" --glob "**/quality-gates.yml" . 2>/dev/null \
     | grep -v "^#\|zombies\|pyright\|cleanup\|log_fail\|log_success\|log_warn\|:# " || :)
