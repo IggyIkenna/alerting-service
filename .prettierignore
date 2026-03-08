@@ -1,0 +1,4 @@
+# Cloud Build YAML files use mixed inline/block YAML arrays that
+# prettier v4 alpha cannot parse (SyntaxError: All collection items
+# must start at the same column). Exclude from prettier formatting.
+cloudbuild.yaml
