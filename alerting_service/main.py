@@ -8,15 +8,22 @@ Usage:
 
 import argparse
 import asyncio
+import contextlib
 import logging
 import uuid
 from typing import cast
 
 from unified_events_interface import log_event, setup_events
 from unified_internal_contracts import LifecycleEventType
-from unified_trading_library import GracefulShutdownHandler, PubSubEventSink, start_memory_watchdog, setup_tracing
+from unified_trading_library import (
+    GracefulShutdownHandler,
+    PubSubEventSink,
+    setup_tracing,
+    start_memory_watchdog,
+)
 
 from .config import AlertingSystemConfig
+from .subscribers.alert_subscriber import AlertSubscriber
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +46,29 @@ def _build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+async def _run_subscriber_until_shutdown(
+    subscriber: AlertSubscriber,
+    shutdown_handler: GracefulShutdownHandler,
+    poll_interval: float = 0.5,
+) -> None:
+    """Drive the subscriber stream and stop it when shutdown is requested.
+
+    Polls shutdown_handler.is_shutdown_requested() every *poll_interval* seconds
+    so that SIGTERM/SIGINT are honoured promptly without blocking the event loop.
+    """
+    subscriber_task = asyncio.create_task(subscriber.run_until_stopped())
+    try:
+        while not shutdown_handler.is_shutdown_requested():
+            if subscriber_task.done():
+                break
+            await asyncio.sleep(poll_interval)
+    finally:
+        subscriber.stop()
+        subscriber_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await subscriber_task
+
+
 async def main() -> None:
     """Main service logic."""
     global _shutdown_handler
@@ -49,11 +79,12 @@ async def main() -> None:
     config = AlertingSystemConfig()
 
     # Setup event logging
-    sink = PubSubEventSink(project_id=config.gcp_project_id, topic_id=f"{config.service_name}-events")
+    sink = PubSubEventSink(
+        project_id=config.gcp_project_id, topic_id=f"{config.service_name}-events"
+    )
     setup_events(
         service_name=config.service_name,
-        mode=cast(str, args.mode)
-
+        mode=cast(str, args.mode),
         sink=sink,
     )
     setup_tracing("alerting-service")
@@ -65,13 +96,18 @@ async def main() -> None:
     start_memory_watchdog("alerting-service")
     log_event(LifecycleEventType.STARTED, details={"correlation_id": correlation_id})
 
+    subscriber = AlertSubscriber(project_id=config.gcp_project_id)
+
     try:
-        # TODO: Implement service logic
-        pass
+        await _run_subscriber_until_shutdown(subscriber, _shutdown_handler)
 
         log_event(LifecycleEventType.STOPPED, details={"correlation_id": correlation_id})
     except (OSError, ValueError, RuntimeError) as e:
-        log_event(LifecycleEventType.FAILED, severity="ERROR", details={"error": str(e), "correlation_id": correlation_id})
+        log_event(
+            LifecycleEventType.FAILED,
+            severity="ERROR",
+            details={"error": str(e), "correlation_id": correlation_id},
+        )
         raise
 
 
