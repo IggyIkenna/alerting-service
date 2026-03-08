@@ -361,9 +361,9 @@ class TestPagerDutyNotifierIntegration:
             ),
             patch("alerting_service.notifiers.pagerduty.httpx.post"),
             patch("alerting_service.notifiers.pagerduty.log_event"),
+            pytest.raises(RuntimeError, match="alerting-pagerduty-routing-key"),
         ):
-            with pytest.raises(RuntimeError, match="alerting-pagerduty-routing-key"):
-                send_event(summary="test", severity="info", source="alerting-service", details={})
+            send_event(summary="test", severity="info", source="alerting-service", details={})
 
     @pytest.mark.parametrize("severity", ["critical", "error", "warning", "info"])
     def test_send_event_all_valid_severities_accepted(
@@ -673,6 +673,6 @@ class TestSlackNotifierIntegration:
             ),
             patch("alerting_service.notifiers.slack.httpx.post"),
             patch("alerting_service.notifiers.slack.log_event"),
+            pytest.raises(RuntimeError, match="alerting-slack-webhook-url"),
         ):
-            with pytest.raises(RuntimeError, match="alerting-slack-webhook-url"):
-                send_message(text="test")
+            send_message(text="test")

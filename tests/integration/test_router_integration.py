@@ -571,9 +571,9 @@ class TestSecretManagerMissingSecret:
             ),
             patch("alerting_service.notifiers.router.log_event"),
             patch("alerting_service.notifiers.slack.log_event"),
+            pytest.raises(RuntimeError, match="alerting-pagerduty-routing-key"),
         ):
-            with pytest.raises(RuntimeError, match="alerting-pagerduty-routing-key"):
-                route_event("CIRCUIT_BREAKER_OPEN", {"venue": "binance"})
+            route_event("CIRCUIT_BREAKER_OPEN", {"venue": "binance"})
 
     def test_missing_slack_secret_raises_runtime_error(
         self,
@@ -591,6 +591,6 @@ class TestSecretManagerMissingSecret:
             patch("alerting_service.notifiers.pagerduty.httpx.post"),
             patch("alerting_service.notifiers.slack.httpx.post"),
             patch("alerting_service.notifiers.router.log_event"),
+            pytest.raises(RuntimeError, match="alerting-slack-webhook-url"),
         ):
-            with pytest.raises(RuntimeError, match="alerting-slack-webhook-url"):
-                route_event("PREFLIGHT_FAILED", {"session": "2026-01-15"})
+            route_event("PREFLIGHT_FAILED", {"session": "2026-01-15"})

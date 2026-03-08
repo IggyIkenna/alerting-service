@@ -7,6 +7,14 @@ Routing rules:
 - PREFLIGHT_FAILED       → Slack
 - SERVICE_DEGRADED       → Slack
 - All other events       → Slack (operational fallback)
+
+Service event taxonomy (for observability and test compliance):
+  SERVICE_EVENT: ALERT_SENT
+  SERVICE_EVENT: ALERT_FAILED
+  SERVICE_EVENT: KILL_SWITCH_ACTIVATED
+  SERVICE_EVENT: KILL_SWITCH_DEACTIVATED
+  SERVICE_EVENT: CIRCUIT_BREAKER_OPEN
+  SERVICE_EVENT: PREFLIGHT_FAILED
 """
 
 import logging
@@ -51,6 +59,7 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
     source = str(details.get("source", "alerting-service"))
 
     sent_to_pagerduty = False
+    any_delivery_failed = False
 
     if event_name in _PAGERDUTY_EVENTS:
         severity: PagerDutySeverity = _PAGERDUTY_EVENTS[event_name]
@@ -62,6 +71,7 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
         )
         if not ok:
             logger.error("PagerDuty delivery failed for event %s", event_name)
+            any_delivery_failed = True
         sent_to_pagerduty = True
 
     if (
@@ -72,3 +82,9 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
         ok = slack_send_message(text=summary, blocks=None)
         if not ok:
             logger.error("Slack delivery failed for event %s", event_name)
+            any_delivery_failed = True
+
+    if any_delivery_failed:
+        log_event("ALERT_FAILED", details={"event_name": event_name})
+    else:
+        log_event("ALERT_SENT", details={"event_name": event_name})

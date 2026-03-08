@@ -80,13 +80,11 @@ async def main() -> None:
 
     # Setup event logging
     sink = PubSubEventSink(
-        project_id=config.gcp_project_id, topic_id=f"{config.service_name}-events"
-    )
-    setup_events(
+        project_id=config.gcp_project_id,
+        topic=f"{config.service_name}-events",
         service_name=config.service_name,
-        mode=cast(str, args.mode),
-        sink=sink,
     )
+    setup_events(sink=sink, service_name=config.service_name, mode=cast(str, args.mode))
     setup_tracing("alerting-service")
 
     # Initialize graceful shutdown handler (handles SIGTERM/SIGINT)
@@ -109,7 +107,3 @@ async def main() -> None:
             details={"error": str(e), "correlation_id": correlation_id},
         )
         raise
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
