@@ -29,7 +29,7 @@ set -e
 # ── REPO-SPECIFIC SETTINGS ────────────────────────────────────────────────────
 SERVICE_NAME="alerting-service"          # e.g. instruments-service
 SOURCE_DIR="alerting_service"            # e.g. instruments_service  (underscore form)
-MIN_COVERAGE=70  # Template default — set to (actual coverage - 1%) after first test run. See test-coverage-targets.mdc
+MIN_COVERAGE=78  # Calibrated: actual 79.44% (2026-03-08) → floor(79.44 - 1) = 78
 RUN_INTEGRATION=false              # Set true when integration tests are stable
 PYTEST_WORKERS=${PYTEST_WORKERS:-2} # Default 2; override via env (cap to avoid OOM)
 
