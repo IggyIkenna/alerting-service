@@ -2,7 +2,7 @@
   "note": "This file is an internal implementation detail to speed up HTML report generation. Its format can change at any time. You might be looking for the JSON report: https://coverage.rtfd.io/cmd.html#cmd-json",
   "format": 5,
   "version": "7.13.4",
-  "globals": "bdea2ed9476b9c57308624266408d403",
+  "globals": "84c0cb012731f2beec96b20b06682ab7",
   "files": {
     "z_d083005eea1ec75b___init___py": {
       "hash": "7cc3b1d4eda40b719cc156f8d843b24b",
@@ -22,8 +22,26 @@
         }
       }
     },
+    "z_d083005eea1ec75b___main___py": {
+      "hash": "c452690cabab5b7e43812e536b4ee60a",
+      "index": {
+        "url": "z_d083005eea1ec75b___main___py.html",
+        "file": "alerting_service/__main__.py",
+        "description": "",
+        "nums": {
+          "precision": 1,
+          "n_files": 1,
+          "n_statements": 3,
+          "n_excluded": 0,
+          "n_missing": 3,
+          "n_branches": 0,
+          "n_partial_branches": 0,
+          "n_missing_branches": 0
+        }
+      }
+    },
     "z_a94665848723bf6e___init___py": {
-      "hash": "ccabf366cfa5495ed76a7b3de81fedbe",
+      "hash": "22a55c70b987e14d3f30c99eef952833",
       "index": {
         "url": "z_a94665848723bf6e___init___py.html",
         "file": "alerting_service/api/__init__.py",
@@ -59,7 +77,7 @@
       }
     },
     "z_38b9f87c9dad4c4b___init___py": {
-      "hash": "ccabf366cfa5495ed76a7b3de81fedbe",
+      "hash": "22a55c70b987e14d3f30c99eef952833",
       "index": {
         "url": "z_38b9f87c9dad4c4b___init___py.html",
         "file": "alerting_service/api/routes/__init__.py",
@@ -95,7 +113,7 @@
       }
     },
     "z_38b9f87c9dad4c4b_health_py": {
-      "hash": "90720699849cf0bf10dfc14f1b040bf0",
+      "hash": "c4a5dcdd026f0de13ab6a407d7d9e59b",
       "index": {
         "url": "z_38b9f87c9dad4c4b_health_py.html",
         "file": "alerting_service/api/routes/health.py",
@@ -105,7 +123,7 @@
           "n_files": 1,
           "n_statements": 5,
           "n_excluded": 0,
-          "n_missing": 5,
+          "n_missing": 0,
           "n_branches": 0,
           "n_partial_branches": 0,
           "n_missing_branches": 0
@@ -113,7 +131,7 @@
       }
     },
     "z_d083005eea1ec75b_auth_py": {
-      "hash": "6c699927093aeee66a3e8f302f79681d",
+      "hash": "81048e0be995172bb42c8cea12d28a9a",
       "index": {
         "url": "z_d083005eea1ec75b_auth_py.html",
         "file": "alerting_service/auth.py",
@@ -123,7 +141,7 @@
           "n_files": 1,
           "n_statements": 23,
           "n_excluded": 0,
-          "n_missing": 23,
+          "n_missing": 2,
           "n_branches": 0,
           "n_partial_branches": 0,
           "n_missing_branches": 0
@@ -131,7 +149,7 @@
       }
     },
     "z_d083005eea1ec75b_config_py": {
-      "hash": "ee0cc0a58dbfb6b62770a3f8c300db71",
+      "hash": "f64230fcb5ce6edfdf834aec87d2c263",
       "index": {
         "url": "z_d083005eea1ec75b_config_py.html",
         "file": "alerting_service/config.py",
@@ -141,7 +159,7 @@
           "n_files": 1,
           "n_statements": 14,
           "n_excluded": 0,
-          "n_missing": 14,
+          "n_missing": 0,
           "n_branches": 0,
           "n_partial_branches": 0,
           "n_missing_branches": 0
@@ -149,7 +167,7 @@
       }
     },
     "z_c59fdea34c633327___init___py": {
-      "hash": "ccabf366cfa5495ed76a7b3de81fedbe",
+      "hash": "22a55c70b987e14d3f30c99eef952833",
       "index": {
         "url": "z_c59fdea34c633327___init___py.html",
         "file": "alerting_service/core/__init__.py",
@@ -167,7 +185,7 @@
       }
     },
     "z_c59fdea34c633327_alert_store_py": {
-      "hash": "d6199e5b786f0ae7479665baf0638cd6",
+      "hash": "1b935e1f18a90819a99df284b70ccf9e",
       "index": {
         "url": "z_c59fdea34c633327_alert_store_py.html",
         "file": "alerting_service/core/alert_store.py",
@@ -177,7 +195,7 @@
           "n_files": 1,
           "n_statements": 31,
           "n_excluded": 0,
-          "n_missing": 31,
+          "n_missing": 0,
           "n_branches": 0,
           "n_partial_branches": 0,
           "n_missing_branches": 0
@@ -203,7 +221,7 @@
       }
     },
     "z_c59fdea34c633327_slack_dispatcher_py": {
-      "hash": "48f367cfe7ed731b26b698e5fd943a5c",
+      "hash": "95634dc552fa0a8c44bf6eb7d41bfee9",
       "index": {
         "url": "z_c59fdea34c633327_slack_dispatcher_py.html",
         "file": "alerting_service/core/slack_dispatcher.py",
@@ -213,7 +231,25 @@
           "n_files": 1,
           "n_statements": 14,
           "n_excluded": 0,
-          "n_missing": 14,
+          "n_missing": 0,
+          "n_branches": 0,
+          "n_partial_branches": 0,
+          "n_missing_branches": 0
+        }
+      }
+    },
+    "z_d083005eea1ec75b_main_py": {
+      "hash": "54b82be2be7c3e4eff854e17d0933ea3",
+      "index": {
+        "url": "z_d083005eea1ec75b_main_py.html",
+        "file": "alerting_service/main.py",
+        "description": "",
+        "nums": {
+          "precision": 1,
+          "n_files": 1,
+          "n_statements": 46,
+          "n_excluded": 0,
+          "n_missing": 3,
           "n_branches": 0,
           "n_partial_branches": 0,
           "n_missing_branches": 0
@@ -239,7 +275,7 @@
       }
     },
     "z_f2ef5b8030f2d7f3_pagerduty_py": {
-      "hash": "dbee39d0c08aded99066aec931c6f1aa",
+      "hash": "b01c1483072fe0d18329c2d132f691a5",
       "index": {
         "url": "z_f2ef5b8030f2d7f3_pagerduty_py.html",
         "file": "alerting_service/notifiers/pagerduty.py",
@@ -249,7 +285,7 @@
           "n_files": 1,
           "n_statements": 30,
           "n_excluded": 0,
-          "n_missing": 18,
+          "n_missing": 1,
           "n_branches": 0,
           "n_partial_branches": 0,
           "n_missing_branches": 0
@@ -257,7 +293,7 @@
       }
     },
     "z_f2ef5b8030f2d7f3_router_py": {
-      "hash": "c7f062f8826fafd5bbde5cb018745695",
+      "hash": "6e8eab26d82c43c594f6004713cdeadb",
       "index": {
         "url": "z_f2ef5b8030f2d7f3_router_py.html",
         "file": "alerting_service/notifiers/router.py",
@@ -265,9 +301,9 @@
         "nums": {
           "precision": 1,
           "n_files": 1,
-          "n_statements": 23,
+          "n_statements": 30,
           "n_excluded": 0,
-          "n_missing": 14,
+          "n_missing": 0,
           "n_branches": 0,
           "n_partial_branches": 0,
           "n_missing_branches": 0
@@ -275,7 +311,7 @@
       }
     },
     "z_f2ef5b8030f2d7f3_slack_py": {
-      "hash": "9f3d56ea8121e107d7ac93fea742cc2f",
+      "hash": "28c46b52c83abea5b31a33796da6b228",
       "index": {
         "url": "z_f2ef5b8030f2d7f3_slack_py.html",
         "file": "alerting_service/notifiers/slack.py",
@@ -285,7 +321,43 @@
           "n_files": 1,
           "n_statements": 31,
           "n_excluded": 0,
-          "n_missing": 22,
+          "n_missing": 1,
+          "n_branches": 0,
+          "n_partial_branches": 0,
+          "n_missing_branches": 0
+        }
+      }
+    },
+    "z_8d531d82de82cd6e___init___py": {
+      "hash": "bd5fa8e0fc55d90ce46943046e844707",
+      "index": {
+        "url": "z_8d531d82de82cd6e___init___py.html",
+        "file": "alerting_service/subscribers/__init__.py",
+        "description": "",
+        "nums": {
+          "precision": 1,
+          "n_files": 1,
+          "n_statements": 0,
+          "n_excluded": 0,
+          "n_missing": 0,
+          "n_branches": 0,
+          "n_partial_branches": 0,
+          "n_missing_branches": 0
+        }
+      }
+    },
+    "z_8d531d82de82cd6e_alert_subscriber_py": {
+      "hash": "ba18aff5e05eb12d7514e5b0ab45caa5",
+      "index": {
+        "url": "z_8d531d82de82cd6e_alert_subscriber_py.html",
+        "file": "alerting_service/subscribers/alert_subscriber.py",
+        "description": "",
+        "nums": {
+          "precision": 1,
+          "n_files": 1,
+          "n_statements": 69,
+          "n_excluded": 0,
+          "n_missing": 5,
           "n_branches": 0,
           "n_partial_branches": 0,
           "n_missing_branches": 0

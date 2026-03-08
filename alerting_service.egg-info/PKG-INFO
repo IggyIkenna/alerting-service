@@ -14,7 +14,8 @@ Requires-Dist: sse-starlette<2.0.0,>=1.6.1
 Requires-Dist: aiohttp<4.0.0,>=3.13.2
 Requires-Dist: httpx<1.0.0,>=0.28.1
 Requires-Dist: pyyaml<7.0.0,>=6.0.1
-Requires-Dist: anthropic<1.0.0,>=0.40.0
+Requires-Dist: pydantic<3.0.0,>=2.12.5
+Requires-Dist: anthropic<1.0.0,>=0.49.0
 Requires-Dist: psutil<7.0.0,>=6.0.0
 Provides-Extra: dev
 Requires-Dist: pytest<10.0.0,>=9.0.1; extra == "dev"
