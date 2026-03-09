@@ -44,15 +44,19 @@ dev = [
 
 [tool.uv.sources.unified-internal-contracts]
 path = "../unified-internal-contracts"
+editable = true
 
 [tool.uv.sources.unified-trading-library]
 path = "../unified-trading-library"
+editable = true
 
 [tool.uv.sources.unified-events-interface]
 path = "../unified-events-interface"
+editable = true
 
 [tool.uv.sources.unified-config-interface]
 path = "../unified-config-interface"
+editable = true
 
 [tool.setuptools.packages.find]
 where = [
