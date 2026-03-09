@@ -1816,7 +1816,7 @@ wheels = [
 
 [[package]]
 name = "unified-api-contracts"
-version = "0.1.164"
+version = "0.1.174"
 source = { editable = "../unified-api-contracts" }
 dependencies = [
     { name = "pydantic" },
@@ -1849,7 +1849,7 @@ provides-extras = ["schema-validation", "dev"]
 
 [[package]]
 name = "unified-cloud-interface"
-version = "0.11.35"
+version = "0.11.36"
 source = { editable = "../unified-cloud-interface" }
 dependencies = [
     { name = "redis" },
@@ -1944,7 +1944,7 @@ provides-extras = ["dev"]
 
 [[package]]
 name = "unified-internal-contracts"
-version = "0.1.43"
+version = "0.1.44"
 source = { editable = "../unified-internal-contracts" }
 dependencies = [
     { name = "pandas" },
