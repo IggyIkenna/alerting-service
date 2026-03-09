@@ -43,12 +43,16 @@ jobs:
 
       - name: Install dependencies
         run: |
-          uv pip install --system ruff==0.15.0 basedpyright
-          uv pip install --system -e ../api-contracts 2>/dev/null || true
-          uv pip install --system -e ../unified-trading-library
-          uv pip install --system -e ../unified-config-interface
-          uv pip install --system -e ../unified-events-interface
-          uv pip install --system -e ".[dev]"
+          uv venv .venv
+          uv pip install --python .venv/bin/python ruff==0.15.0 basedpyright
+          uv pip install --python .venv/bin/python -e ../api-contracts 2>/dev/null || true
+          uv pip install --python .venv/bin/python -e ../unified-trading-library
+          uv pip install --python .venv/bin/python -e ../unified-config-interface
+          uv pip install --python .venv/bin/python -e ../unified-events-interface
+          uv pip install --python .venv/bin/python -e ".[dev]" || uv pip install --python .venv/bin/python -e .
+          uv pip install --python .venv/bin/python pytest pytest-cov pytest-asyncio pytest-timeout pytest-xdist bandit pip-audit
 
       - name: Run quality gates
-        run: bash scripts/quality-gates.sh --no-fix
+        run: |
+          export PATH="$(pwd)/.venv/bin:$PATH"
+          bash scripts/quality-gates.sh --no-fix
