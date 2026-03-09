@@ -3,6 +3,17 @@
 from __future__ import annotations
 
 import pytest
+from unified_events_interface import MockEventSink, setup_events
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _init_event_logging() -> None:
+    """Initialize event logging once per test session using MockEventSink.
+
+    Tests that call log_event() (e.g. auth failure paths in verify_api_key)
+    require setup_events() to have been called first.
+    """
+    setup_events(service_name="alerting-service", mode="test", sink=MockEventSink())
 
 
 @pytest.fixture(autouse=True)
