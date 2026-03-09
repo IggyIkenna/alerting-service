@@ -3,25 +3,32 @@
 Multi-channel alerting (Slack, email, PagerDuty) for system health and trading events
 
 ## Type
+
 platform
 
 ## Tech Stack
+
 Python
 
 ## Mode Support
+
 - Batch: ❌
 - Live: ✅
 
 ## Upstream Dependencies
+
 - unified-trading-services
 
 ## Deployment
+
 cloud_run_services
 
 ## Priority
+
 P1-high
 
 ## Owner
+
 Harsh
 
 ---
