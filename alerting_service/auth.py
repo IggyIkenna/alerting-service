@@ -7,6 +7,7 @@ import logging
 from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
 from unified_config_interface import UnifiedCloudConfig
+from unified_events_interface import log_event
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +35,26 @@ async def verify_api_key(
     if DISABLE_AUTH:
         return "dev-mode"
     if not api_key:
+        log_event(
+            "AUTH_FAILURE",
+            severity="WARNING",
+            details={
+                "auth_type": "api_key",
+                "reason": "missing_key",
+                "service": "alerting-service",
+            },
+        )
         raise HTTPException(status_code=401, detail="Missing API key")
     expected_key = _auth_cfg.api_key
     if not expected_key or api_key != expected_key:
+        log_event(
+            "AUTH_FAILURE",
+            severity="WARNING",
+            details={
+                "auth_type": "api_key",
+                "reason": "invalid_key",
+                "service": "alerting-service",
+            },
+        )
         raise HTTPException(status_code=401, detail="Invalid API key")
     return api_key
