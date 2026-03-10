@@ -10,9 +10,9 @@ from functools import lru_cache
 from typing import Literal
 
 import httpx
+from unified_cloud_interface import SecretClient, get_secret_client
 from unified_config_interface import UnifiedCloudConfig
 from unified_events_interface import log_event
-from unified_trading_library import get_secret_client
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,8 @@ def _get_cloud_config() -> UnifiedCloudConfig:
 
 def _get_routing_key(project_id: str) -> str:
     """Retrieve the PagerDuty routing key from Secret Manager."""
-    secret_value = get_secret_client(project_id=project_id).get_secret(_SECRET_NAME)
+    client: SecretClient = get_secret_client(project_id=project_id)
+    secret_value: str | None = client.get_secret(_SECRET_NAME)
     if secret_value is None:
         raise RuntimeError(f"Secret '{_SECRET_NAME}' not found in Secret Manager")
     return secret_value

@@ -150,4 +150,7 @@ exclude = [
 extraPaths = [
     "../unified-config-interface",
     "../unified-internal-contracts",
+    "../unified-cloud-interface",
+    "../unified-trading-library",
+    "../unified-events-interface",
 ]

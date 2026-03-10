@@ -6,7 +6,7 @@ T4f STEP B checklist:
 - API app is importable with /health and /readiness endpoints
 - Alert subscriber module is importable
 - Metrics module is importable
-- PubSub access is via get_queue_client() — no direct google-cloud-pubsub
+- PubSub access is via get_queue_client — no direct google-cloud-pubsub
 """
 
 import os
@@ -77,7 +77,7 @@ def test_metrics_importable() -> None:
 
 @pytest.mark.unit
 def test_alert_subscriber_uses_queue_client() -> None:
-    """AlertSubscriber must use get_queue_client() — no direct google-cloud-pubsub."""
+    """AlertSubscriber must use get_queue_client — no direct google-cloud-pubsub."""
     mock_client = MagicMock()
     with patch(
         "alerting_service.subscribers.alert_subscriber.get_queue_client",
@@ -103,7 +103,7 @@ def test_no_direct_google_pubsub_import() -> None:
     )
     assert not has_direct_import, (
         "alert_subscriber.py must not import google-cloud-pubsub directly; "
-        "use get_queue_client() from unified_cloud_interface"
+        "use get_queue_client from unified_cloud_interface"
     )
 
 
