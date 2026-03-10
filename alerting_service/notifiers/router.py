@@ -20,11 +20,6 @@ Service event taxonomy (for observability and test compliance):
 import logging
 
 from unified_events_interface import log_event
-from unified_internal_contracts import (
-    AlertContextData,  # noqa: F401  # UIC contract type reference
-    AuthFailureDetails,  # noqa: F401  # UIC contract type reference
-    AuthFailureEvent,  # noqa: F401  # UIC contract type reference
-)
 
 from .pagerduty import PagerDutySeverity
 from .pagerduty import send_event as pd_send_event
