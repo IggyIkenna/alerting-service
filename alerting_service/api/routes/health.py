@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
+from unified_config_interface import UnifiedCloudConfig
 
 router = APIRouter()
 
@@ -14,12 +15,10 @@ async def readiness() -> JSONResponse:
     """Readiness probe — checks config is loaded and service is ready."""
     checks: dict[str, str] = {}
     try:
-        from unified_config_interface import UnifiedCloudConfig
-
         _cfg = UnifiedCloudConfig()
         _ = _cfg.gcp_project_id
         checks["config"] = "ok"
-    except Exception as e:
+    except (RuntimeError, ValueError, OSError) as e:
         checks["config"] = f"error: {e}"
     all_ok = all(v == "ok" for v in checks.values())
     return JSONResponse(
