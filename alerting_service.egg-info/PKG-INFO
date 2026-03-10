@@ -4,7 +4,7 @@ Version: 0.1.0
 Summary: Multi-channel alerting (Slack, email, PagerDuty) for system health and trading events
 Requires-Python: <3.14,>=3.13
 Description-Content-Type: text/markdown
-Requires-Dist: unified-trading-library<1.0.0,>=0.1.0
+Requires-Dist: unified-trading-library[observability]<1.0.0,>=0.1.0
 Requires-Dist: unified-events-interface<1.0.0,>=0.1.0
 Requires-Dist: unified-config-interface<1.0.0,>=0.1.0
 Requires-Dist: unified-internal-contracts<1.0.0,>=0.1.0

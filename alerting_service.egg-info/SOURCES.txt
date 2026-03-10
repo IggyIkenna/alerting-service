@@ -6,7 +6,6 @@ alerting_service/auth.py
 alerting_service/config.py
 alerting_service/main.py
 alerting_service/metrics.py
-alerting_service/otel_setup.py
 alerting_service.egg-info/PKG-INFO
 alerting_service.egg-info/SOURCES.txt
 alerting_service.egg-info/dependency_links.txt
@@ -17,10 +16,12 @@ alerting_service/api/main.py
 alerting_service/api/routes/__init__.py
 alerting_service/api/routes/alerts.py
 alerting_service/api/routes/health.py
+alerting_service/api/routes/system_status.py
 alerting_service/core/__init__.py
 alerting_service/core/alert_store.py
 alerting_service/core/claude_slack_agent.py
 alerting_service/core/slack_dispatcher.py
+alerting_service/core/system_health_aggregator.py
 alerting_service/notifiers/__init__.py
 alerting_service/notifiers/pagerduty.py
 alerting_service/notifiers/router.py

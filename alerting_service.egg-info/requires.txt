@@ -1,4 +1,4 @@
-unified-trading-library<1.0.0,>=0.1.0
+unified-trading-library[observability]<1.0.0,>=0.1.0
 unified-events-interface<1.0.0,>=0.1.0
 unified-config-interface<1.0.0,>=0.1.0
 unified-internal-contracts<1.0.0,>=0.1.0
