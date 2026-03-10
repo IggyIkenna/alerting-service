@@ -77,10 +77,8 @@ async def test_main_runs_successfully() -> None:
     with (
         patch.object(sys, "argv", ["alerting-service", "--mode", "batch"]),
         patch("alerting_service.main.PubSubEventSink"),
-        patch("alerting_service.main.setup_events"),
-        patch("alerting_service.main.setup_tracing"),
+        patch("alerting_service.main.setup_service_observability"),
         patch("alerting_service.main.GracefulShutdownHandler") as mock_handler_cls,
-        patch("alerting_service.main.start_memory_watchdog"),
         patch("alerting_service.main.log_event"),
         patch("alerting_service.main.AlertSubscriber") as mock_subscriber_cls,
         patch(

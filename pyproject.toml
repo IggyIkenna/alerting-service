@@ -12,7 +12,7 @@ description = "Multi-channel alerting (Slack, email, PagerDuty) for system healt
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "unified-trading-library>=0.1.0,<1.0.0",
+    "unified-trading-library[observability]>=0.1.0,<1.0.0",
     "unified-events-interface>=0.1.0,<1.0.0",
     "unified-config-interface>=0.1.0,<1.0.0",
     "unified-internal-contracts>=0.1.0,<1.0.0",

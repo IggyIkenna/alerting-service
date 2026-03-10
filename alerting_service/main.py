@@ -13,13 +13,12 @@ import logging
 import uuid
 from typing import cast
 
-from unified_events_interface import log_event, setup_events
+from unified_events_interface import log_event
 from unified_internal_contracts import LifecycleEventType
 from unified_trading_library import (
     GracefulShutdownHandler,
     PubSubEventSink,
-    setup_tracing,
-    start_memory_watchdog,
+    setup_service_observability,
 )
 
 from .config import AlertingSystemConfig
@@ -78,20 +77,24 @@ async def main() -> None:
 
     config = AlertingSystemConfig()
 
-    # Setup event logging
+    # Setup unified observability (events + tracing + memory watchdog)
     sink = PubSubEventSink(
         project_id=config.gcp_project_id,
         topic=f"{config.service_name}-events",
         service_name=config.service_name,
     )
-    setup_events(sink=sink, service_name=config.service_name, mode=cast(str, args.mode))
-    setup_tracing("alerting-service")
+    setup_service_observability(
+        "alerting-service",
+        mode=cast(str, args.mode),
+        sink=sink,
+        enable_tracing=True,
+        memory_threshold_pct=85.0,
+    )
 
     # Initialize graceful shutdown handler (handles SIGTERM/SIGINT)
     _shutdown_handler = GracefulShutdownHandler()
 
     correlation_id = str(uuid.uuid4())
-    start_memory_watchdog("alerting-service")
     log_event(LifecycleEventType.STARTED, details={"correlation_id": correlation_id})
 
     subscriber = AlertSubscriber(project_id=config.gcp_project_id)
