@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, FastAPI
 
 from alerting_service.api.routes.alerts import router as alerts_router
 from alerting_service.api.routes.health import router as health_router
+from alerting_service.api.routes.system_status import router as system_status_router
 from alerting_service.auth import _auth_cfg, verify_api_key
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ app = FastAPI(
 
 # --- Unauthenticated health endpoints ---
 app.include_router(health_router)
+app.include_router(system_status_router)
 
 # --- Authenticated API routes (require API key) ---
 _authenticated_router = APIRouter(dependencies=[Depends(verify_api_key)])
