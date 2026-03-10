@@ -13,6 +13,7 @@ logger = logging.getLogger(__name__)
 
 # --- Production guard for DISABLE_AUTH ---
 _auth_cfg = UnifiedCloudConfig()
+auth_cfg = _auth_cfg  # public alias for use in api/main.py
 _disable_auth_raw = _auth_cfg.disable_auth
 _environment = _auth_cfg.environment
 if _disable_auth_raw and _environment == "production":
