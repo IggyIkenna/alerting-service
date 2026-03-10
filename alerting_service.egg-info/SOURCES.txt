@@ -26,5 +26,7 @@ alerting_service/notifiers/__init__.py
 alerting_service/notifiers/pagerduty.py
 alerting_service/notifiers/router.py
 alerting_service/notifiers/slack.py
+alerting_service/rules/__init__.py
+alerting_service/rules/data_freshness_rules.py
 alerting_service/subscribers/__init__.py
 alerting_service/subscribers/alert_subscriber.py
