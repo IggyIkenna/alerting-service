@@ -28,6 +28,11 @@
 # Data and logs (often large)
 **/data/
 **/logs/
+# Keep Python source modules named 'data' (e.g. execution_service/data/, features_sports_service/data/)
+!**/execution_service/data/
+!**/execution_service/data/**
+!**/features_sports_service/data/
+!**/features_sports_service/data/**
 
 # Common data / document file types (large or binary, exclude from index)
 **/*.csv
