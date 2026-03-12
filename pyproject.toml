@@ -1,9 +1,6 @@
 [build-system]
-requires = [
-    "setuptools>=75,<82",
-    "wheel",
-]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "alerting-service"
@@ -58,14 +55,6 @@ editable = true
 [tool.uv.sources.unified-config-interface]
 path = "../unified-config-interface"
 editable = true
-
-[tool.setuptools.packages.find]
-where = [
-    ".",
-]
-include = [
-    "alerting_service*",
-]
 
 [tool.ruff]
 line-length = 100
