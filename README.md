@@ -1,4 +1,4 @@
-# alerting-system
+# alerting-system — SOURCE BRANCH VERSION (conflict test)
 
 Multi-channel alerting (Slack, email, PagerDuty) for system health and trading events
 
