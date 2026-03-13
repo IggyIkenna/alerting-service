@@ -52,7 +52,7 @@ repos:
 
       - id: no-backup-files
         name: No backup files
-        entry: bash -c '! find . -name "*_backup.py" -o -name "*_original.py" -o -name "*_clean.py" | grep -q .'
+        entry: bash -c '! find . \( -path "./.venv*" -o -path "./.venv-workspace" \) -prune -o \( -name "*_backup.py" -o -name "*_original.py" -o -name "*_clean.py" \) -print | grep -q .'
         language: system
         pass_filenames: false
 
