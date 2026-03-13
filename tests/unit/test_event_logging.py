@@ -10,6 +10,7 @@ Verifies that:
   (f) setup_events signature meets the codex contract
 """
 
+import os
 import re
 from pathlib import Path
 
@@ -47,12 +48,14 @@ _EXCLUDE_DIRS = {"tests", ".venv", "venv", "__pycache__", ".git", "examples"}
 
 
 def _find_python_files(service_dir: Path) -> list[Path]:
-    """Return all non-test Python source files under service_dir."""
-    return [
-        p
-        for p in service_dir.rglob("*.py")
-        if not any(x in p.relative_to(service_dir).parts for x in _EXCLUDE_DIRS)
-    ]
+    exclude = {"tests", ".venv", "venv", "__pycache__", ".git", "examples"}
+    result = []
+    for root, dirs, files in os.walk(service_dir, followlinks=False):
+        dirs[:] = [d for d in dirs if d not in exclude]
+        for f in files:
+            if f.endswith(".py"):
+                result.append(Path(root) / f)
+    return result
 
 
 def _find_event_markers(file_path: Path) -> set[str]:
