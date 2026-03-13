@@ -1,4 +1,5 @@
 # alerting-system — SOURCE BRANCH VERSION (conflict test)
+<!-- Resolved: preferred SOURCE branch title per rule 4 (incoming value wins on scalar conflict) -->
 
 Multi-channel alerting (Slack, email, PagerDuty) for system health and trading events
 
@@ -79,4 +80,9 @@ bash scripts/quickmerge.sh "commit message"
 ## Codex Reference
 
 See unified-trading-codex for all standards and patterns.
+
+# Conflict test target side
+<!-- Preserved from TARGET branch (rule 1: keep both sides where semantically compatible) -->
+
 # Conflict test SOURCE side — different content
+<!-- Preserved from SOURCE branch (rule 1: keep both sides where semantically compatible) -->
