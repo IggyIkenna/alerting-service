@@ -13,7 +13,10 @@ class TestHealthEndpoint:
         from alerting_service.api.routes.health import health
 
         result = asyncio.get_event_loop().run_until_complete(health())
-        assert result == {"status": "ok", "service": "alerting-system"}
+        assert result["status"] == "ok"
+        assert result["service"] == "alerting-system"
+        assert "cloud_provider" in result
+        assert "mock_mode" in result
 
 
 class TestVerifyApiKey:
