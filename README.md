@@ -79,3 +79,4 @@ bash scripts/quickmerge.sh "commit message"
 ## Codex Reference
 
 See unified-trading-codex for all standards and patterns.
+# Conflict test SOURCE side — different content
