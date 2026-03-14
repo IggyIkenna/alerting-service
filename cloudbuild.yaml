@@ -1,36 +1,108 @@
-# Cloud Build for alerting-service
+# Cloud Build Template — Unified Trading System Services
 #
-# ARCHITECTURE: Test the artifact you deploy
-#   1. Pull base image
-#   2. Build Docker image
-#   3. Run quality gates INSIDE the image
-#   4. Push ONLY if tests pass
+# CANONICAL TEMPLATE for service cloudbuild.yaml files.
+# Service-specific variants must preserve all REQUIRED steps (marked below).
+# DO NOT auto-generate — human review required for service-specific customization.
 #
+# Required step IDs (enforced by quality-gates.sh STEP 5.22 for canary services):
+#   - configure-docker     (Docker auth)
+#   - ensure-repo          (Artifact Registry bootstrap)
+#   - pull-base-image      (UTL base image)
+#   - build                (Docker image build)
+#   - quality-gates        (REQUIRED: test the artifact you deploy)
+#   - push                 (REQUIRED: push only if quality gates pass)
+#   - scan-check           (REQUIRED: CRITICAL CVE gate)
+#
+# Optional steps (service-specific):
+#   - extract-version      (semver tagging from pyproject.toml)
+#   - notify-deployment    (dispatch to deployment-service stable_versions.yaml)
+#   - publish-wheel        (Python wheel to Artifact Registry)
+#
+# Services deployed via central deployment-service (not inline): add "# deploy-via-dispatch"
+# after the title to suppress STEP 5.17 advisory. Rollout: add-cloudbuild-deploy-via-dispatch.py --all
+#
+# Variable conventions:
+#   _SERVICE_NAME          — substitution: e.g. my-service
+#   _REGISTRY_REPO         — substitution: e.g. unified-trading-system
+#   _PKG_NAME              — substitution: e.g. my_service (underscores)
+#   $PROJECT_ID            — Cloud Build built-in
+#   $SHORT_SHA             — Cloud Build built-in (use for image tagging)
+#   $$VERSION              — double-dollar for shell variable inside args
+#
+# Machine type: E2_HIGHCPU_8 (standard for all service builds)
+# Timeout: 1800s (services), 600s (lightweight services without wheel publish)
+# Logging: CLOUD_LOGGING_ONLY
+#
+# Reference: unified-trading-codex/04-architecture/deployment-pipeline.md
+# QG enforcement: STEP 5.22 in quality-gates.sh (canary: execution, instruments, alerting)
+
+substitutions:
+  _SERVICE_NAME: "alerting-service"
+  _REGISTRY_REPO: "unified-trading-system"
+  _PKG_NAME: "alerting_service"
+
 steps:
+  # ── Auth pre-check: fail fast if SA lacks AR access (before expensive build) ─
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:alpine"
+    id: "auth-precheck"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -e
+        echo "=== Auth pre-check ==="
+        TOKEN=$$(gcloud auth print-access-token) || { echo "FAIL: No GCP token"; exit 1; }
+        echo "GCP token OK"
+        STATUS=$$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $$TOKEN" "https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/simple/" || echo "000")
+        if [ "$$STATUS" != "200" ] && [ "$$STATUS" != "404" ]; then
+          echo "FAIL: Python AR HTTP $$STATUS"; exit 1
+        fi
+        echo "Python AR OK"
+        gcloud artifacts repositories describe unified-trading-library --location=asia-northeast1 --quiet || { echo "FAIL: Docker AR"; exit 1; }
+        echo "Docker AR OK"
+        echo "=== Auth pre-check passed ==="
+    waitFor: ["-"]
+
+  # ── OPTIONAL: Extract version from pyproject.toml for semver tagging ──────
+
+  # Include this step if you want $VERSION tags in addition to $SHORT_SHA.
+  - name: "gcr.io/cloud-builders/git"
+    id: "extract-version"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/version = "//;s/"//')
+        echo "$$VERSION" > /workspace/VERSION
+        echo "Building version $$VERSION"
+    waitFor: ["-"]
+
+  # ── STEP 1: Configure Docker authentication ───────────────────────────────
   - name: "gcr.io/cloud-builders/gcloud"
     id: "configure-docker"
     args:
       ["auth", "configure-docker", "asia-northeast1-docker.pkg.dev", "--quiet"]
     waitFor: ["-"]
 
+  # ── STEP 2: Ensure Artifact Registry repository exists ───────────────────
   - name: "gcr.io/cloud-builders/gcloud"
     id: "ensure-repo"
     entrypoint: "bash"
     args:
       - "-c"
       - |
-        gcloud artifacts repositories describe unified-trading-system \
+        gcloud artifacts repositories describe ${_REGISTRY_REPO} \
           --location=asia-northeast1 &>/dev/null || \
-        gcloud artifacts repositories create unified-trading-system \
+        gcloud artifacts repositories create ${_REGISTRY_REPO} \
           --repository-format=docker \
           --location=asia-northeast1 \
-          --description="alerting-service and related service Docker images"
-        # Enable Container Analysis vulnerability scanning
-        gcloud artifacts repositories update unified-trading-system \
+          --description="${_SERVICE_NAME} Docker images"
+        gcloud artifacts repositories update ${_REGISTRY_REPO} \
           --location=asia-northeast1 \
           --enable-vulnerability-scanning 2>/dev/null || true
     waitFor: ["-"]
 
+  # ── STEP 3: Pull UTL base image (required for authenticated access) ───────
   - name: "gcr.io/cloud-builders/docker"
     id: "pull-base-image"
     args:
@@ -40,21 +112,25 @@ steps:
       ]
     waitFor: ["configure-docker"]
 
+  # ── STEP 4: Build Docker image ────────────────────────────────────────────
   - name: "gcr.io/cloud-builders/docker"
     id: "build"
+    entrypoint: "bash"
     args:
-      - "build"
-      - "-f"
-      - "Dockerfile"
-      - "--build-arg"
-      - "PROJECT_ID=$PROJECT_ID"
-      - "-t"
-      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:$SHORT_SHA"
-      - "-t"
-      - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:latest"
-      - "."
-    waitFor: ["pull-base-image", "ensure-repo"]
+      - "-c"
+      - |
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
+        docker build -f Dockerfile \
+          --build-arg PROJECT_ID=$PROJECT_ID \
+          -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
+          -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
+          .
+    waitFor: ["pull-base-image", "ensure-repo", "extract-version"]
 
+  # ── STEP 5: REQUIRED — Run quality gates INSIDE the image ─────────────────
+  # CRITICAL: Use --entrypoint "" to clear the image's default ENTRYPOINT.
+  # Then run /bin/bash -c "..." explicitly. --entrypoint bash does NOT work reliably.
+  # Service-specific env vars: add -e KEY=VALUE lines for required config.
   - name: "gcr.io/cloud-builders/docker"
     id: "quality-gates"
     entrypoint: "bash"
@@ -62,64 +138,114 @@ steps:
       - "-c"
       - |
         set -e
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
+        echo "Running quality gates inside ${_SERVICE_NAME} image..."
         docker run --rm \
           --entrypoint "" \
           -e CLOUD_BUILD=true \
           -e CLOUD_MOCK_MODE=true \
           -e GCP_PROJECT_ID=$PROJECT_ID \
-          -e GCP_PROJECT_ID=$PROJECT_ID \
-          asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:$SHORT_SHA \
-          /bin/bash -c "bash scripts/quality-gates.sh --no-fix --quick"
+          asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
+          /bin/bash -c "scripts/quality-gates.sh --no-fix --quick"
     waitFor: ["build"]
 
+  # ── STEP 6: REQUIRED — Push image ONLY if quality gates passed ────────────
   - name: "gcr.io/cloud-builders/docker"
     id: "push"
     args:
       [
         "push",
         "--all-tags",
-        "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service",
+        "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}",
       ]
     waitFor: ["quality-gates"]
 
-  # Step: Vulnerability scan — check for CRITICAL CVEs in pushed image
-  # Container Analysis scans asynchronously after push; retry for up to 3 min
+  # ── STEP 7: REQUIRED — Vulnerability scan (CRITICAL CVE gate) ────────────
+  # Container Analysis scans asynchronously after push; poll up to 3 minutes.
   - name: "gcr.io/cloud-builders/gcloud"
     id: "scan-check"
     entrypoint: "bash"
     args:
       - "-c"
       - |
-        IMAGE="asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:$SHORT_SHA"
-        echo "Waiting for Container Analysis vulnerability scan on $IMAGE..."
-        # Poll up to 18 times × 10s = 3 minutes for scan to complete
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
+        IMAGE="asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION"
+        echo "Waiting for Container Analysis vulnerability scan on $$IMAGE..."
         for i in $(seq 1 18); do
-          RESULT=$(gcloud artifacts docker images describe "$IMAGE" \
+          RESULT=$(gcloud artifacts docker images describe "$$IMAGE" \
             --show-package-vulnerability --format="json" 2>/dev/null)
-          if [ -n "$RESULT" ]; then
-            CRITICAL=$(echo "$RESULT" | python3 -c "import json,sys;d=json.load(sys.stdin);print(len(d.get('package_vulnerability_summary',{}).get('vulnerabilities',{}).get('CRITICAL',[])))" 2>/dev/null || echo "0")
-            if [ "$CRITICAL" != "0" ]; then
-              echo "SCAN FAILED: $CRITICAL CRITICAL CVEs found in $IMAGE"
-              gcloud artifacts docker images describe "$IMAGE" \
-                --show-package-vulnerability --format="table[box](package_vulnerability_summary.vulnerabilities.CRITICAL[].vulnerability,package_vulnerability_summary.vulnerabilities.CRITICAL[].fixedPackage)" 2>/dev/null || true
+          if [ -n "$$RESULT" ]; then
+            CRITICAL=$(echo "$$RESULT" | python3 -c "import json,sys;d=json.load(sys.stdin);summary=d.get('package_vulnerability_summary',{});vulns=summary.get('vulnerabilities',{});crits=vulns.get('CRITICAL',[]);print(len(crits))" 2>/dev/null || echo "0")
+            if [ "$$CRITICAL" != "0" ]; then
+              echo "SCAN FAILED: $$CRITICAL CRITICAL CVEs found in $$IMAGE"
+              gcloud artifacts docker images describe "$$IMAGE" \
+                --show-package-vulnerability \
+                --format="table[box](package_vulnerability_summary.vulnerabilities.CRITICAL[].vulnerability,package_vulnerability_summary.vulnerabilities.CRITICAL[].fixedPackage)" \
+                2>/dev/null || true
               exit 1
             fi
             echo "Scan complete: 0 CRITICAL CVEs — image is clean"
             exit 0
           fi
-          echo "Scan not ready yet (attempt $i/18) — waiting 10s..."
+          echo "Scan not ready yet (attempt $$i/18) — waiting 10s..."
           sleep 10
         done
         echo "WARNING: Vulnerability scan did not complete within 3 minutes — proceeding (non-blocking)"
         exit 0
     waitFor: ["push"]
 
+  # ── OPTIONAL: Notify deployment-service to update stable_versions.yaml ────
+  # Requires GH_PAT secret in Secret Manager. allowFailure: true — advisory only.
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    id: "notify-deployment"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
+        IMAGE="asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION"
+        GH_PAT=$(gcloud secrets versions access latest --secret=GH_PAT --project=$PROJECT_ID 2>/dev/null || echo "")
+        if [ -n "$$GH_PAT" ]; then
+          curl -sS -X POST \
+            -H "Authorization: token $$GH_PAT" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/IggyIkenna/deployment-service/dispatches \
+            -d "{\"event_type\":\"service-deployed\",\"client_payload\":{\"service_name\":\"${_SERVICE_NAME}\",\"version\":\"$$VERSION\",\"image\":\"$$IMAGE\"}}"
+          echo "Notified deployment-service: ${_SERVICE_NAME} $$VERSION"
+        else
+          echo "GH_PAT not configured — skipping dispatch"
+        fi
+    waitFor: ["push"]
+    allowFailure: true
+
+  # ── OPTIONAL: Publish Python wheel to Artifact Registry ───────────────────
+  # For services that are also imported as libraries by other services.
+  # Remove this step if the service has no cross-service Python imports.
+  - name: "python:3.13-slim"
+    id: "publish-wheel"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -e
+        pip install uv
+        uv pip install --system build twine keyrings.google-artifactregistry-auth
+        mkdir -p /root/.config/pip
+        echo "[global]
+        extra-index-url = https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/simple/" \
+          > /root/.config/pip/pip.conf
+        python -m build --wheel --outdir dist/
+        python -m twine upload \
+          --repository-url https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/ \
+          --non-interactive dist/*.whl || true
+    waitFor: ["quality-gates"]
+
 images:
-  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:$SHORT_SHA"
-  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-system/alerting-service:latest"
+  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA"
+  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest"
 
 options:
   logging: CLOUD_LOGGING_ONLY
   machineType: "E2_HIGHCPU_8"
 
-timeout: "600s"
+timeout: "1800s"

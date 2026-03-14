@@ -56,19 +56,22 @@ class TestEventRouter:
 
         assert router is not None
 
-    def test_pagerduty_events_dict_not_empty(self) -> None:
-        from alerting_service.notifiers.router import _PAGERDUTY_EVENTS
+    def test_default_routing_rules_not_empty(self) -> None:
+        from alerting_service.config import _default_routing_rules
 
-        assert len(_PAGERDUTY_EVENTS) > 0
+        rules = _default_routing_rules()
+        assert len(rules) > 0
 
-    def test_kill_switch_routes_to_pagerduty(self) -> None:
-        from alerting_service.notifiers.router import _PAGERDUTY_EVENTS
+    def test_kill_switch_rule_routes_to_pagerduty(self) -> None:
+        from alerting_service.config import _default_routing_rules
+        from alerting_service.notifiers.router import _match_routing_rules
 
-        assert "KILL_SWITCH_ACTIVATED" in _PAGERDUTY_EVENTS
-        assert _PAGERDUTY_EVENTS["KILL_SWITCH_ACTIVATED"] == "critical"
+        rules = _default_routing_rules()
+        channels, severity = _match_routing_rules("KILL_SWITCH_ACTIVATED", rules)
+        assert "pagerduty" in channels
+        assert severity == "critical"
 
-    def test_always_slack_events_is_frozenset(self) -> None:
-        from alerting_service.notifiers.router import _ALWAYS_SLACK_EVENTS
+    def test_config_has_routing_rules_field(self) -> None:
+        from alerting_service.config import AlertingSystemConfig
 
-        assert isinstance(_ALWAYS_SLACK_EVENTS, frozenset)
-        assert "KILL_SWITCH_ACTIVATED" in _ALWAYS_SLACK_EVENTS
+        assert "routing_rules" in AlertingSystemConfig.model_fields

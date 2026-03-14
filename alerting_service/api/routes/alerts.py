@@ -6,10 +6,12 @@ from typing import Annotated
 from fastapi import APIRouter, Depends
 from sse_starlette.sse import EventSourceResponse
 
+from alerting_service.config import AlertingSystemConfig
 from alerting_service.core.alert_store import AlertStore
 
 router = APIRouter()
 _store: AlertStore | None = None
+_cfg = AlertingSystemConfig()
 
 
 def set_alert_store(store: AlertStore) -> None:
@@ -25,6 +27,19 @@ def get_store() -> AlertStore:
 
 @router.get("/stream/alerts")
 async def stream_alerts(store: Annotated[AlertStore, Depends(get_store)]) -> EventSourceResponse:
+    if _cfg.cloud_mock_mode:
+        from alerting_service.api.routes.mock_data import MOCK_SSE_EVENTS
+
+        async def mock_generator() -> AsyncIterator[dict[str, str]]:
+            for evt in MOCK_SSE_EVENTS:
+                yield {"data": json.dumps(evt)}
+                await asyncio.sleep(1)
+            while True:
+                await asyncio.sleep(30)
+                yield {"data": json.dumps({"heartbeat": True})}
+
+        return EventSourceResponse(mock_generator())
+
     async def generator() -> AsyncIterator[dict[str, str]]:
         q = store.subscribe()
         try:
@@ -42,4 +57,23 @@ async def stream_alerts(store: Annotated[AlertStore, Depends(get_store)]) -> Eve
 
 @router.get("/rules/recent")
 async def get_recent_alerts(store: Annotated[AlertStore, Depends(get_store)]) -> object:
+    if _cfg.cloud_mock_mode:
+        from alerting_service.api.routes.mock_state import get_store as get_mock_store
+
+        return get_mock_store().list("alerts")
     return store.get_recent_events(limit=100)
+
+
+@router.post("/rules/recent")
+async def create_alert(alert: dict[str, object]) -> dict[str, object]:
+    """Record a new alert. Persists in mock state when CLOUD_MOCK_MODE=true."""
+    if _cfg.cloud_mock_mode:
+        import uuid
+
+        from alerting_service.api.routes.mock_state import get_store as get_mock_store
+
+        if "alert_id" not in alert:
+            alert["alert_id"] = f"alert-{uuid.uuid4().hex[:6]}"
+        alert["id"] = alert["alert_id"]
+        return get_mock_store().create("alerts", alert)
+    return alert

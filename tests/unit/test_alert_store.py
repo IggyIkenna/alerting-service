@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from unittest.mock import MagicMock
 
 import pytest
 from unified_internal_contracts import AlertEvent
@@ -32,7 +33,7 @@ class TestAlertStoreCooldown:
         store = AlertStore()
         event = _make_event()
         store.record_fired(event)
-        # triggered_at is 2026-03-08 12:00:00 UTC (in the past).
+        # triggered_at is 2020-01-01 00:00:00 UTC (in the past).
         # With 0 seconds cooldown, elapsed time (many seconds) > 0, so it IS cooled down.
         assert store.is_cooled_down(event.rule_id, 0) is True
 
@@ -40,9 +41,7 @@ class TestAlertStoreCooldown:
         store = AlertStore()
         event = _make_event()
         store.record_fired(event)
-        # triggered_at is 2026-03-08 12:00:00 UTC (past); 999999s cooldown ensures not cooled down
-        # Since triggered_at is in the past and current time > triggered_at, delta is positive.
-        # For a very large cooldown, the elapsed time < cooldown → not cooled down.
+        # triggered_at is in the past; 999999999s cooldown ensures not cooled down
         assert store.is_cooled_down(event.rule_id, 999_999_999) is False
 
 
@@ -72,6 +71,36 @@ class TestAlertStoreRecordFired:
             store.record_fired(_make_event(alert_id=f"alert-{i}"))
         # Should be trimmed to 500
         assert len(store._recent_events) == 500
+
+
+class TestAlertStoreGCSDualWrite:
+    def test_record_fired_writes_to_gcs_when_configured(self) -> None:
+        mock_storage = MagicMock()
+        store = AlertStore(storage_store=mock_storage)
+        event = _make_event()
+        store.record_fired(event)
+
+        mock_storage.write_alert_history.assert_called_once()
+        call_args = mock_storage.write_alert_history.call_args[0][0]
+        assert call_args["alert_id"] == "alert-1"
+        assert call_args["rule_id"] == "rule-1"
+        assert call_args["severity"] == "WARNING"
+
+    def test_record_fired_does_not_write_to_gcs_when_not_configured(self) -> None:
+        store = AlertStore()
+        event = _make_event()
+        # Should not raise
+        store.record_fired(event)
+
+    def test_gcs_failure_does_not_crash_record_fired(self) -> None:
+        mock_storage = MagicMock()
+        mock_storage.write_alert_history.side_effect = RuntimeError("GCS down")
+        store = AlertStore(storage_store=mock_storage)
+        event = _make_event()
+        # Should not raise despite GCS failure
+        store.record_fired(event)
+        # Event should still be recorded in memory
+        assert event in store.get_recent_events()
 
 
 class TestAlertStoreSubscriptions:

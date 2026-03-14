@@ -18,15 +18,29 @@ def _init_event_logging() -> None:
 
 @pytest.fixture(autouse=True)
 def _clear_notifier_config_caches() -> None:
-    """Clear lru_cache on _get_cloud_config in both notifiers before every test.
+    """Clear lru_cache on _get_cloud_config in all notifiers before every test.
 
-    Both pagerduty._get_cloud_config() and slack._get_cloud_config() are
-    decorated with @lru_cache(maxsize=1). Without clearing between tests,
-    the first test that calls send_event() or send_message() populates the
-    cache and all subsequent tests — even those that patch UnifiedCloudConfig
-    — receive the stale cached value instead of their mock.
+    pagerduty, slack, telegram, and router all cache their config.
+    Without clearing between tests, the first test that populates the
+    cache contaminates all subsequent tests.
     """
-    from alerting_service.notifiers import pagerduty, slack
+    from alerting_service.notifiers import pagerduty, slack, telegram
+    from alerting_service.notifiers.router import _get_cloud_config as router_get_config
+    from alerting_service.persistence.storage_store import _get_cloud_config as storage_get_config
 
     pagerduty._get_cloud_config.cache_clear()
     slack._get_cloud_config.cache_clear()
+    telegram._get_cloud_config.cache_clear()
+    router_get_config.cache_clear()
+    storage_get_config.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_deduplicator() -> None:
+    """Reset the module-level deduplicator before each test.
+
+    Without this, dedup state leaks across tests causing false suppression.
+    """
+    from alerting_service.notifiers.router import _deduplicator
+
+    _deduplicator._seen.clear()
