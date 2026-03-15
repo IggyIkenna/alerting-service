@@ -9,21 +9,13 @@ Best-effort: logs failures, returns False, never crashes.
 """
 
 import logging
-from functools import lru_cache
 
 import httpx
-from unified_config_interface import UnifiedCloudConfig
 from unified_events_interface import log_event
 
 logger = logging.getLogger(__name__)
 
 _TELEGRAM_API_URL = "https://api.telegram.org/bot{token}/sendMessage"
-
-
-@lru_cache(maxsize=1)
-def _get_cloud_config() -> UnifiedCloudConfig:
-    """Return singleton UnifiedCloudConfig instance."""
-    return UnifiedCloudConfig()
 
 
 def send_telegram(message: str, bot_token: str, chat_id: str) -> bool:

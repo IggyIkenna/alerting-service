@@ -136,7 +136,8 @@ class AlertStorageStore:
             if not self._client.blob_exists(bucket=self._bucket, blob_path=_COOLDOWN_BLOB):
                 return {}
             raw = self._client.download_bytes(bucket=self._bucket, blob_path=_COOLDOWN_BLOB)
-            result: dict[str, object] = json.loads(raw.decode("utf-8"))
+            parsed: object = json.loads(raw.decode("utf-8"))
+            result: dict[str, object] = parsed if isinstance(parsed, dict) else {}
             return result
         except Exception:
             logger.exception("Failed to read cooldown state from GCS")
@@ -170,7 +171,10 @@ class AlertStorageStore:
                     for line in raw.decode("utf-8").strip().splitlines():
                         if not line:
                             continue
-                        record: dict[str, object] = json.loads(line)
+                        parsed_line: object = json.loads(line)
+                        record: dict[str, object] = (
+                            parsed_line if isinstance(parsed_line, dict) else {}
+                        )
                         if record.get("alert_id") == alert_id:
                             records.append(record)
             except Exception:

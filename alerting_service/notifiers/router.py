@@ -78,8 +78,8 @@ def _match_routing_rules(
             raw_channels = rule.get("channels", [])
             channels: set[str] = set()
             if isinstance(raw_channels, list):
-                for ch in raw_channels:
-                    channels.add(str(ch))
+                for ch_item in raw_channels:
+                    channels.add(str(ch_item))
             severity_raw = rule.get("severity_filter")
             severity: PagerDutySeverity | None = None
             if severity_raw is not None:

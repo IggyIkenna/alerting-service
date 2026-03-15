@@ -7,7 +7,9 @@ when CLOUD_MOCK_MODE=true.
 
 from __future__ import annotations
 
-from unified_trading_library.core.mock_state_store import MockStateStore
+from datetime import datetime
+
+from unified_trading_library import MockStateStore
 
 from alerting_service.api.routes.mock_data import MOCK_DELIVERY_RECORDS, MOCK_RECENT_ALERTS
 
@@ -22,7 +24,7 @@ def _alerts_as_dicts() -> list[dict[str, object]]:
         d["id"] = d.get("alert_id", "")
         # Convert datetime to string for JSON serialization
         triggered = d.get("triggered_at")
-        if triggered is not None and hasattr(triggered, "isoformat"):
+        if isinstance(triggered, datetime):
             d["triggered_at"] = triggered.isoformat()
         result.append(d)
     return result

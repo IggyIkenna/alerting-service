@@ -81,7 +81,8 @@ async def main() -> None:
     except ValueError as err:
         valid = ", ".join(v.value for v in LogLevel)
         raise SystemExit(f"Invalid LOG_LEVEL={_raw_log_level!r}. Must be one of: {valid}") from err
-    logging.basicConfig(level=getattr(logging, _log_level.value))
+    log_level_int: int = getattr(logging, _log_level.value)
+    logging.basicConfig(level=log_level_int)
 
     parser = _build_parser()
     args = parser.parse_args()
