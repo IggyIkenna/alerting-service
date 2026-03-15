@@ -1,5 +1,7 @@
 [build-system]
-requires = ["hatchling"]
+requires = [
+    "hatchling",
+]
 build-backend = "hatchling.build"
 
 [project]
@@ -34,7 +36,9 @@ dependencies = [
     "pip-audit>=2.7.0,<3.0.0",
     "bandit>=1.7.0,<2.0.0",
     "pre-commit>=3.0,<4.0.0",
+    "unified-cloud-interface>=0.11.39,<1.0.0",
 ]
+
 [tool.uv.sources.unified-internal-contracts]
 path = "../unified-internal-contracts"
 editable = true
@@ -50,6 +54,9 @@ editable = true
 [tool.uv.sources.unified-config-interface]
 path = "../unified-config-interface"
 editable = true
+
+[tool.uv.sources.unified-cloud-interface]
+path = "../unified-cloud-interface"
 
 [tool.ruff]
 line-length = 100
