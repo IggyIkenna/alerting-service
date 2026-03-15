@@ -78,10 +78,9 @@ async def main() -> None:
     _raw_log_level = os.environ.get("LOG_LEVEL", "INFO")
     try:
         _log_level = LogLevel(_raw_log_level)
-    except ValueError:
-        raise SystemExit(
-            f"Invalid LOG_LEVEL={_raw_log_level!r}. Must be one of: {', '.join(v.value for v in LogLevel)}"
-        )
+    except ValueError as err:
+        valid = ", ".join(v.value for v in LogLevel)
+        raise SystemExit(f"Invalid LOG_LEVEL={_raw_log_level!r}. Must be one of: {valid}") from err
     logging.basicConfig(level=getattr(logging, _log_level.value))
 
     parser = _build_parser()

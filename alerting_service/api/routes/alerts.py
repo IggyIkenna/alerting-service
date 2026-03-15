@@ -28,31 +28,32 @@ def get_store() -> AlertStore:
 @router.get("/stream/alerts")
 async def stream_alerts(store: Annotated[AlertStore, Depends(get_store)]) -> EventSourceResponse:
     if _cfg.cloud_mock_mode:
-        from alerting_service.api.routes.mock_data import MOCK_SSE_EVENTS
+        return EventSourceResponse(_mock_sse_generator())
+    return EventSourceResponse(_live_sse_generator(store))
 
-        async def mock_generator() -> AsyncIterator[dict[str, str]]:
-            for evt in MOCK_SSE_EVENTS:
-                yield {"data": json.dumps(evt)}
-                await asyncio.sleep(1)
-            while True:
-                await asyncio.sleep(30)
+
+async def _mock_sse_generator() -> AsyncIterator[dict[str, str]]:
+    from alerting_service.api.routes.mock_data import MOCK_SSE_EVENTS
+
+    for evt in MOCK_SSE_EVENTS:
+        yield {"data": json.dumps(evt)}
+        await asyncio.sleep(1)
+    while True:
+        await asyncio.sleep(30)
+        yield {"data": json.dumps({"heartbeat": True})}
+
+
+async def _live_sse_generator(store: AlertStore) -> AsyncIterator[dict[str, str]]:
+    q = store.subscribe()
+    try:
+        while True:
+            try:
+                event = await asyncio.wait_for(q.get(), timeout=30)
+                yield {"data": event.model_dump_json()}
+            except TimeoutError:
                 yield {"data": json.dumps({"heartbeat": True})}
-
-        return EventSourceResponse(mock_generator())
-
-    async def generator() -> AsyncIterator[dict[str, str]]:
-        q = store.subscribe()
-        try:
-            while True:
-                try:
-                    event = await asyncio.wait_for(q.get(), timeout=30)
-                    yield {"data": event.model_dump_json()}
-                except TimeoutError:
-                    yield {"data": json.dumps({"heartbeat": True})}
-        finally:
-            store.unsubscribe(q)
-
-    return EventSourceResponse(generator())
+    finally:
+        store.unsubscribe(q)
 
 
 @router.get("/rules/recent")
