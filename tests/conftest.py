@@ -24,13 +24,12 @@ def _clear_notifier_config_caches() -> None:
     Without clearing between tests, the first test that populates the
     cache contaminates all subsequent tests.
     """
-    from alerting_service.notifiers import pagerduty, slack, telegram
+    from alerting_service.notifiers import pagerduty, slack
     from alerting_service.notifiers.router import _get_cloud_config as router_get_config
     from alerting_service.persistence.storage_store import _get_cloud_config as storage_get_config
 
     pagerduty._get_cloud_config.cache_clear()
     slack._get_cloud_config.cache_clear()
-    telegram._get_cloud_config.cache_clear()
     router_get_config.cache_clear()
     storage_get_config.cache_clear()
 

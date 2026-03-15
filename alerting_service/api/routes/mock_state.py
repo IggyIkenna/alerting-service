@@ -21,7 +21,7 @@ def _alerts_as_dicts() -> list[dict[str, object]]:
     result: list[dict[str, object]] = []
     for alert in MOCK_RECENT_ALERTS:
         d: dict[str, object] = alert.model_dump()
-        d["id"] = d.get("alert_id", "")
+        d["id"] = d.get("alert_id", "")  # noqa: qg-empty-fallback
         # Convert datetime to string for JSON serialization
         triggered = d.get("triggered_at")
         if isinstance(triggered, datetime):

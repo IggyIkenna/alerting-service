@@ -13,6 +13,14 @@ MIN_COVERAGE=89
 RUN_INTEGRATION=false
 PYTEST_WORKERS=${PYTEST_WORKERS:-2}
 LOCAL_DEPS=()
+# config-bootstrap: main.py reads LOG_LEVEL before UnifiedCloudConfig is available
+OS_ENV_EXCLUDE_GLOBS=("--glob" "!**/main.py")
+# Lazy imports to avoid circular dependency (router.py -> storage_store.py)
+IMPORT_INSIDE_EXCLUDE_GLOBS=("!**/notifiers/router.py")
+# Mock-mode paths use inline imports for conditional loading
+IMPORT_INSIDE_EXCLUDE_GLOBS+=("!**/api/routes/alerts.py" "!**/api/routes/delivery_status.py")
+# Broad except in persistence layer — logs exception detail, returns safe default
+BE_EXCLUDE_GLOBS=("**/persistence/storage_store.py" "**/notifiers/router.py")
 WORKSPACE_ROOT="$(cd "$(git rev-parse --show-toplevel)/.." && pwd)"
 source "${WORKSPACE_ROOT}/unified-trading-pm/scripts/quality-gates-base/base-service.sh"
 

@@ -31,7 +31,7 @@ class SportsAlertType(StrEnum):
     SETTLEMENT_DELAYED = "settlement_delayed"
 
 
-class SportsAlert(BaseModel):
+class SportsAlert(BaseModel):  # CORRECT-LOCAL — sports rule output, not a shared domain contract
     """A sports-specific alert."""
 
     alert_type: SportsAlertType

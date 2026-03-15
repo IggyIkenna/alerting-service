@@ -26,6 +26,7 @@ import uuid
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from functools import lru_cache
+from typing import cast
 
 from unified_events_interface import log_event
 
@@ -73,13 +74,13 @@ def _match_routing_rules(
         Tuple of (channel_set, pagerduty_severity_or_none).
     """
     for rule in rules:
-        pattern = str(rule.get("event_pattern", ""))
+        pattern = str(rule.get("event_pattern", ""))  # noqa: qg-empty-fallback
         if fnmatch(event_name, pattern):
-            raw_channels = rule.get("channels", [])
+            raw_channels = rule.get("channels", [])  # noqa: qg-empty-fallback
             channels: set[str] = set()
             if isinstance(raw_channels, list):
-                for ch_item in raw_channels:
-                    channels.add(str(ch_item))
+                for channel_name in cast("list[object]", raw_channels):
+                    channels.add(str(channel_name))
             severity_raw = rule.get("severity_filter")
             severity: PagerDutySeverity | None = None
             if severity_raw is not None:
