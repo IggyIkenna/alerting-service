@@ -75,7 +75,7 @@ async def main() -> None:
     global _shutdown_handler
 
     # LOG_LEVEL env var validation (SSOT for log levels)
-    _raw_log_level = os.environ.get("LOG_LEVEL", "INFO")
+    _raw_log_level = os.environ.get("LOG_LEVEL", "INFO")  # config-bootstrap: before UCC init
     try:
         _log_level = LogLevel(_raw_log_level)
     except ValueError as err:

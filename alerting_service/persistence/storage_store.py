@@ -13,7 +13,7 @@ Path conventions (see ``docs/GCS_PATHS.md``):
 import json
 import logging
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import cast
 
@@ -155,8 +155,6 @@ class AlertStorageStore:
         Returns:
             List of delivery record dicts matching the alert_id.
         """
-        from datetime import timedelta
-
         records: list[dict[str, object]] = []
         now = datetime.now(UTC)
 

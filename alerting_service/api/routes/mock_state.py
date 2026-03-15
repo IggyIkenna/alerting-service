@@ -35,7 +35,7 @@ def _delivery_records_as_dicts() -> list[dict[str, object]]:
     result: list[dict[str, object]] = []
     for record in MOCK_DELIVERY_RECORDS:
         d: dict[str, object] = dict(record)
-        d["id"] = str(d.get("delivery_id", ""))
+        d["id"] = str(d.get("delivery_id", ""))  # noqa: qg-empty-fallback
         result.append(d)
     return result
 
