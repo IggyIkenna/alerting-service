@@ -14,11 +14,11 @@ import os
 import uuid
 from typing import cast
 
-from unified_api_contracts import LogLevel
 from unified_events_interface import log_event
 from unified_internal_contracts import LifecycleEventType
 from unified_trading_library import (
     GracefulShutdownHandler,
+    LogLevel,
     PubSubEventSink,
     setup_service_observability,
 )

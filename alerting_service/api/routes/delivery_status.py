@@ -46,8 +46,22 @@ def get_delivery_status(
         if not matching:
             # Return sample records with the requested alert_id
             matching = [
-                {"delivery_id": "del-mock-001", "alert_id": alert_id, "channel": "telegram", "status": "delivered", "delivered_at": "2026-03-14T12:00:01Z", "acknowledged": False},
-                {"delivery_id": "del-mock-002", "alert_id": alert_id, "channel": "pagerduty", "status": "delivered", "delivered_at": "2026-03-14T12:00:02Z", "acknowledged": True},
+                {
+                    "delivery_id": "del-mock-001",
+                    "alert_id": alert_id,
+                    "channel": "telegram",
+                    "status": "delivered",
+                    "delivered_at": "2026-03-14T12:00:01Z",
+                    "acknowledged": False,
+                },
+                {
+                    "delivery_id": "del-mock-002",
+                    "alert_id": alert_id,
+                    "channel": "pagerduty",
+                    "status": "delivered",
+                    "delivered_at": "2026-03-14T12:00:02Z",
+                    "acknowledged": True,
+                },
             ]
         return {
             "alert_id": alert_id,

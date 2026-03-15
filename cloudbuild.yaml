@@ -80,8 +80,7 @@ steps:
   # ── STEP 1: Configure Docker authentication ───────────────────────────────
   - name: "gcr.io/cloud-builders/gcloud"
     id: "configure-docker"
-    args:
-      ["auth", "configure-docker", "asia-northeast1-docker.pkg.dev", "--quiet"]
+    args: ["auth", "configure-docker", "asia-northeast1-docker.pkg.dev", "--quiet"]
     waitFor: ["-"]
 
   # ── STEP 2: Ensure Artifact Registry repository exists ───────────────────
@@ -105,11 +104,7 @@ steps:
   # ── STEP 3: Pull UTL base image (required for authenticated access) ───────
   - name: "gcr.io/cloud-builders/docker"
     id: "pull-base-image"
-    args:
-      [
-        "pull",
-        "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-library/unified-trading-library:latest",
-      ]
+    args: ["pull", "asia-northeast1-docker.pkg.dev/$PROJECT_ID/unified-trading-library/unified-trading-library:latest"]
     waitFor: ["configure-docker"]
 
   # ── STEP 4: Build Docker image ────────────────────────────────────────────
@@ -152,12 +147,7 @@ steps:
   # ── STEP 6: REQUIRED — Push image ONLY if quality gates passed ────────────
   - name: "gcr.io/cloud-builders/docker"
     id: "push"
-    args:
-      [
-        "push",
-        "--all-tags",
-        "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}",
-      ]
+    args: ["push", "--all-tags", "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}"]
     waitFor: ["quality-gates"]
 
   # ── STEP 7: REQUIRED — Vulnerability scan (CRITICAL CVE gate) ────────────

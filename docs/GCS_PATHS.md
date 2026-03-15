@@ -17,11 +17,11 @@ gs://alerting-service-{gcp_project_id}/
 
 ### Path Templates
 
-| Dataset       | Path Pattern                          | Format | Notes                                          |
-| ------------- | ------------------------------------- | ------ | ---------------------------------------------- |
+| Dataset       | Path Pattern                          | Format | Notes                                             |
+| ------------- | ------------------------------------- | ------ | ------------------------------------------------- |
 | Alert history | `alerting/history/date={YYYY-MM-DD}/` | JSONL  | One blob per write, UUID-named to avoid conflicts |
-| Alert configs | `alerting/configs/`                   | YAML   | Routing rule snapshots for audit               |
-| Alert state   | `alerting/state/cooldowns.json`       | JSON   | Cooldown state for cross-instance coordination |
+| Alert configs | `alerting/configs/`                   | YAML   | Routing rule snapshots for audit                  |
+| Alert state   | `alerting/state/cooldowns.json`       | JSON   | Cooldown state for cross-instance coordination    |
 
 ### Example Resolved Paths
 

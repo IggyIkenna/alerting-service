@@ -22,7 +22,9 @@ def mock_config() -> MagicMock:
     """Patch UnifiedCloudConfig to provide a fixed project_id."""
     mock_cfg = MagicMock()
     mock_cfg.gcp_project_id = "test-project"
-    with patch("alerting_service.persistence.storage_store.UnifiedCloudConfig", return_value=mock_cfg):
+    with patch(
+        "alerting_service.persistence.storage_store.UnifiedCloudConfig", return_value=mock_cfg
+    ):
         yield mock_cfg
 
 
@@ -41,7 +43,10 @@ def mock_log_event() -> MagicMock:
 
 class TestWriteAlertHistory:
     def test_writes_jsonl_to_correct_prefix(
-        self, storage_store: AlertStorageStore, mock_storage_client: MagicMock, mock_log_event: MagicMock
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
     ) -> None:
         alert = {"alert_id": "a1", "severity": "WARNING", "message": "test"}
         storage_store.write_alert_history(alert)
@@ -54,7 +59,10 @@ class TestWriteAlertHistory:
         assert call_kwargs["content_type"] == "application/x-ndjson"
 
     def test_data_is_valid_jsonl(
-        self, storage_store: AlertStorageStore, mock_storage_client: MagicMock, mock_log_event: MagicMock
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
     ) -> None:
         alert: dict[str, object] = {"alert_id": "a1", "severity": "WARNING"}
         storage_store.write_alert_history(alert)
@@ -67,14 +75,20 @@ class TestWriteAlertHistory:
         assert parsed["severity"] == "WARNING"
 
     def test_logs_event_on_success(
-        self, storage_store: AlertStorageStore, mock_storage_client: MagicMock, mock_log_event: MagicMock
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
     ) -> None:
         storage_store.write_alert_history({"alert_id": "a1"})
         mock_log_event.assert_called_once()
         assert mock_log_event.call_args[0][0] == "PERSISTENCE_COMPLETED"
 
     def test_does_not_raise_on_upload_failure(
-        self, storage_store: AlertStorageStore, mock_storage_client: MagicMock, mock_log_event: MagicMock
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
     ) -> None:
         mock_storage_client.upload_bytes.side_effect = RuntimeError("GCS down")
         # Should not raise
@@ -83,7 +97,10 @@ class TestWriteAlertHistory:
 
 class TestWriteConfigSnapshot:
     def test_writes_yaml_to_configs_prefix(
-        self, storage_store: AlertStorageStore, mock_storage_client: MagicMock, mock_log_event: MagicMock
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
     ) -> None:
         config: dict[str, object] = {"rules": [{"name": "rule1"}]}
         storage_store.write_config_snapshot(config)
@@ -93,14 +110,20 @@ class TestWriteConfigSnapshot:
         assert call_kwargs["content_type"] == "application/x-yaml"
 
     def test_custom_name(
-        self, storage_store: AlertStorageStore, mock_storage_client: MagicMock, mock_log_event: MagicMock
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
     ) -> None:
         storage_store.write_config_snapshot({"rules": []}, name="custom_config")
         call_kwargs = mock_storage_client.upload_bytes.call_args.kwargs
         assert call_kwargs["blob_path"] == "alerting/configs/custom_config.yaml"
 
     def test_data_is_valid_yaml(
-        self, storage_store: AlertStorageStore, mock_storage_client: MagicMock, mock_log_event: MagicMock
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
     ) -> None:
         config: dict[str, object] = {"rules": [{"name": "rule1", "threshold": 0.9}]}
         storage_store.write_config_snapshot(config)
@@ -110,7 +133,10 @@ class TestWriteConfigSnapshot:
         assert parsed["rules"][0]["name"] == "rule1"
 
     def test_does_not_raise_on_upload_failure(
-        self, storage_store: AlertStorageStore, mock_storage_client: MagicMock, mock_log_event: MagicMock
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
     ) -> None:
         mock_storage_client.upload_bytes.side_effect = RuntimeError("GCS down")
         storage_store.write_config_snapshot({"rules": []})
@@ -142,7 +168,10 @@ class TestCooldownState:
         assert result == {}
 
     def test_write_uploads_json(
-        self, storage_store: AlertStorageStore, mock_storage_client: MagicMock, mock_log_event: MagicMock
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
     ) -> None:
         state: dict[str, object] = {"rule-1": "2026-03-08T12:00:00"}
         storage_store.write_cooldown_state(state)
@@ -154,7 +183,10 @@ class TestCooldownState:
         assert parsed == state
 
     def test_write_does_not_raise_on_failure(
-        self, storage_store: AlertStorageStore, mock_storage_client: MagicMock, mock_log_event: MagicMock
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
     ) -> None:
         mock_storage_client.upload_bytes.side_effect = RuntimeError("GCS down")
         storage_store.write_cooldown_state({"rule-1": "2026-03-08"})

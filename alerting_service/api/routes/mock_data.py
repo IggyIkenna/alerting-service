@@ -132,13 +132,55 @@ def _make_alert_events() -> list[AlertEvent]:
 MOCK_RECENT_ALERTS: list[AlertEvent] = _make_alert_events()
 
 MOCK_SSE_EVENTS: list[dict[str, str | float]] = [
-    {"alert_id": "alert-sse-001", "rule_id": "DATA_STALE", "severity": "WARNING", "message": "Market data stale for okx ETH-USDT", "metric_value": 45.0, "threshold": 30.0},
-    {"alert_id": "alert-sse-002", "rule_id": "PREFLIGHT_FAILED", "severity": "WARNING", "message": "Preflight failed: risk check timeout", "metric_value": 0.0, "threshold": 1.0},
-    {"alert_id": "alert-sse-003", "rule_id": "KILL_SWITCH_TRIGGERED", "severity": "CRITICAL", "message": "Kill switch: daily loss limit reached", "metric_value": -5000.0, "threshold": -4500.0},
+    {
+        "alert_id": "alert-sse-001",
+        "rule_id": "DATA_STALE",
+        "severity": "WARNING",
+        "message": "Market data stale for okx ETH-USDT",
+        "metric_value": 45.0,
+        "threshold": 30.0,
+    },
+    {
+        "alert_id": "alert-sse-002",
+        "rule_id": "PREFLIGHT_FAILED",
+        "severity": "WARNING",
+        "message": "Preflight failed: risk check timeout",
+        "metric_value": 0.0,
+        "threshold": 1.0,
+    },
+    {
+        "alert_id": "alert-sse-003",
+        "rule_id": "KILL_SWITCH_TRIGGERED",
+        "severity": "CRITICAL",
+        "message": "Kill switch: daily loss limit reached",
+        "metric_value": -5000.0,
+        "threshold": -4500.0,
+    },
 ]
 
 MOCK_DELIVERY_RECORDS: list[dict[str, str | bool]] = [
-    {"delivery_id": "del-001", "alert_id": "alert-001", "channel": "pagerduty", "status": "delivered", "delivered_at": "2026-03-14T11:55:02Z", "acknowledged": True},
-    {"delivery_id": "del-002", "alert_id": "alert-001", "channel": "telegram", "status": "delivered", "delivered_at": "2026-03-14T11:55:01Z", "acknowledged": False},
-    {"delivery_id": "del-003", "alert_id": "alert-001", "channel": "slack", "status": "failed", "delivered_at": "", "acknowledged": False},
+    {
+        "delivery_id": "del-001",
+        "alert_id": "alert-001",
+        "channel": "pagerduty",
+        "status": "delivered",
+        "delivered_at": "2026-03-14T11:55:02Z",
+        "acknowledged": True,
+    },
+    {
+        "delivery_id": "del-002",
+        "alert_id": "alert-001",
+        "channel": "telegram",
+        "status": "delivered",
+        "delivered_at": "2026-03-14T11:55:01Z",
+        "acknowledged": False,
+    },
+    {
+        "delivery_id": "del-003",
+        "alert_id": "alert-001",
+        "channel": "slack",
+        "status": "failed",
+        "delivered_at": "",
+        "acknowledged": False,
+    },
 ]
