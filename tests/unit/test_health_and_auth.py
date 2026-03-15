@@ -18,6 +18,25 @@ class TestHealthEndpoint:
         assert "cloud_provider" in result
         assert "mock_mode" in result
 
+    def test_health_data_freshness_is_dict(self) -> None:
+        import asyncio
+
+        from alerting_service.api.routes.health import health
+
+        result = asyncio.get_event_loop().run_until_complete(health())
+        freshness = result.get("data_freshness")
+        assert isinstance(freshness, dict), f"data_freshness must be dict, got {type(freshness)}"
+
+    def test_health_data_freshness_fields(self) -> None:
+        import asyncio
+
+        from alerting_service.api.routes.health import health
+
+        result = asyncio.get_event_loop().run_until_complete(health())
+        freshness = result["data_freshness"]
+        assert isinstance(freshness.get("last_processed_date"), str)
+        assert isinstance(freshness.get("stale"), bool)
+
 
 class TestVerifyApiKey:
     @pytest.mark.asyncio

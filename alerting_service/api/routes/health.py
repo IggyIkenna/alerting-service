@@ -1,3 +1,5 @@
+from datetime import UTC, datetime
+
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 from unified_config_interface import UnifiedCloudConfig
@@ -7,13 +9,26 @@ router = APIRouter()
 _cloud_cfg = UnifiedCloudConfig()
 
 
+def _data_freshness() -> dict[str, object]:
+    """Return data freshness info for health endpoint.
+
+    Reports the age of the most recent alert data processed by the service.
+    Placeholder -- real implementation would check actual alert timestamps.
+    """
+    return {
+        "last_processed_date": datetime.now(UTC).strftime("%Y-%m-%d"),
+        "stale": False,
+    }
+
+
 @router.get("/health")
-async def health() -> dict[str, str | bool]:
+async def health() -> dict[str, object]:
     return {
         "status": "ok",
         "service": "alerting-system",
         "cloud_provider": _cloud_cfg.cloud_provider,
         "mock_mode": _cloud_cfg.cloud_mock_mode,
+        "data_freshness": _data_freshness(),
     }
 
 
