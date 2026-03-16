@@ -407,8 +407,16 @@ class TestUnifiedTradingLibrary:
         from alerting_service.notifiers.router import _match_routing_rules
 
         rules: list[dict[str, object]] = [
-            {"event_pattern": "KILL_SWITCH_*", "channels": ["pagerduty", "telegram"], "severity_filter": "critical"},
-            {"event_pattern": "SERVICE_DEGRADED", "channels": ["telegram"], "severity_filter": None},
+            {
+                "event_pattern": "KILL_SWITCH_*",
+                "channels": ["pagerduty", "telegram"],
+                "severity_filter": "critical",
+            },
+            {
+                "event_pattern": "SERVICE_DEGRADED",
+                "channels": ["telegram"],
+                "severity_filter": None,
+            },
             {"event_pattern": "*", "channels": ["telegram"], "severity_filter": None},
         ]
 
