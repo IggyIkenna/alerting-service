@@ -1,8 +1,12 @@
+# Canonical pre-commit config for Python services and API services.
+# Template SSOT: unified-trading-pm/scripts/pre-commit-templates/
+# Rollout: bash unified-trading-pm/scripts/propagation/rollout-pre-commit-configs.sh
+# Setup: pre-commit install --install-hooks
+
 default_install_hook_types:
   - pre-commit
   - commit-msg
 
-# See https://pre-commit.com for more information
 repos:
   # Conventional commit validation (feat:/fix:/chore:/docs:/refactor:/test:/ci:)
   - repo: https://github.com/compilerla/conventional-pre-commit
@@ -10,14 +14,18 @@ repos:
     hooks:
       - id: conventional-pre-commit
         stages: [commit-msg]
+
+  # Ruff - Fast Python linter AND formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.0
     hooks:
       - id: ruff
-        args: [--fix]
+        name: Lint with Ruff
+        args: [--fix, --exit-non-zero-on-fix]
       - id: ruff-format
+        name: Format with Ruff
 
-  # Prettier - TypeScript/JSON/Markdown formatter
+  # Prettier - TypeScript/JSON/Markdown/YAML formatter
   - repo: https://github.com/pre-commit/mirrors-prettier
     rev: v4.0.0-alpha.8
     hooks:
@@ -27,48 +35,27 @@ repos:
         additional_dependencies:
           - prettier@3.6.2
 
+  # Branch drift check - blocks commit if you're behind origin
+  - repo: local
+    hooks:
+      - id: check-branch-drift
+        name: Check branch drift (are you behind origin?)
+        entry: bash -c 'HOOK="${WORKSPACE_ROOT:-$(cd "$(git rev-parse --show-toplevel)/.." && pwd)}/unified-trading-pm/scripts/hooks/check-branch-drift.sh"; [ -f "$HOOK" ] && bash "$HOOK" || exit 0'
+        language: system
+        always_run: true
+        pass_filenames: false
+
+  # Basic file checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
-        exclude: "^cloudbuild\\.yaml$" # cloudbuild.yaml uses embedded Python strings that fail PyYAML strict parsing
-      - id: check-json
+        exclude: "^cloudbuild\\.yaml$"
+      - id: check-toml
       - id: check-added-large-files
         args: ["--maxkb=1000"]
       - id: check-merge-conflict
-      - id: check-case-conflict
-      - id: mixed-line-ending
       - id: detect-private-key
-
-  - repo: local
-    hooks:
-      - id: file-size-limit
-        name: Check file size limit
-        entry: bash -c 'find . -name "*.py" -size +500k -exec echo "File {} exceeds 500 lines" \; -exec false \;'
-        language: system
-        pass_filenames: false
-
-      - id: no-backup-files
-        name: No backup files
-        entry: bash -c '! find . \( -path "./.venv*" -o -path "./.venv-workspace" \) -prune -o \( -name "*_backup.py" -o -name "*_original.py" -o -name "*_clean.py" \) -print | grep -q .'
-        language: system
-        pass_filenames: false
-
-  - repo: local
-    hooks:
-      - id: check-import-patterns
-        name: Check external import patterns
-        entry: python3 .cursor/scripts/check-import-patterns.py
-        language: python
-        files: \.py$
-        pass_filenames: false
-        stages: [commit]
-      - id: fix-import-patterns
-        name: Fix external import patterns (manual)
-        entry: python3 .cursor/scripts/check-import-patterns.py --fix
-        language: python
-        files: \.py$
-        pass_filenames: false
-        stages: [manual]
+      - id: mixed-line-ending
