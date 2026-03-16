@@ -57,6 +57,7 @@ editable = true
 
 [tool.uv.sources.unified-cloud-interface]
 path = "../unified-cloud-interface"
+editable = true
 
 [tool.ruff]
 line-length = 100
