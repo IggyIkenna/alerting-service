@@ -429,7 +429,7 @@ class TestUnifiedTradingLibrary:
         assert channels2 == {"telegram"}
         assert severity2 is None
 
-        channels3, severity3 = _match_routing_rules("RANDOM_EVENT", rules)
+        channels3, _severity3 = _match_routing_rules("RANDOM_EVENT", rules)
         assert "telegram" in channels3
 
     @patch("alerting_service.notifiers.router._deliver_message", return_value=True)
