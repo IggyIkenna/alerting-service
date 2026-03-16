@@ -13,6 +13,16 @@ MIN_COVERAGE=89
 RUN_INTEGRATION=false
 PYTEST_WORKERS=${PYTEST_WORKERS:-2}
 LOCAL_DEPS=()
+
+# broad except Exception in persistence and routing: documented in QUALITY_GATE_BYPASS_AUDIT.md §2.1
+# These are best-effort persistence handlers where catching all exceptions is intentional
+# to prevent GCS outages from crashing the alerting pipeline.
+BE_EXCLUDE_GLOBS=(
+  "**/persistence/storage_store.py"
+  "**/notifiers/router.py"
+  "**/core/alert_store.py"
+)
+
 WORKSPACE_ROOT="$(cd "$(git rev-parse --show-toplevel)/.." && pwd)"
 source "${WORKSPACE_ROOT}/unified-trading-pm/scripts/quality-gates-base/base-service.sh"
 

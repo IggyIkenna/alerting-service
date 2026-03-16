@@ -12,11 +12,20 @@ This file documents any quality gate bypasses (e.g. reportAny, E501, file size) 
 **Rule:** `asyncio.run() in loop — use asyncio.gather()`
 **Reason:** False positive. `asyncio.run(main())` is in the `if __name__ == "__main__":` guard — it is the entry point, not inside a loop. The QG heuristic fires because the same file contains a `while` loop inside `_run_subscriber_until_shutdown()`, a separate async function. The `asyncio.run()` call is architecturally correct: it is the outermost event loop entry, not nested inside a loop.
 
+### §2.1 — broad except Exception (persistence + routing)
+
+**Files:** `alerting_service/persistence/storage_store.py`, `alerting_service/notifiers/router.py`, `alerting_service/core/alert_store.py`
+**Rule:** `except Exception:` (broad except)
+**Reason:** Best-effort persistence handlers. These catch all exceptions to prevent a GCS/storage outage from crashing the alerting pipeline. Each catch site logs the exception via `logger.exception()` — no errors are swallowed. This is the same pattern used in execution-service for resilience-critical handlers (see execution-service QUALITY_GATE_BYPASS_AUDIT.md §5.1).
+
 ## Bypass Register
 
-| ID   | File                       | Rule                    | Type           | Reviewed | Justification                                                    |
-| ---- | -------------------------- | ----------------------- | -------------- | -------- | ---------------------------------------------------------------- |
-| §1.1 | `alerting_service/main.py` | `asyncio.run() in loop` | False positive | 2026-03  | Entry point guard pattern; while loop is in a different function |
+| ID   | File                                            | Rule                    | Type                    | Reviewed | Justification                                                    |
+| ---- | ----------------------------------------------- | ----------------------- | ----------------------- | -------- | ---------------------------------------------------------------- |
+| §1.1 | `alerting_service/main.py`                      | `asyncio.run() in loop` | False positive          | 2026-03  | Entry point guard pattern; while loop is in a different function |
+| §2.1 | `alerting_service/persistence/storage_store.py` | `except Exception:`     | Architectural exception | 2026-03  | Best-effort persistence; all exceptions logged, not swallowed    |
+| §2.1 | `alerting_service/notifiers/router.py`          | `except Exception:`     | Architectural exception | 2026-03  | Best-effort persistence; all exceptions logged, not swallowed    |
+| §2.1 | `alerting_service/core/alert_store.py`          | `except Exception:`     | Architectural exception | 2026-03  | Best-effort GCS dual-write; exception logged, not swallowed      |
 
 ## What Counts as a Bypass
 

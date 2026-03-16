@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from alerting_service.api.routes.mock_state import get_store as get_mock_store
 from alerting_service.config import AlertingSystemConfig
 from alerting_service.persistence.storage_store import AlertStorageStore
 
@@ -39,8 +41,6 @@ def get_delivery_status(
         JSON object with ``alert_id`` and a list of ``records``.
     """
     if _cfg.cloud_mock_mode:
-        from alerting_service.api.routes.mock_state import get_store as get_mock_store
-
         all_records = get_mock_store().list("delivery_records")
         matching = [r for r in all_records if r.get("alert_id") == alert_id]
         if not matching:
@@ -80,10 +80,6 @@ def create_delivery_record(
 ) -> dict[str, object]:
     """Record a new delivery record. Persists in mock state when CLOUD_MOCK_MODE=true."""
     if _cfg.cloud_mock_mode:
-        import uuid
-
-        from alerting_service.api.routes.mock_state import get_store as get_mock_store
-
         if "delivery_id" not in record:
             record["delivery_id"] = f"del-{uuid.uuid4().hex[:6]}"
         record["id"] = record["delivery_id"]

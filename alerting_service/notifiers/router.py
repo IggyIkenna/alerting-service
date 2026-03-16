@@ -32,6 +32,7 @@ from unified_events_interface import log_event
 
 from ..config import AlertingSystemConfig
 from ..core.dedup import AlertDeduplicator
+from ..persistence.storage_store import AlertStorageStore
 from .pagerduty import PagerDutySeverity
 from .pagerduty import send_event as pd_send_event
 from .slack import send_message as slack_send_message  # DEPRECATED: use Telegram
@@ -52,14 +53,12 @@ def _get_cloud_config() -> AlertingSystemConfig:
     return AlertingSystemConfig()
 
 
-def _get_storage_store() -> object:
-    """Return singleton AlertStorageStore instance (lazy import to avoid circular deps)."""
+def _get_storage_store() -> AlertStorageStore:
+    """Return singleton AlertStorageStore instance."""
     global _storage_store_instance
     if _storage_store_instance is None:
-        from ..persistence.storage_store import AlertStorageStore
-
         _storage_store_instance = AlertStorageStore()
-    return _storage_store_instance
+    return cast("AlertStorageStore", _storage_store_instance)
 
 
 def _match_routing_rules(
@@ -135,9 +134,7 @@ def _build_delivery_record(
 def _persist_delivery_record(record: dict[str, object]) -> None:
     """Write a delivery record to GCS history (best-effort)."""
     try:
-        from ..persistence.storage_store import AlertStorageStore
-
-        store: AlertStorageStore = _get_storage_store()  # type: ignore[assignment]
+        store = _get_storage_store()
         store.write_alert_history(record)
     except Exception:
         logger.exception("Failed to persist delivery record")
@@ -146,9 +143,7 @@ def _persist_delivery_record(record: dict[str, object]) -> None:
 def _persist_config_snapshot(config: AlertingSystemConfig) -> None:
     """Write current routing config to GCS configs/ (best-effort)."""
     try:
-        from ..persistence.storage_store import AlertStorageStore
-
-        store: AlertStorageStore = _get_storage_store()  # type: ignore[assignment]
+        store = _get_storage_store()
         snapshot: dict[str, object] = {"routing_rules": config.routing_rules}
         store.write_config_snapshot(snapshot, name="routing_rules")
     except Exception:
