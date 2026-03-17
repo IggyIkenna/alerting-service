@@ -474,6 +474,72 @@ class TestConfigSnapshotPersistence:
         mock_persist_config.assert_called_once()
 
 
+class TestDefiRoutingRules:
+    """Tests for DeFi event routing through _match_routing_rules."""
+
+    @staticmethod
+    def _defi_rules() -> list[dict[str, object]]:
+        """Return routing rules including DeFi entries (matches config.py defaults)."""
+        return [
+            {
+                "event_pattern": "KILL_SWITCH_*",
+                "channels": ["pagerduty", "telegram"],
+                "severity_filter": "critical",
+            },
+            {
+                "event_pattern": "DEFI_HEALTH_FACTOR_CRITICAL",
+                "channels": ["pagerduty", "telegram"],
+                "severity_filter": "critical",
+            },
+            {
+                "event_pattern": "DEFI_WEETH_DEPEG",
+                "channels": ["pagerduty", "telegram"],
+                "severity_filter": "critical",
+            },
+            {
+                "event_pattern": "DEFI_AAVE_UTILIZATION_SPIKE",
+                "channels": ["telegram"],
+                "severity_filter": None,
+            },
+            {
+                "event_pattern": "DEFI_FUNDING_RATE_FLIP",
+                "channels": ["telegram"],
+                "severity_filter": None,
+            },
+            {
+                "event_pattern": "DEFI_FEATURE_STALE",
+                "channels": ["telegram"],
+                "severity_filter": None,
+            },
+            {"event_pattern": "*", "channels": ["telegram"], "severity_filter": None},
+        ]
+
+    def test_health_factor_critical_routes_to_pagerduty_and_telegram(self) -> None:
+        channels, severity = _match_routing_rules("DEFI_HEALTH_FACTOR_CRITICAL", self._defi_rules())
+        assert channels == {"pagerduty", "telegram"}
+        assert severity == "critical"
+
+    def test_weeth_depeg_routes_to_pagerduty_and_telegram(self) -> None:
+        channels, severity = _match_routing_rules("DEFI_WEETH_DEPEG", self._defi_rules())
+        assert channels == {"pagerduty", "telegram"}
+        assert severity == "critical"
+
+    def test_aave_utilization_routes_to_telegram_only(self) -> None:
+        channels, severity = _match_routing_rules("DEFI_AAVE_UTILIZATION_SPIKE", self._defi_rules())
+        assert channels == {"telegram"}
+        assert severity is None
+
+    def test_funding_rate_flip_routes_to_telegram_only(self) -> None:
+        channels, severity = _match_routing_rules("DEFI_FUNDING_RATE_FLIP", self._defi_rules())
+        assert channels == {"telegram"}
+        assert severity is None
+
+    def test_feature_stale_routes_to_telegram_only(self) -> None:
+        channels, severity = _match_routing_rules("DEFI_FEATURE_STALE", self._defi_rules())
+        assert channels == {"telegram"}
+        assert severity is None
+
+
 class TestCustomRoutingRules:
     """Tests with custom routing rules."""
 

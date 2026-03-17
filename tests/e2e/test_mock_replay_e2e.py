@@ -93,9 +93,7 @@ class TestMarketDataFreshnessMonitoring:
 
         import requests
 
-        resp = requests.get(
-            "https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=BTCUSDT"
-        )
+        resp = requests.get("https://fapi.binance.com/fapi/v1/ticker/24hr?symbol=BTCUSDT")
         assert resp.status_code == 200
         # 200 response means exchange is responsive -> no freshness alert
 
@@ -172,12 +170,10 @@ class TestAlertRuleIntegration:
         # Check Hyperliquid via meta cassette
         hl_body = load_cassette("hyperliquid", "meta_and_asset_ctxs.yaml")
         health_statuses["hyperliquid"] = (
-            isinstance(hl_body.get("universe"), list) and
-            len(hl_body["universe"]) > 0
+            isinstance(hl_body.get("universe"), list) and len(hl_body["universe"]) > 0
         )
 
         # All services should be healthy
         assert all(health_statuses.values()), (
-            f"Unhealthy services: "
-            f"{[k for k, v in health_statuses.items() if not v]}"
+            f"Unhealthy services: {[k for k, v in health_statuses.items() if not v]}"
         )

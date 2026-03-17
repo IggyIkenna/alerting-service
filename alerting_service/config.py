@@ -27,6 +27,33 @@ def _default_routing_rules() -> list[dict[str, object]]:
             "channels": ["pagerduty", "telegram"],
             "severity_filter": "critical",
         },
+        # DeFi P0 alerts — immediate PagerDuty + Telegram
+        {
+            "event_pattern": "DEFI_HEALTH_FACTOR_CRITICAL",
+            "channels": ["pagerduty", "telegram"],
+            "severity_filter": "critical",
+        },
+        {
+            "event_pattern": "DEFI_WEETH_DEPEG",
+            "channels": ["pagerduty", "telegram"],
+            "severity_filter": "critical",
+        },
+        # DeFi P1 alerts — Telegram only
+        {
+            "event_pattern": "DEFI_AAVE_UTILIZATION_SPIKE",
+            "channels": ["telegram"],
+            "severity_filter": None,
+        },
+        {
+            "event_pattern": "DEFI_FUNDING_RATE_FLIP",
+            "channels": ["telegram"],
+            "severity_filter": None,
+        },
+        {
+            "event_pattern": "DEFI_FEATURE_STALE",
+            "channels": ["telegram"],
+            "severity_filter": None,
+        },
         {
             "event_pattern": "PREFLIGHT_FAILED",
             "channels": ["telegram"],
