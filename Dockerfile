@@ -13,11 +13,11 @@ FROM base AS app
 
 # Copy application code
 COPY alerting_system/ /app/alerting_system/
-COPY pyproject.toml /app/
+COPY pyproject.toml uv.lock /app/
 COPY README.md /app/
 
-# Install service with dev dependencies (for tests)
-RUN uv pip install --system -e ".[dev]"
+# Install dependencies from lockfile
+RUN uv sync --frozen --no-dev --system
 
 # Copy tests
 COPY tests/ /app/tests/
