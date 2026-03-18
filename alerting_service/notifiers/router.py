@@ -26,7 +26,7 @@ import uuid
 from datetime import UTC, datetime
 from fnmatch import fnmatch
 from functools import lru_cache
-from typing import cast
+from typing import cast, get_args
 
 from unified_events_interface import log_event
 
@@ -39,6 +39,8 @@ from .slack import send_message as slack_send_message  # DEPRECATED: use Telegra
 from .telegram import send_telegram
 
 logger = logging.getLogger(__name__)
+
+_VALID_SEVERITIES: frozenset[str] = frozenset(get_args(PagerDutySeverity))
 
 # Module-level deduplicator (shared across all route_event calls).
 _deduplicator = AlertDeduplicator(ttl_seconds=60.0)
@@ -83,7 +85,16 @@ def _match_routing_rules(
             severity_raw = rule.get("severity_filter")
             severity: PagerDutySeverity | None = None
             if severity_raw is not None:
-                severity = str(severity_raw)  # type: ignore[assignment]
+                severity_str = str(severity_raw).lower()
+                if severity_str in _VALID_SEVERITIES:
+                    severity = cast("PagerDutySeverity", severity_str)
+                else:
+                    logger.warning(
+                        "Unknown severity %r in routing rule for %s, defaulting to 'warning'",
+                        severity_raw,
+                        pattern,
+                    )
+                    severity = "warning"
             return channels, severity
 
     # No rule matched — fallback to telegram only

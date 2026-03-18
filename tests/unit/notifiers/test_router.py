@@ -165,6 +165,42 @@ class TestMatchRoutingRules:
         assert channels == {"telegram"}
         assert severity is None
 
+    def test_invalid_severity_defaults_to_warning(self) -> None:
+        rules: list[dict[str, object]] = [
+            {
+                "event_pattern": "BAD_SEVERITY_*",
+                "channels": ["pagerduty"],
+                "severity_filter": "catastrophic",
+            },
+        ]
+        channels, severity = _match_routing_rules("BAD_SEVERITY_EVENT", rules)
+        assert channels == {"pagerduty"}
+        assert severity == "warning"
+
+    def test_valid_severity_preserved(self) -> None:
+        rules: list[dict[str, object]] = [
+            {
+                "event_pattern": "TEST_*",
+                "channels": ["pagerduty"],
+                "severity_filter": "error",
+            },
+        ]
+        channels, severity = _match_routing_rules("TEST_EVENT", rules)
+        assert channels == {"pagerduty"}
+        assert severity == "error"
+
+    def test_severity_case_insensitive(self) -> None:
+        rules: list[dict[str, object]] = [
+            {
+                "event_pattern": "UPPER_*",
+                "channels": ["pagerduty"],
+                "severity_filter": "CRITICAL",
+            },
+        ]
+        channels, severity = _match_routing_rules("UPPER_EVENT", rules)
+        assert channels == {"pagerduty"}
+        assert severity == "critical"
+
 
 class TestRouteEventWithTelegram:
     """Tests when Telegram is configured (primary path)."""
