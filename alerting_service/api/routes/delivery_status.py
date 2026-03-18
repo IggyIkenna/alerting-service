@@ -40,7 +40,7 @@ def get_delivery_status(
     Returns:
         JSON object with ``alert_id`` and a list of ``records``.
     """
-    if _cfg.cloud_mock_mode:
+    if _cfg.is_mock_mode():
         all_records = get_mock_store().list("delivery_records")
         matching = [r for r in all_records if r.get("alert_id") == alert_id]
         if not matching:
@@ -79,7 +79,7 @@ def create_delivery_record(
     record: dict[str, object],
 ) -> dict[str, object]:
     """Record a new delivery record. Persists in mock state when CLOUD_MOCK_MODE=true."""
-    if _cfg.cloud_mock_mode:
+    if _cfg.is_mock_mode():
         if "delivery_id" not in record:
             record["delivery_id"] = f"del-{uuid.uuid4().hex[:6]}"
         record["id"] = record["delivery_id"]
