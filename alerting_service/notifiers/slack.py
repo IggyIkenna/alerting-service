@@ -12,6 +12,7 @@ import httpx
 from unified_cloud_interface import SecretClient, get_secret_client
 from unified_config_interface import UnifiedCloudConfig
 from unified_events_interface import log_event
+from unified_trading_library.core.fault_injection import get_fault_transport
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +62,12 @@ def send_message(
         payload["blocks"] = blocks
 
     try:
-        response = httpx.post(webhook_url, json=payload, timeout=10.0)
+        fault_transport = get_fault_transport()
+        if fault_transport is not None:
+            with httpx.Client(transport=fault_transport, timeout=10.0) as client:
+                response = client.post(webhook_url, json=payload)
+        else:
+            response = httpx.post(webhook_url, json=payload, timeout=10.0)
         if response.status_code == 200:
             log_event("SLACK_MESSAGE_SENT", details={"text": text, "channel": channel or "default"})
             return True

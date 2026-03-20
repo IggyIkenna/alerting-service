@@ -12,6 +12,7 @@ import logging
 
 import httpx
 from unified_events_interface import log_event
+from unified_trading_library.core.fault_injection import get_fault_transport
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +40,12 @@ def send_telegram(message: str, bot_token: str, chat_id: str) -> bool:
     }
 
     try:
-        response = httpx.post(url, json=payload, timeout=10.0)
+        fault_transport = get_fault_transport()
+        if fault_transport is not None:
+            with httpx.Client(transport=fault_transport, timeout=10.0) as client:
+                response = client.post(url, json=payload)
+        else:
+            response = httpx.post(url, json=payload, timeout=10.0)
         if response.status_code == 200:
             log_event(
                 "TELEGRAM_MESSAGE_SENT",
