@@ -30,6 +30,7 @@ from typing import Final
 
 from unified_internal_contracts import AlertEvent
 from unified_internal_contracts.modes import MockScenario
+from unified_trading_library.core.seed_writer import LocalWriter, SeedWriter, get_seed_writer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)
@@ -513,20 +514,16 @@ def write_seed_manifest(
     return manifest_path
 
 
-def write_seed_complete_marker(output_root: Path) -> Path:
+def write_seed_complete_marker(writer: SeedWriter) -> str:
     """Write .seed-complete marker file."""
-    marker_path = output_root / ".seed-complete"
-    marker_path.write_text(
-        json.dumps(
-            {
-                "service": SERVICE_NAME,
-                "completed_at": datetime.now(UTC).isoformat(),
-                "layer": LAYER,
-            }
-        )
+    marker_data = json.dumps(
+        {
+            "service": SERVICE_NAME,
+            "completed_at": datetime.now(UTC).isoformat(),
+            "layer": LAYER,
+        }
     )
-    log.info("Marker: %s", marker_path)
-    return marker_path
+    return writer.write_text(marker_data, ".seed-complete")
 
 
 # ---------------------------------------------------------------------------
@@ -582,17 +579,12 @@ def main(argv: list[str] | None = None) -> int:
     log.info("Scenario: %s (seed=%d)", args.scenario, args.seed)
     log.info("Env: %s, Date: %s", args.env, args.date)
 
-    # Determine output root
-    if args.output_dir:
-        output_root = Path(args.output_dir)
-    else:
-        script_dir = Path(__file__).resolve().parent
-        repo_root = script_dir.parent
-        workspace_root = repo_root.parent
-        output_root = workspace_root / ".local-dev-cache" / "mock-seed" / SERVICE_NAME
+    # Create seed writer (local filesystem or cloud storage)
+    writer = get_seed_writer(args.env, SERVICE_NAME, args.output_dir)
+    log.info("Writer: %s", type(writer).__name__)
 
-    output_root.mkdir(parents=True, exist_ok=True)
-    log.info("Output: %s", output_root)
+    # Keep output_root reference for internal write functions
+    output_root = writer.base if isinstance(writer, LocalWriter) else Path(".")
 
     # Generate alerts and delivery records
     alerts, delivery_records, counts = generate_alerts(
@@ -609,7 +601,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Write manifest and marker
     write_seed_manifest(output_root, counts, written, args.scenario, args.seed, args.date)
-    write_seed_complete_marker(output_root)
+    write_seed_complete_marker(writer)
 
     # Print summary
     total = sum(counts.values())
