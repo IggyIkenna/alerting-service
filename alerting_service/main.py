@@ -20,6 +20,8 @@ from unified_trading_library import (
     GracefulShutdownHandler,
     LogLevel,
     PubSubEventSink,
+    get_messaging_protocol,
+    get_storage_protocol,
     setup_service_observability,
 )
 
@@ -95,6 +97,14 @@ async def main() -> None:
 
     config = AlertingSystemConfig()
 
+    # --- MOCK MODE: use pre-generated seed data ---
+    if config.is_mock_mode():
+        from alerting_service.engine.mock_data_provider import run_mock_pipeline
+
+        logger.info("MOCK MODE: redirecting to mock pipeline")
+        run_mock_pipeline()
+        return
+
     # Setup unified observability (events + tracing + memory watchdog)
     sink = PubSubEventSink(
         project_id=config.gcp_project_id,
@@ -113,6 +123,9 @@ async def main() -> None:
     _shutdown_handler = GracefulShutdownHandler()
 
     correlation_id = str(uuid.uuid4())
+    _messaging = get_messaging_protocol(mode=cast(str, args.mode), service="alerting-service")
+    _storage = get_storage_protocol(mode=cast(str, args.mode), service="alerting-service")
+    logger.info("Alerting Service — transport: %s, storage: %s", _messaging, _storage)
     log_event(LifecycleEventType.STARTED, details={"correlation_id": correlation_id})
 
     subscriber = AlertSubscriber(project_id=config.gcp_project_id)
