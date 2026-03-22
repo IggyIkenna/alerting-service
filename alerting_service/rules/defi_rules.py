@@ -27,33 +27,14 @@ from __future__ import annotations
 
 import logging
 from decimal import Decimal
-from enum import StrEnum
 
-from pydantic import BaseModel, Field
+from unified_api_contracts import DefiAlertType
 from unified_events_interface import log_event
+from unified_internal_contracts import DefiAlert
 
 from ..notifiers.router import route_event
 
 logger = logging.getLogger(__name__)
-
-
-class DefiAlertType(StrEnum):
-    HEALTH_FACTOR_CRITICAL = "health_factor_critical"
-    WEETH_DEPEG = "weeth_depeg"
-    AAVE_UTILIZATION_SPIKE = "aave_utilization_spike"
-    FUNDING_RATE_FLIP = "funding_rate_flip"
-    FEATURE_STALE = "feature_stale"
-
-
-class DefiAlert(BaseModel):  # CORRECT-LOCAL — DeFi rule output, not a shared domain contract
-    """A DeFi-specific alert."""
-
-    alert_type: DefiAlertType
-    severity: str = "warning"
-    protocol: str | None = None
-    asset: str | None = None
-    message: str
-    details: dict[str, str | int | float | bool] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

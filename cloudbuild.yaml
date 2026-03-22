@@ -218,7 +218,6 @@ steps:
       - "-c"
       - |
         set -e
-        pip install uv
         uv pip install --system build twine keyrings.google-artifactregistry-auth
         mkdir -p /root/.config/pip
         echo "[global]
