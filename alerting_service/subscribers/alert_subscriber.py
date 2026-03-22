@@ -4,10 +4,15 @@ Subscribes to the following PubSub topics via get_queue_client():
   - risk_alerts_circuit_breaker_triggers
   - balance_discrepancy_alerts
   - order_rejection_spikes
+  - service_error_events
 
 Also processes coordination events emitted by execution-service:
   - KILL_SWITCH_ACTIVATED
   - CIRCUIT_BREAKER_OPEN
+
+SERVICE_ERROR events are dispatched to handle_service_error() which feeds
+them into the circuit breaker for error-rate tracking and emits CIRCUIT_OPEN
+events when the threshold is exceeded.
 
 On each message the event name is extracted and forwarded to route_event()
 which dispatches to PagerDuty and/or Slack according to routing rules.
@@ -40,6 +45,7 @@ from typing import cast
 from unified_cloud_interface import QueueClient, get_queue_client
 from unified_events_interface import log_event
 
+from ..error_event_handler import handle_service_error
 from ..metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 from ..notifiers.router import route_event
 
@@ -50,10 +56,14 @@ _ALERT_SUBSCRIPTIONS: tuple[str, ...] = (
     "risk_alerts_circuit_breaker_triggers",
     "balance_discrepancy_alerts",
     "order_rejection_spikes",
+    "service_error_events",
 )
 
 # Coordination events from execution-service that must also be routed.
 _COORDINATION_EVENTS: frozenset[str] = frozenset({"KILL_SWITCH_ACTIVATED", "CIRCUIT_BREAKER_OPEN"})
+
+# Events that have dedicated handlers (not just generic routing).
+_SERVICE_ERROR_EVENT: str = "SERVICE_ERROR"
 
 
 def _extract_event_name(payload: dict[str, object]) -> str:
@@ -160,6 +170,19 @@ class AlertSubscriber:
         )
         return event_name, enriched
 
+    @staticmethod
+    def _dispatch_event(event_name: str, enriched: dict[str, object]) -> None:
+        """Route an event to the appropriate handler.
+
+        SERVICE_ERROR events are dispatched to the dedicated error handler
+        which feeds them into the circuit breaker. All other events go
+        through the standard routing pipeline.
+        """
+        if event_name == _SERVICE_ERROR_EVENT:
+            handle_service_error(enriched)
+        else:
+            route_event(event_name, enriched)
+
     async def stream(self) -> AsyncIterator[tuple[str, dict[str, object]]]:
         """Yield (event_name, details) pairs from all subscribed topics.
 
@@ -186,7 +209,7 @@ class AlertSubscriber:
                         _start = time.perf_counter()
                         try:
                             event_name, enriched = self._process_message(data, attrs, subscription)
-                            route_event(event_name, enriched)
+                            self._dispatch_event(event_name, enriched)
                             RECORDS_PROCESSED.labels(status="success").inc()
                         except BaseException:  # cleanup: record metric before re-raise
                             RECORDS_PROCESSED.labels(status="error").inc()

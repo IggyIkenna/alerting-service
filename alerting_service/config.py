@@ -27,6 +27,18 @@ def _default_routing_rules() -> list[dict[str, object]]:
             "channels": ["pagerduty", "telegram"],
             "severity_filter": "critical",
         },
+        # SERVICE_ERROR with critical severity -> PagerDuty + Telegram
+        {
+            "event_pattern": "SERVICE_ERROR_CRITICAL",
+            "channels": ["pagerduty", "telegram"],
+            "severity_filter": "critical",
+        },
+        # SERVICE_ERROR (non-critical) -> Telegram only
+        {
+            "event_pattern": "SERVICE_ERROR",
+            "channels": ["telegram"],
+            "severity_filter": None,
+        },
         # DeFi P0 alerts — immediate PagerDuty + Telegram
         {
             "event_pattern": "DEFI_HEALTH_FACTOR_CRITICAL",

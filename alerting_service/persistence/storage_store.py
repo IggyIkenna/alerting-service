@@ -21,6 +21,7 @@ import yaml
 from unified_cloud_interface import StorageClient, get_storage_client
 from unified_config_interface import UnifiedCloudConfig
 from unified_events_interface import log_event
+from unified_trading_library import classify_and_emit_error
 
 logger = logging.getLogger(__name__)
 
@@ -93,8 +94,13 @@ class AlertStorageStore:
                 "PERSISTENCE_COMPLETED",
                 details={"target": "alert_history", "blob_path": blob_path},
             )
-        except Exception:
-            logger.exception("Failed to write alert history to GCS: %s", blob_path)
+        except Exception as exc:
+            classify_and_emit_error(
+                exc,
+                service_name="alerting-service",
+                operation="write_alert_history",
+                shard=blob_path,
+            )
 
     # ------------------------------------------------------------------
     # Config snapshots (YAML)
@@ -121,8 +127,13 @@ class AlertStorageStore:
                 "PERSISTENCE_COMPLETED",
                 details={"target": "config_snapshot", "blob_path": blob_path},
             )
-        except Exception:
-            logger.exception("Failed to write config snapshot to GCS: %s", blob_path)
+        except Exception as exc:
+            classify_and_emit_error(
+                exc,
+                service_name="alerting-service",
+                operation="write_config_snapshot",
+                shard=blob_path,
+            )
 
     # ------------------------------------------------------------------
     # Cooldown state (JSON)
@@ -139,8 +150,12 @@ class AlertStorageStore:
             raw = self._client.download_bytes(bucket=self._bucket, blob_path=_COOLDOWN_BLOB)
             result: dict[str, object] = cast("dict[str, object]", json.loads(raw.decode("utf-8")))
             return result
-        except Exception:
-            logger.exception("Failed to read cooldown state from GCS")
+        except Exception as exc:
+            classify_and_emit_error(
+                exc,
+                service_name="alerting-service",
+                operation="read_cooldown_state",
+            )
             return {}
 
     def read_delivery_records(self, alert_id: str) -> list[dict[str, object]]:
@@ -172,8 +187,13 @@ class AlertStorageStore:
                         record: dict[str, object] = cast("dict[str, object]", json.loads(line))
                         if record.get("alert_id") == alert_id:
                             records.append(record)
-            except Exception:
-                logger.exception("Failed to read delivery records for date=%s", date_partition)
+            except Exception as exc:
+                classify_and_emit_error(
+                    exc,
+                    service_name="alerting-service",
+                    operation="read_delivery_records",
+                    shard=date_partition,
+                )
                 continue
 
         return records
@@ -197,5 +217,9 @@ class AlertStorageStore:
                 "PERSISTENCE_COMPLETED",
                 details={"target": "cooldown_state", "blob_path": _COOLDOWN_BLOB},
             )
-        except Exception:
-            logger.exception("Failed to write cooldown state to GCS")
+        except Exception as exc:
+            classify_and_emit_error(
+                exc,
+                service_name="alerting-service",
+                operation="write_cooldown_state",
+            )

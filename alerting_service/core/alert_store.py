@@ -4,6 +4,7 @@ import logging
 from datetime import UTC, datetime
 
 from unified_internal_contracts import AlertEvent
+from unified_trading_library import classify_and_emit_error
 
 from ..persistence.storage_store import AlertStorageStore
 
@@ -42,8 +43,12 @@ class AlertStore:
                     "threshold": event.threshold,
                 }
                 self.storage_store.write_alert_history(event_dict)
-            except Exception:
-                logger.exception("GCS dual-write failed for alert %s", event.alert_id)
+            except Exception as exc:
+                classify_and_emit_error(
+                    exc,
+                    service_name="alerting-service",
+                    operation="gcs_dual_write",
+                )
 
     def get_recent_events(self, limit: int = 100) -> list[AlertEvent]:
         return self._recent_events[-limit:]

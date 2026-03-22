@@ -29,6 +29,7 @@ from functools import lru_cache
 from typing import cast, get_args
 
 from unified_events_interface import log_event
+from unified_trading_library import classify_and_emit_error
 
 from ..config import AlertingSystemConfig
 from ..core.dedup import AlertDeduplicator
@@ -147,8 +148,12 @@ def _persist_delivery_record(record: dict[str, object]) -> None:
     try:
         store = _get_storage_store()
         store.write_alert_history(record)
-    except Exception:
-        logger.exception("Failed to persist delivery record")
+    except Exception as exc:
+        classify_and_emit_error(
+            exc,
+            service_name="alerting-service",
+            operation="persist_delivery_record",
+        )
 
 
 def _persist_config_snapshot(config: AlertingSystemConfig) -> None:
@@ -157,8 +162,12 @@ def _persist_config_snapshot(config: AlertingSystemConfig) -> None:
         store = _get_storage_store()
         snapshot: dict[str, object] = {"routing_rules": config.routing_rules}
         store.write_config_snapshot(snapshot, name="routing_rules")
-    except Exception:
-        logger.exception("Failed to persist config snapshot")
+    except Exception as exc:
+        classify_and_emit_error(
+            exc,
+            service_name="alerting-service",
+            operation="persist_config_snapshot",
+        )
 
 
 def route_event(event_name: str, details: dict[str, object]) -> None:
