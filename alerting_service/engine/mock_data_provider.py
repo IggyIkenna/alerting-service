@@ -17,25 +17,16 @@ from __future__ import annotations
 import json
 import logging
 from datetime import UTC, datetime
-from decimal import Decimal
 from pathlib import Path
-from typing import Final, Literal
+from typing import Final
+
+from alerting_service.rules.risk_threshold_rules import evaluate_risk_thresholds
 
 logger = logging.getLogger(__name__)
 
 SERVICE_NAME: Final[str] = "alerting-service"
 UPSTREAM_SERVICE: Final[str] = "risk-and-exposure-service"
 LAYER: Final[int] = 7
-
-# Alert thresholds matching production configuration
-_LEVERAGE_WARNING: Final[Decimal] = Decimal("7")
-_LEVERAGE_CRITICAL: Final[Decimal] = Decimal("10")
-_CONCENTRATION_WARNING: Final[Decimal] = Decimal("0.35")
-_CONCENTRATION_CRITICAL: Final[Decimal] = Decimal("0.5")
-_DRAWDOWN_WARNING: Final[Decimal] = Decimal("0.10")
-_DRAWDOWN_CRITICAL: Final[Decimal] = Decimal("0.15")
-
-ThresholdStatus = Literal["OK", "WARNING", "CRITICAL"]
 
 
 def _get_workspace_root() -> Path:
@@ -68,70 +59,6 @@ def _load_upstream_risk_metrics() -> dict[str, object]:
     if metrics_path.exists():
         return json.loads(metrics_path.read_text())  # type: ignore[no-any-return]
     return {}
-
-
-def _get_threshold_status(
-    value: Decimal,
-    warning_threshold: Decimal,
-    critical_threshold: Decimal,
-) -> ThresholdStatus:
-    """Return OK, WARNING, or CRITICAL based on value vs thresholds.
-
-    Same logic as risk-and-exposure-service risk_metrics.get_threshold_status.
-    """
-    if value >= critical_threshold:
-        return "CRITICAL"
-    if value >= warning_threshold:
-        return "WARNING"
-    return "OK"
-
-
-def _evaluate_thresholds(
-    risk_metrics: dict[str, object],
-) -> list[dict[str, object]]:
-    """Run threshold evaluation on risk metrics.
-
-    Applies the same threshold comparison logic used by the risk service.
-    """
-    alerts: list[dict[str, object]] = []
-    now = datetime.now(UTC)
-
-    checks: list[tuple[str, str, Decimal, Decimal]] = [
-        ("leverage", str(risk_metrics.get("leverage", "0")), _LEVERAGE_WARNING, _LEVERAGE_CRITICAL),
-        (
-            "concentration",
-            str(risk_metrics.get("concentration", "0")),
-            _CONCENTRATION_WARNING,
-            _CONCENTRATION_CRITICAL,
-        ),
-        ("drawdown", str(risk_metrics.get("drawdown", "0")), _DRAWDOWN_WARNING, _DRAWDOWN_CRITICAL),
-    ]
-
-    for metric_name, value_str, warning, critical in checks:
-        value = Decimal(value_str)
-        status = _get_threshold_status(value, warning, critical)
-
-        if status != "OK":
-            alerts.append(
-                {
-                    "alert_id": f"mock-{metric_name}-{now.strftime('%Y%m%d%H%M%S')}",
-                    "metric_name": metric_name,
-                    "metric_value": str(value),
-                    "threshold_warning": str(warning),
-                    "threshold_critical": str(critical),
-                    "severity": status,
-                    "client_id": str(risk_metrics.get("client_id", "mock-client")),
-                    "message": (
-                        f"{metric_name} is {status}: {value}"
-                        f" (warning={warning}, critical={critical})"
-                    ),
-                    "created_at": now.isoformat(),
-                    "delivered": False,
-                    "delivery_channel": "mock-suppressed",
-                }
-            )
-
-    return alerts
 
 
 def run_mock_pipeline() -> int:
@@ -171,8 +98,8 @@ def run_mock_pipeline() -> int:
         }
         logger.info("MOCK MODE: Using fallback risk metrics")
 
-    # Run real threshold evaluation
-    alerts = _evaluate_thresholds(risk_metrics)
+    # Run REAL threshold evaluation from alerting_service.rules
+    alerts = evaluate_risk_thresholds(risk_metrics)
     logger.info(
         "MOCK MODE: Threshold evaluation produced %d alerts",
         len(alerts),
