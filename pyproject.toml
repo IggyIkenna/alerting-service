@@ -12,9 +12,6 @@ readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "unified-trading-library>=0.1.0,<1.0.0",
-    "unified-events-interface>=0.1.0,<1.0.0",
-    "unified-config-interface>=0.1.0,<1.0.0",
-    "unified-internal-contracts>=0.1.0,<1.0.0",
     "fastapi<1.0.0,>=0.115.0",
     "uvicorn[standard]>=0.27.0,<1.0.0",
     "prometheus-client<1.0.0,>=0.20.0",
@@ -36,28 +33,11 @@ dependencies = [
     "pip-audit>=2.7.0,<3.0.0",
     "bandit>=1.7.0,<2.0.0",
     "pre-commit>=3.0,<4.0.0",
-    "unified-cloud-interface>=0.11.39,<1.0.0",
     "pyjwt>=2.12.0,<3.0.0",
 ]
 
-[tool.uv.sources.unified-internal-contracts]
-path = "../unified-internal-contracts"
-editable = true
-
 [tool.uv.sources.unified-trading-library]
 path = "../unified-trading-library"
-editable = true
-
-[tool.uv.sources.unified-events-interface]
-path = "../unified-events-interface"
-editable = true
-
-[tool.uv.sources.unified-config-interface]
-path = "../unified-config-interface"
-editable = true
-
-[tool.uv.sources.unified-cloud-interface]
-path = "../unified-cloud-interface"
 editable = true
 
 [tool.ruff]
@@ -142,9 +122,5 @@ exclude = [
     "dist",
 ]
 extraPaths = [
-    "../unified-config-interface",
-    "../unified-internal-contracts",
-    "../unified-cloud-interface",
     "../unified-trading-library",
-    "../unified-events-interface",
 ]

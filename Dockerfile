@@ -1,18 +1,18 @@
-# Multi-stage build for alerting-system
+# Multi-stage build for alerting-service
 #
 # Uses unified-trading-services base from Artifact Registry.
 # Cloud Build passes PROJECT_ID via --build-arg.
 
 ARG PROJECT_ID
-FROM asia-northeast1-docker.pkg.dev/${PROJECT_ID}/unified-trading-library/unified-trading-library:latest AS base
+FROM --platform=linux/amd64 asia-northeast1-docker.pkg.dev/${PROJECT_ID}/unified-trading-services/unified-trading-services:latest AS base
 
 WORKDIR /app
 
 # Stage 2: Application
-FROM base AS app
+FROM --platform=linux/amd64 base AS app
 
 # Copy application code
-COPY alerting_system/ /app/alerting_system/
+COPY alerting_service/ /app/alerting_service/
 COPY pyproject.toml uv.lock /app/
 COPY README.md /app/
 
@@ -33,4 +33,4 @@ RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
 USER appuser
 
 # Default command
-CMD ["python", "-m", "alerting_service.main", "--mode", "batch"]
+CMD ["python", "-m", "alerting_service.cli.main", "--operation", "alerts", "--mode", "live"]

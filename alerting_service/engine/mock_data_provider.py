@@ -18,7 +18,7 @@ import json
 import logging
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 from alerting_service.rules.risk_threshold_rules import evaluate_risk_thresholds
 
@@ -30,15 +30,11 @@ LAYER: Final[int] = 7
 
 
 def _get_workspace_root() -> Path:
-    """Resolve workspace root from env or heuristics."""
-    import os
+    """Resolve workspace root relative to this file's location.
 
-    workspace = os.environ.get(
-        "WORKSPACE_ROOT",
-        os.environ.get("UNIFIED_TRADING_WORKSPACE_ROOT", ""),
-    )
-    if workspace:
-        return Path(workspace)
+    alerting_service/engine/mock_data_provider.py is 4 levels deep from
+    the workspace root: workspace/alerting-service/alerting_service/engine/
+    """
     return Path(__file__).resolve().parents[3]
 
 
@@ -57,7 +53,8 @@ def _load_upstream_risk_metrics() -> dict[str, object]:
     """Load risk metrics from upstream risk-and-exposure-service seed."""
     metrics_path = _get_seed_base(UPSTREAM_SERVICE) / "metrics" / "risk_metrics.json"
     if metrics_path.exists():
-        return json.loads(metrics_path.read_text())  # type: ignore[no-any-return]
+        raw = json.loads(metrics_path.read_text())
+        return cast(dict[str, object], raw)
     return {}
 
 

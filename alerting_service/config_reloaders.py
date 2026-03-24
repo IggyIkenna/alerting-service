@@ -12,6 +12,8 @@ from unified_config_interface import (
 from unified_events_interface import log_event
 from unified_trading_library import DomainConfigReloader
 
+from alerting_service.config import AlertingSystemConfig
+
 logger = logging.getLogger(__name__)
 
 _instrument_reloader: DomainConfigReloader[InstrumentDomainConfig] | None = None
@@ -93,12 +95,12 @@ def _on_alert_rules_reload(config: AlertRuleDomainConfig) -> None:
     )
 
 
-def start_domain_config_reloaders(service_config: object) -> None:
+def start_domain_config_reloaders(service_config: AlertingSystemConfig) -> None:
     """Start domain config reloaders. Call on service startup."""
     global _instrument_reloader, _venue_reloader, _alert_rule_reloader
 
-    config_store_bucket: str = getattr(service_config, "config_store_bucket", "")
-    project_id: str | None = getattr(service_config, "project_id", None)
+    config_store_bucket: str = service_config.config_store_bucket
+    project_id: str | None = service_config.gcp_project_id
 
     if not config_store_bucket:
         logger.info("CONFIG_STORE_BUCKET not set — domain config hot-reload disabled")

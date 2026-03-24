@@ -1,49 +1,43 @@
-import logging
+"""alerting-service — FastAPI health API.
 
-from fastapi import APIRouter, Depends, FastAPI, Header, Request
+Exposes /health and /readiness endpoints via UTL make_health_router.
+"""
 
-from alerting_service.api.routes.alerts import router as alerts_router
-from alerting_service.api.routes.delivery_status import router as delivery_status_router
-from alerting_service.api.routes.health import router as health_router
-from alerting_service.api.routes.system_status import router as system_status_router
-from alerting_service.auth import auth_cfg, verify_api_key
-from alerting_service.auth_s2s import verify_service_token
+from __future__ import annotations
 
-logger = logging.getLogger(__name__)
+from datetime import date
 
+from fastapi import FastAPI
+from unified_trading_library import make_health_router
 
-async def verify_auth(
-    request: Request,
-    x_api_key: str | None = Header(default=None, alias="X-API-Key"),
-    x_service_token: str | None = Header(default=None, alias="X-Service-Token"),
-) -> None:
-    """Accept either API key or S2S token for authentication.
-
-    S2S token is checked first (inter-service calls).
-    Falls back to API key validation (which respects DISABLE_AUTH for dev mode).
-    """
-    if x_service_token:
-        await verify_service_token(x_service_token=x_service_token, request=request)
-        return
-    # Delegate to verify_api_key — handles DISABLE_AUTH internally
-    await verify_api_key(api_key=x_api_key)
+_last_processed_date: date | None = None
 
 
-_env = auth_cfg.environment
-app = FastAPI(
-    title="Alerting System",
-    version="1.0.0",
-    docs_url="/docs" if _env != "production" else None,
-    redoc_url="/redoc" if _env != "production" else None,
-    openapi_url="/openapi.json" if _env != "production" else None,
-)
+def set_last_processed_date(d: date) -> None:
+    global _last_processed_date
+    _last_processed_date = d
 
-# --- Unauthenticated health endpoints ---
-app.include_router(health_router)
-app.include_router(system_status_router)
 
-# --- Authenticated API routes (require API key or S2S token) ---
-_authenticated_router = APIRouter(dependencies=[Depends(verify_auth)])
-_authenticated_router.include_router(alerts_router)
-_authenticated_router.include_router(delivery_status_router)
-app.include_router(_authenticated_router)
+def _data_freshness() -> dict[str, object]:
+    if _last_processed_date is None:
+        return {"last_processed_date": None, "stale": True}
+    return {"last_processed_date": _last_processed_date.isoformat(), "stale": False}
+
+
+def create_app() -> FastAPI:
+    app = FastAPI(
+        title="alerting-service",
+        version="0.1.0",
+        docs_url="/docs",
+        redoc_url="/redoc",
+    )
+    health_router = make_health_router(
+        service_name="alerting-service",
+        version="0.1.0",
+        data_freshness=_data_freshness,
+    )
+    app.include_router(health_router)
+    return app
+
+
+app = create_app()
