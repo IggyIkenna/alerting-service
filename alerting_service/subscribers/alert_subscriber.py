@@ -42,8 +42,8 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import cast
 
-from unified_cloud_interface import QueueClient, get_queue_client
-from unified_events_interface import log_event
+from unified_trading_library import QueueClient, get_queue_client
+from unified_trading_library import log_event
 
 from ..error_event_handler import handle_service_error
 from ..metrics import PROCESSING_LATENCY, RECORDS_PROCESSED

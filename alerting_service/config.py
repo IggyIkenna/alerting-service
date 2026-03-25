@@ -5,7 +5,7 @@ Configuration for alerting-service
 from typing import ClassVar
 
 from pydantic import Field
-from unified_config_interface import UnifiedCloudConfig
+from unified_trading_library import UnifiedCloudConfig
 
 
 def _default_routing_rules() -> list[dict[str, object]]:

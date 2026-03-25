@@ -12,9 +12,11 @@ import contextlib
 import logging
 import os
 import uuid
+from datetime import datetime as dt
+from datetime import timedelta
 from typing import cast
 
-from unified_events_interface import log_event
+from unified_trading_library import log_event
 from unified_internal_contracts import LifecycleEventType
 from unified_trading_library import (
     GracefulShutdownHandler,
@@ -26,7 +28,9 @@ from unified_trading_library import (
 )
 
 from .config import AlertingSystemConfig
+from .notifiers.router import get_batch_stats, set_batch_mode
 from .subscribers.alert_subscriber import AlertSubscriber
+from .subscribers.batch_event_reader import BatchEventReader
 
 logger = logging.getLogger(__name__)
 
@@ -44,9 +48,29 @@ def _build_parser() -> argparse.ArgumentParser:
         "--mode",
         choices=["batch", "live"],
         required=True,
-        help="Execution mode: batch for historical, live for real-time",
+        help="Execution mode: batch for historical replay, live for real-time",
+    )
+    parser.add_argument(
+        "--date",
+        help="Batch replay start date (YYYY-MM-DD). Required when --mode batch.",
+    )
+    parser.add_argument(
+        "--end-date",
+        help="Batch replay end date (YYYY-MM-DD). Defaults to --date for single-day replay.",
     )
     return parser
+
+
+def _build_date_range(start: str, end: str) -> list[str]:
+    """Build inclusive list of YYYY-MM-DD strings from start to end."""
+    start_d = dt.strptime(start, "%Y-%m-%d")
+    end_d = dt.strptime(end, "%Y-%m-%d")
+    dates: list[str] = []
+    current = start_d
+    while current <= end_d:
+        dates.append(current.strftime("%Y-%m-%d"))
+        current += timedelta(days=1)
+    return dates
 
 
 async def _run_subscriber_until_shutdown(
@@ -70,6 +94,46 @@ async def _run_subscriber_until_shutdown(
         subscriber_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await subscriber_task
+
+
+async def _run_batch_replay(
+    args: argparse.Namespace,
+    config: AlertingSystemConfig,
+    shutdown_handler: GracefulShutdownHandler,
+) -> None:
+    """Run batch replay: read GCS event logs, route through rules, write audit records."""
+    if not args.date:
+        raise SystemExit("--date is required when --mode batch")
+    end_date = getattr(args, "end_date", None) or args.date
+    dates = _build_date_range(args.date, end_date)
+    logger.info("Batch replay: %s → %s (%d days)", args.date, end_date, len(dates))
+
+    set_batch_mode(True)
+    reader = BatchEventReader(project_id=config.gcp_project_id, dates=dates)
+
+    async for event_name, enriched in reader.stream():
+        if shutdown_handler.is_shutdown_requested():
+            break
+        AlertSubscriber._dispatch_event(event_name, enriched)
+
+    set_batch_mode(False)
+
+    stats = get_batch_stats()
+    reader_stats = reader.stats
+    logger.info("=" * 60)
+    logger.info("Alerting Batch Replay Summary")
+    logger.info("=" * 60)
+    logger.info("Date range:     %s → %s", args.date, end_date)
+    logger.info("Total events:   %d", reader_stats.total_events)
+    logger.info("Events matched: %d (routing rule hit)", stats.get("matched", 0))
+    would_deliver = stats.get("would_deliver", {})
+    if isinstance(would_deliver, dict):
+        for channel, count in sorted(would_deliver.items()):
+            logger.info("  %-14s %d", f"{channel}:", count)
+    logger.info("Deduplicated:   %d", stats.get("deduplicated", 0))
+    logger.info("Services w/data:%d", reader_stats.services_with_data)
+    logger.info("Errors:         %d", reader_stats.errors)
+    logger.info("=" * 60)
 
 
 async def main() -> None:
@@ -128,10 +192,12 @@ async def main() -> None:
     logger.info("Alerting Service — transport: %s, storage: %s", _messaging, _storage)
     log_event(LifecycleEventType.STARTED, details={"correlation_id": correlation_id})
 
-    subscriber = AlertSubscriber(project_id=config.gcp_project_id)
-
     try:
-        await _run_subscriber_until_shutdown(subscriber, _shutdown_handler)
+        if args.mode == "live":
+            subscriber = AlertSubscriber(project_id=config.gcp_project_id)
+            await _run_subscriber_until_shutdown(subscriber, _shutdown_handler)
+        else:
+            await _run_batch_replay(args, config, _shutdown_handler)
 
         log_event(LifecycleEventType.STOPPED, details={"correlation_id": correlation_id})
     except (OSError, ValueError, RuntimeError) as e:

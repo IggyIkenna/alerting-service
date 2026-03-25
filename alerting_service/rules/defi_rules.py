@@ -29,7 +29,7 @@ import logging
 from decimal import Decimal
 
 from unified_api_contracts import DefiAlertType
-from unified_events_interface import log_event
+from unified_trading_library import log_event
 from unified_internal_contracts import DefiAlert
 
 from ..notifiers.router import route_event

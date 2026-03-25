@@ -23,7 +23,7 @@ Service event taxonomy:
 
 import logging
 
-from unified_events_interface import log_event
+from unified_trading_library import log_event
 
 from ..notifiers.pagerduty import PagerDutySeverity
 from ..notifiers.pagerduty import send_event as pd_send_event

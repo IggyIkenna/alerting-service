@@ -28,7 +28,7 @@ from fnmatch import fnmatch
 from functools import lru_cache
 from typing import cast, get_args
 
-from unified_events_interface import log_event
+from unified_trading_library import log_event
 from unified_trading_library import classify_and_emit_error
 
 from ..config import AlertingSystemConfig
@@ -48,6 +48,34 @@ _deduplicator = AlertDeduplicator(ttl_seconds=60.0)
 
 # Module-level GCS store (lazily initialised).
 _storage_store_instance: object | None = None
+
+# Batch mode flag — when True, route_event() writes audit records
+# instead of delivering to PagerDuty/Telegram/Slack.
+# Set from main.py before batch replay starts.
+_BATCH_MODE: bool = False
+
+# Batch replay stats — accumulated by route_event() in batch mode.
+_batch_would_deliver: dict[str, int] = {}
+_batch_deduplicated: int = 0
+_batch_matched: int = 0
+
+
+def set_batch_mode(enabled: bool) -> None:
+    """Enable or disable batch delivery suppression."""
+    global _BATCH_MODE, _batch_would_deliver, _batch_deduplicated, _batch_matched
+    _BATCH_MODE = enabled
+    _batch_would_deliver = {}
+    _batch_deduplicated = 0
+    _batch_matched = 0
+
+
+def get_batch_stats() -> dict[str, object]:
+    """Return accumulated batch replay routing stats."""
+    return {
+        "would_deliver": dict(_batch_would_deliver),
+        "deduplicated": _batch_deduplicated,
+        "matched": _batch_matched,
+    }
 
 
 @lru_cache(maxsize=1)
@@ -170,6 +198,35 @@ def _persist_config_snapshot(config: AlertingSystemConfig) -> None:
         )
 
 
+def _record_batch_audit(
+    alert_id: str,
+    event_name: str,
+    channels: set[str],
+    pd_severity: PagerDutySeverity | None,
+    source: str,
+    details: dict[str, object],
+) -> None:
+    """Record what would have been delivered in batch mode (no actual delivery)."""
+    global _batch_matched
+    _batch_matched += 1
+    for ch in channels:
+        _batch_would_deliver[ch] = _batch_would_deliver.get(ch, 0) + 1
+    _persist_delivery_record(
+        {
+            "alert_id": alert_id,
+            "event_name": event_name,
+            "channels": sorted(channels),
+            "severity": str(pd_severity) if pd_severity else None,
+            "status": "batch_audit",
+            "response_detail": "delivery_suppressed_batch_mode",
+            "source": source,
+            "original_timestamp": str(details.get("timestamp", "")),
+            "timestamp": datetime.now(UTC).isoformat(),
+            "_batch_replay": True,
+        }
+    )
+
+
 def route_event(event_name: str, details: dict[str, object]) -> None:
     """Route an event to the correct notifier(s) based on config-driven rules.
 
@@ -187,8 +244,12 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
         event_name: Canonical event name (e.g. "KILL_SWITCH_ACTIVATED").
         details: Arbitrary context dictionary forwarded to the notifier payload.
     """
+    global _batch_deduplicated, _batch_matched
+
     if _deduplicator.is_duplicate(event_name, details):
         logger.debug("Duplicate alert suppressed: %s", event_name)
+        if _BATCH_MODE:
+            _batch_deduplicated += 1
         return
 
     log_event("ALERT_ROUTED", details={"event_name": event_name})
@@ -201,50 +262,50 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
     # Determine channels from config-driven routing rules
     channels, pd_severity = _match_routing_rules(event_name, config.routing_rules)
 
-    any_delivery_failed = False
+    if _BATCH_MODE:
+        _record_batch_audit(alert_id, event_name, channels, pd_severity, source, details)
+        return
 
-    # PagerDuty delivery
+    failed = _deliver_to_channels(
+        alert_id, event_name, summary, source, channels, pd_severity, config, details,
+    )
+    status_event = "ALERT_FAILED" if failed else "ALERT_SENT"
+    log_event(status_event, details={"event_name": event_name, "alert_id": alert_id})
+    _persist_config_snapshot(config)
+
+
+def _deliver_to_channels(
+    alert_id: str,
+    event_name: str,
+    summary: str,
+    source: str,
+    channels: set[str],
+    pd_severity: PagerDutySeverity | None,
+    config: AlertingSystemConfig,
+    details: dict[str, object],
+) -> bool:
+    """Deliver to all matched channels. Returns True if any delivery failed."""
+    any_failed = False
+
     if "pagerduty" in channels:
         severity: PagerDutySeverity = pd_severity or "critical"
-        ok = pd_send_event(
-            summary=summary,
-            severity=severity,
-            source=source,
-            details=details,
-        )
-        status = "sent" if ok else "failed"
+        ok = pd_send_event(summary=summary, severity=severity, source=source, details=details)
         if not ok:
             logger.error("PagerDuty delivery failed for event %s", event_name)
-            any_delivery_failed = True
+            any_failed = True
         _persist_delivery_record(
-            _build_delivery_record(
-                alert_id=alert_id,
-                channel="pagerduty",
-                status=status,
-                response_detail="accepted" if ok else "delivery_failed",
-                event_name=event_name,
-            )
+            _build_delivery_record(alert_id, "pagerduty", "sent" if ok else "failed",
+                                   "accepted" if ok else "delivery_failed", event_name)
         )
 
-    # Telegram (primary) or Slack (deprecated fallback)
     if "telegram" in channels or not channels:
         ok = _deliver_message(event_name, summary)
         channel_used = "telegram" if config.telegram_bot_token else "slack"
-        status = "sent" if ok else "failed"
         if not ok:
-            any_delivery_failed = True
+            any_failed = True
         _persist_delivery_record(
-            _build_delivery_record(
-                alert_id=alert_id,
-                channel=channel_used,
-                status=status,
-                response_detail="accepted" if ok else "delivery_failed",
-                event_name=event_name,
-            )
+            _build_delivery_record(alert_id, channel_used, "sent" if ok else "failed",
+                                   "accepted" if ok else "delivery_failed", event_name)
         )
 
-    status_event = "ALERT_FAILED" if any_delivery_failed else "ALERT_SENT"
-    log_event(status_event, details={"event_name": event_name, "alert_id": alert_id})
-
-    # Persist config snapshot (best-effort, async-safe)
-    _persist_config_snapshot(config)
+    return any_failed

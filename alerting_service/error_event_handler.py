@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 
-from unified_events_interface import log_event
+from unified_trading_library import log_event
 from unified_internal_contracts import EnhancedError, LifecycleEventType
 
 from .circuit_breaker import CircuitBreaker

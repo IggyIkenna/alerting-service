@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from unified_events_interface import MockEventSink, setup_events
+from unified_trading_library import MockEventSink, setup_events
 
 
 @pytest.fixture(autouse=True, scope="session")

@@ -121,17 +121,17 @@ def test_event_helper_imported(all_event_markers: set[str]) -> None:
     if not all_event_markers:
         pytest.skip("No event markers found in source — check service directory")
     for py in _find_python_files(Path.cwd()):
-        if "from unified_events_interface import log_event" in py.read_text():
+        if "from unified_trading_library import log_event" in py.read_text():
             return
     pytest.fail(
         "log_event not imported from unified_events_interface.\n"
-        "Add: from unified_events_interface import log_event"
+        "Add: from unified_trading_library import log_event"
     )
 
 
 def test_mock_event_sink_importable() -> None:
     """MockEventSink must be importable and expose the required interface."""
-    from unified_events_interface import MockEventSink
+    from unified_trading_library import MockEventSink
 
     sink = MockEventSink()
     assert hasattr(sink, "events"), "MockEventSink missing 'events' attribute"
@@ -147,7 +147,7 @@ def test_setup_events_signature_meets_contract() -> None:
     """
     import inspect
 
-    from unified_events_interface import setup_events
+    from unified_trading_library import setup_events
 
     sig = inspect.signature(setup_events)
     param_names = list(sig.parameters.keys())

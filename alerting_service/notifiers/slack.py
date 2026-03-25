@@ -9,9 +9,9 @@ import logging
 from functools import lru_cache
 
 import httpx
-from unified_cloud_interface import SecretClient, get_secret_client
-from unified_config_interface import UnifiedCloudConfig
-from unified_events_interface import log_event
+from unified_trading_library import SecretClient, get_secret_client
+from unified_trading_library import UnifiedCloudConfig
+from unified_trading_library import log_event
 from unified_trading_library.core.fault_injection import get_fault_transport
 
 logger = logging.getLogger(__name__)

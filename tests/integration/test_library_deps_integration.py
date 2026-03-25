@@ -73,14 +73,14 @@ class TestUnifiedEventsInterface:
 
     def test_log_event_with_details(self) -> None:
         """log_event() accepts event name and details dict without error."""
-        from unified_events_interface import log_event
+        from unified_trading_library import log_event
 
         # Should not raise — conftest sets up MockEventSink
         log_event("ALERT_SENT", details={"event_name": "TEST", "alert_id": "abc123"})
 
     def test_log_event_with_lifecycle_type(self) -> None:
         """log_event() works with LifecycleEventType enum values."""
-        from unified_events_interface import log_event
+        from unified_trading_library import log_event
         from unified_internal_contracts import LifecycleEventType
 
         log_event(LifecycleEventType.STARTED, details={"correlation_id": "test-123"})
@@ -88,7 +88,7 @@ class TestUnifiedEventsInterface:
 
     def test_setup_events_with_mock_sink(self) -> None:
         """setup_events() accepts MockEventSink for credential-free testing."""
-        from unified_events_interface import MockEventSink, setup_events
+        from unified_trading_library import MockEventSink, setup_events
 
         sink = MockEventSink()
         # Should not raise
@@ -167,7 +167,7 @@ class TestUnifiedCloudInterface:
 
     def test_get_storage_client_returns_client(self) -> None:
         """get_storage_client() returns an object with the StorageClient interface."""
-        from unified_cloud_interface import get_storage_client
+        from unified_trading_library import get_storage_client
 
         client = get_storage_client()
         # StorageClient protocol: upload_bytes, download_bytes, blob_exists, list_blobs
@@ -177,7 +177,7 @@ class TestUnifiedCloudInterface:
 
     def test_get_queue_client_returns_client(self) -> None:
         """get_queue_client() returns an object with the QueueClient interface."""
-        from unified_cloud_interface import get_queue_client
+        from unified_trading_library import get_queue_client
 
         client = get_queue_client()
         # QueueClient protocol: publish, subscribe_once
@@ -185,7 +185,7 @@ class TestUnifiedCloudInterface:
 
     def test_get_secret_client_returns_client(self) -> None:
         """get_secret_client() returns an object with the SecretClient interface."""
-        from unified_cloud_interface import get_secret_client
+        from unified_trading_library import get_secret_client
 
         client = get_secret_client()
         assert hasattr(client, "get_secret")
