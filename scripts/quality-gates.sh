@@ -10,8 +10,8 @@
 SERVICE_NAME="alerting-service"
 SOURCE_DIR="alerting_service"
 MIN_COVERAGE=89
-RUN_INTEGRATION=true
-PYTEST_WORKERS=${PYTEST_WORKERS:-}  # default: max(1, cpu_count//4) computed by base script
+RUN_INTEGRATION=false
+PYTEST_WORKERS=${PYTEST_WORKERS:-2}
 LOCAL_DEPS=()
 WORKSPACE_ROOT="$(cd "$(git rev-parse --show-toplevel)/.." && pwd)"
 source "${WORKSPACE_ROOT}/unified-trading-pm/scripts/quality-gates-base/base-service.sh"

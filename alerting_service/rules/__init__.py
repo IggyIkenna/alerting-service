@@ -12,6 +12,11 @@ from .defi_rules import (
     check_weeth_depeg,
     route_defi_alert,
 )
+from .reconciliation_rules import (
+    evaluate_balance_discrepancy,
+    evaluate_pnl_discrepancy,
+    evaluate_position_discrepancy,
+)
 from .sports_rules import (
     SportsAlert,
     SportsAlertType,
@@ -35,6 +40,9 @@ __all__ = [
     "check_health_factor",
     "check_steam_alert",
     "check_weeth_depeg",
+    "evaluate_balance_discrepancy",
+    "evaluate_pnl_discrepancy",
+    "evaluate_position_discrepancy",
     "route_data_freshness_event",
     "route_defi_alert",
 ]
