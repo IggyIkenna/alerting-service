@@ -1,7 +1,7 @@
 """
 Cloud-agnostic persistence for alert history, config snapshots, and cooldown state.
 
-Uses ``get_storage_client()`` from unified_cloud_interface — works on GCS, S3, or
+Uses ``get_storage_client()`` from unified_trading_library.cloud_interface — works on GCS, S3, or
 local filesystem depending on ``CLOUD_PROVIDER`` env var. No direct cloud SDK imports.
 
 Path conventions (see ``docs/GCS_PATHS.md``):

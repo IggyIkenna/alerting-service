@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # ---------------------------------------------------------------------------
-# unified_config_interface
+# unified_trading_library.config_interface
 # ---------------------------------------------------------------------------
 
 
@@ -63,7 +63,7 @@ class TestUnifiedConfigInterface:
 
 
 # ---------------------------------------------------------------------------
-# unified_events_interface
+# unified_trading_library.events_interface
 # ---------------------------------------------------------------------------
 
 
@@ -157,7 +157,7 @@ class TestUnifiedInternalContracts:
 
 
 # ---------------------------------------------------------------------------
-# unified_cloud_interface
+# unified_trading_library.cloud_interface
 # ---------------------------------------------------------------------------
 
 

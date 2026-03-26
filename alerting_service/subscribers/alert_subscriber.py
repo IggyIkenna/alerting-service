@@ -18,7 +18,7 @@ On each message the event name is extracted and forwarded to route_event()
 which dispatches to PagerDuty and/or Slack according to routing rules.
 
 No direct google.cloud.pubsub_v1 imports — all PubSub access goes
-through get_queue_client() from unified_cloud_interface.
+through get_queue_client() from unified_trading_library.cloud_interface.
 
 Lifecycle event taxonomy (common events — alerting-service is a router, not a pipeline):
   SERVICE_EVENT: VALIDATION_STARTED
@@ -97,7 +97,7 @@ def _deserialize_message(data: bytes) -> tuple[str, dict[str, object]]:
 class AlertSubscriber:
     """Pulls alert events from multiple PubSub subscriptions and routes them.
 
-    Uses get_queue_client() from unified_cloud_interface — no direct PubSub SDK.
+    Uses get_queue_client() from unified_trading_library.cloud_interface — no direct PubSub SDK.
 
     Each subscription is polled in a round-robin fashion inside a single async
     loop so that all topics share one event loop iteration.

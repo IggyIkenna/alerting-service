@@ -4,7 +4,7 @@
 Verifies that:
   (a) log_event is called with event names that match the required common set
   (b) Required fields (service, environment, timestamp) are present via setup_events
-  (c) The import comes from unified_events_interface (Pattern B — no fallbacks)
+  (c) The import comes from unified_trading_library.events_interface (Pattern B — no fallbacks)
   (d) Service-specific events are present in source code
   (e) MockEventSink is importable and functional
   (f) setup_events signature meets the codex contract
@@ -114,7 +114,7 @@ def test_service_specific_events_exist(all_event_markers: set[str]) -> None:
 
 
 def test_event_helper_imported(all_event_markers: set[str]) -> None:
-    """log_event must be imported directly from unified_events_interface.
+    """log_event must be imported directly from unified_trading_library.events_interface.
 
     No try/except ImportError fallbacks are permitted (see no-empty-fallbacks rule).
     """
@@ -124,7 +124,7 @@ def test_event_helper_imported(all_event_markers: set[str]) -> None:
         if "from unified_trading_library import log_event" in py.read_text():
             return
     pytest.fail(
-        "log_event not imported from unified_events_interface.\n"
+        "log_event not imported from unified_trading_library.events_interface.\n"
         "Add: from unified_trading_library import log_event"
     )
 
