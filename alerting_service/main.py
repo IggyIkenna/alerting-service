@@ -16,14 +16,14 @@ from datetime import datetime as dt
 from datetime import timedelta
 from typing import cast
 
-from unified_trading_library import log_event
-from unified_internal_contracts import LifecycleEventType
+from unified_api_contracts.internal import LifecycleEventType
 from unified_trading_library import (
     GracefulShutdownHandler,
     LogLevel,
     PubSubEventSink,
     get_messaging_protocol,
     get_storage_protocol,
+    log_event,
     setup_service_observability,
 )
 

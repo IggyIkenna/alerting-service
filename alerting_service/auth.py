@@ -6,8 +6,7 @@ import logging
 
 from fastapi import HTTPException, Security
 from fastapi.security import APIKeyHeader
-from unified_trading_library import UnifiedCloudConfig
-from unified_trading_library import log_event
+from unified_trading_library import UnifiedCloudConfig, log_event
 
 logger = logging.getLogger(__name__)
 

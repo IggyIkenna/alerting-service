@@ -28,8 +28,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Final
 
-from unified_internal_contracts import AlertEvent
-from unified_internal_contracts.modes import MockScenario
+from unified_api_contracts.internal import AlertEvent
+from unified_api_contracts.internal.modes import MockScenario
 from unified_trading_library.core.seed_writer import LocalWriter, SeedWriter, get_seed_writer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")

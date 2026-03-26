@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from unified_internal_contracts import AlertEvent
+from unified_api_contracts.internal import AlertEvent
 
 from alerting_service.core.slack_dispatcher import SEVERITY_COLORS, build_slack_blocks
 

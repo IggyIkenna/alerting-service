@@ -80,8 +80,8 @@ class TestUnifiedEventsInterface:
 
     def test_log_event_with_lifecycle_type(self) -> None:
         """log_event() works with LifecycleEventType enum values."""
+        from unified_api_contracts.internal import LifecycleEventType
         from unified_trading_library import log_event
-        from unified_internal_contracts import LifecycleEventType
 
         log_event(LifecycleEventType.STARTED, details={"correlation_id": "test-123"})
         log_event(LifecycleEventType.STOPPED, details={"correlation_id": "test-123"})
@@ -96,7 +96,7 @@ class TestUnifiedEventsInterface:
 
 
 # ---------------------------------------------------------------------------
-# unified_internal_contracts
+# unified_api_contracts.internal
 # ---------------------------------------------------------------------------
 
 
@@ -106,7 +106,7 @@ class TestUnifiedInternalContracts:
 
     def test_alert_event_construction(self) -> None:
         """AlertEvent can be constructed with required fields and serialized."""
-        from unified_internal_contracts import AlertEvent
+        from unified_api_contracts.internal import AlertEvent
 
         event = AlertEvent(
             alert_id="alert-001",
@@ -130,7 +130,7 @@ class TestUnifiedInternalContracts:
 
     def test_alert_event_optional_fields(self) -> None:
         """AlertEvent works with optional fields set to None."""
-        from unified_internal_contracts import AlertEvent
+        from unified_api_contracts.internal import AlertEvent
 
         event = AlertEvent(
             alert_id="alert-002",
@@ -146,7 +146,7 @@ class TestUnifiedInternalContracts:
 
     def test_lifecycle_event_type_enum_values(self) -> None:
         """LifecycleEventType has the standard lifecycle states the service uses."""
-        from unified_internal_contracts import LifecycleEventType
+        from unified_api_contracts.internal import LifecycleEventType
 
         # The service uses STARTED, STOPPED, FAILED
         assert hasattr(LifecycleEventType, "STARTED")
@@ -303,7 +303,7 @@ class TestUnifiedTradingLibrary:
 
     def test_alert_store_with_internal_contracts(self) -> None:
         """AlertStore.record_fired() works with AlertEvent from unified-internal-contracts."""
-        from unified_internal_contracts import AlertEvent
+        from unified_api_contracts.internal import AlertEvent
 
         from alerting_service.core.alert_store import AlertStore
 
@@ -326,7 +326,7 @@ class TestUnifiedTradingLibrary:
 
     def test_alert_store_cooldown_logic(self) -> None:
         """AlertStore.is_cooled_down() correctly enforces cooldown periods."""
-        from unified_internal_contracts import AlertEvent
+        from unified_api_contracts.internal import AlertEvent
 
         from alerting_service.core.alert_store import AlertStore
 
@@ -348,7 +348,7 @@ class TestUnifiedTradingLibrary:
 
     def test_alert_store_publish_subscribe(self) -> None:
         """AlertStore pub/sub delivers events to subscribed queues."""
-        from unified_internal_contracts import AlertEvent
+        from unified_api_contracts.internal import AlertEvent
 
         from alerting_service.core.alert_store import AlertStore
 

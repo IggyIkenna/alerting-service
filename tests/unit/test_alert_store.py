@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
-from unified_internal_contracts import AlertEvent
+from unified_api_contracts.internal import AlertEvent
 
 from alerting_service.core.alert_store import AlertStore
 

@@ -17,6 +17,8 @@ Routing matrix
 | Aave utilization spike| DEFI_AAVE_UTILIZATION_SPIKE     | P1       | Telegram             |
 | Funding rate flip     | DEFI_FUNDING_RATE_FLIP          | P1       | Telegram             |
 | Feature staleness     | DEFI_FEATURE_STALE              | P1       | Telegram             |
+| TX simulation failed  | DEFI_TX_SIMULATION_FAILED       | P1       | Telegram             |
+| Position liquidated   | DEFI_POSITION_LIQUIDATED        | P0       | PagerDuty + Telegram |
 
 Service event taxonomy:
   SERVICE_EVENT: DEFI_ALERT_ROUTED
@@ -29,8 +31,8 @@ import logging
 from decimal import Decimal
 
 from unified_api_contracts import DefiAlertType
+from unified_api_contracts.internal import DefiAlert
 from unified_trading_library import log_event
-from unified_internal_contracts import DefiAlert
 
 from ..notifiers.router import route_event
 
@@ -241,6 +243,98 @@ def check_feature_staleness(
 
 
 # ---------------------------------------------------------------------------
+# TX simulation failed (Tenderly pre-simulation revert)
+# ---------------------------------------------------------------------------
+
+
+def check_tx_simulation(
+    success: bool,
+    revert_reason: str,
+    protocol: str,
+    tx_type: str,
+    estimated_gas: int,
+) -> DefiAlert | None:
+    """Check if a Tenderly transaction simulation failed.
+
+    Args:
+        success: Whether the simulation succeeded.
+        revert_reason: Revert reason if simulation failed.
+        protocol: DeFi protocol (e.g. AAVE_V3, UNISWAP_V3).
+        tx_type: Transaction type (e.g. SWAP, LEND, BORROW).
+        estimated_gas: Estimated gas from simulation.
+
+    Returns:
+        DefiAlert if simulation failed, None if succeeded.
+    """
+    if success:
+        return None
+
+    return DefiAlert(
+        alert_type=DefiAlertType.TX_SIMULATION_FAILED,
+        severity="P1",
+        protocol=protocol,
+        asset=None,
+        message=(f"DeFi tx simulation failed: {tx_type} on {protocol} — revert: {revert_reason}"),
+        details={
+            "tx_type": tx_type,
+            "revert_reason": revert_reason,
+            "estimated_gas": estimated_gas,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Position liquidated (on-chain Aave LiquidationCall)
+# ---------------------------------------------------------------------------
+
+
+def check_position_liquidated(
+    liquidated: bool,
+    protocol: str,
+    wallet: str,
+    collateral_asset: str,
+    debt_asset: str,
+    liquidated_collateral: Decimal,
+    debt_covered: Decimal,
+) -> DefiAlert | None:
+    """Check if an on-chain liquidation was detected.
+
+    Args:
+        liquidated: Whether a liquidation event was detected.
+        protocol: DeFi protocol (e.g. AAVE_V3).
+        wallet: Wallet address that was liquidated.
+        collateral_asset: Collateral asset seized.
+        debt_asset: Debt asset repaid.
+        liquidated_collateral: Amount of collateral seized.
+        debt_covered: Amount of debt covered.
+
+    Returns:
+        DefiAlert if liquidation detected, None otherwise.
+    """
+    if not liquidated:
+        return None
+
+    return DefiAlert(
+        alert_type=DefiAlertType.POSITION_LIQUIDATED,
+        severity="P0",
+        protocol=protocol,
+        asset=collateral_asset,
+        message=(
+            f"DeFi position liquidated: {wallet[:10]}... on {protocol}"
+            f" — collateral={collateral_asset} debt={debt_asset}"
+            f" seized={liquidated_collateral}"
+        ),
+        details={
+            "wallet": wallet,
+            "collateral_asset": collateral_asset,
+            "debt_asset": debt_asset,
+            "liquidated_collateral": str(liquidated_collateral),
+            "debt_covered": str(debt_covered),
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
 # Event routing
 # ---------------------------------------------------------------------------
 
@@ -251,6 +345,8 @@ _ALERT_TYPE_TO_EVENT: dict[DefiAlertType, str] = {
     DefiAlertType.AAVE_UTILIZATION_SPIKE: "DEFI_AAVE_UTILIZATION_SPIKE",
     DefiAlertType.FUNDING_RATE_FLIP: "DEFI_FUNDING_RATE_FLIP",
     DefiAlertType.FEATURE_STALE: "DEFI_FEATURE_STALE",
+    DefiAlertType.TX_SIMULATION_FAILED: "DEFI_TX_SIMULATION_FAILED",
+    DefiAlertType.POSITION_LIQUIDATED: "DEFI_POSITION_LIQUIDATED",
 }
 
 

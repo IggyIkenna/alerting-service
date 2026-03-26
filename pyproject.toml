@@ -12,7 +12,6 @@ readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     "unified-trading-library>=0.1.0,<1.0.0",
-    "unified-internal-contracts>=0.1.0,<1.0.0",
     "unified-api-contracts>=0.1.0,<1.0.0",
     "fastapi<1.0.0,>=0.115.0",
     "uvicorn[standard]>=0.27.0,<1.0.0",
@@ -105,10 +104,6 @@ editable = true
 
 
 
-
-[tool.uv.sources.unified-internal-contracts]
-path = "../unified-internal-contracts"
-editable = true
 
 [tool.basedpyright]
 pythonVersion = "3.13"

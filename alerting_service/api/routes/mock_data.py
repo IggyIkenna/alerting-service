@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from unified_internal_contracts import AlertEvent
+from unified_api_contracts.internal import AlertEvent
 
 _NOW = "2026-03-14T12:00:00"
 

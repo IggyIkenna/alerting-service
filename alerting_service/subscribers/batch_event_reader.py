@@ -25,8 +25,7 @@ import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 
-from unified_trading_library import StorageClient, get_storage_client
-from unified_trading_library import log_event
+from unified_trading_library import StorageClient, get_storage_client, log_event
 
 logger = logging.getLogger(__name__)
 

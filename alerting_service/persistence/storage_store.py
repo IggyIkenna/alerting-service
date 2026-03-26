@@ -18,10 +18,13 @@ from functools import lru_cache
 from typing import cast
 
 import yaml
-from unified_trading_library import StorageClient, get_storage_client
-from unified_trading_library import UnifiedCloudConfig
-from unified_trading_library import log_event
-from unified_trading_library import classify_and_emit_error
+from unified_trading_library import (
+    StorageClient,
+    UnifiedCloudConfig,
+    classify_and_emit_error,
+    get_storage_client,
+    log_event,
+)
 
 logger = logging.getLogger(__name__)
 

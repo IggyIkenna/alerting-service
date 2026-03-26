@@ -10,8 +10,8 @@ Uses MockEventSink to capture events — no network or cloud credentials require
 from __future__ import annotations
 
 import pytest
+from unified_api_contracts.internal import ErrorCategory
 from unified_trading_library import MockEventSink, close_events, log_event, setup_events
-from unified_internal_contracts import ErrorCategory
 
 pytestmark = pytest.mark.integration
 

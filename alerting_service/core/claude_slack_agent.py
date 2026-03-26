@@ -2,7 +2,7 @@ import logging
 
 import anthropic
 from anthropic.types import TextBlock
-from unified_internal_contracts import AlertEvent
+from unified_api_contracts.internal import AlertEvent
 
 logger = logging.getLogger(__name__)
 

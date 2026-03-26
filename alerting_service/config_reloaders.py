@@ -6,11 +6,11 @@ import logging
 
 from unified_trading_library import (
     AlertRuleDomainConfig,
+    DomainConfigReloader,
     InstrumentDomainConfig,
     VenueDomainConfig,
+    log_event,
 )
-from unified_trading_library import log_event
-from unified_trading_library import DomainConfigReloader
 
 from alerting_service.config import AlertingSystemConfig
 

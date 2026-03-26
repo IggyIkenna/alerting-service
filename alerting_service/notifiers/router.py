@@ -28,8 +28,7 @@ from fnmatch import fnmatch
 from functools import lru_cache
 from typing import cast, get_args
 
-from unified_trading_library import log_event
-from unified_trading_library import classify_and_emit_error
+from unified_trading_library import classify_and_emit_error, log_event
 
 from ..config import AlertingSystemConfig
 from ..core.dedup import AlertDeduplicator
@@ -267,7 +266,14 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
         return
 
     failed = _deliver_to_channels(
-        alert_id, event_name, summary, source, channels, pd_severity, config, details,
+        alert_id,
+        event_name,
+        summary,
+        source,
+        channels,
+        pd_severity,
+        config,
+        details,
     )
     status_event = "ALERT_FAILED" if failed else "ALERT_SENT"
     log_event(status_event, details={"event_name": event_name, "alert_id": alert_id})
@@ -294,8 +300,13 @@ def _deliver_to_channels(
             logger.error("PagerDuty delivery failed for event %s", event_name)
             any_failed = True
         _persist_delivery_record(
-            _build_delivery_record(alert_id, "pagerduty", "sent" if ok else "failed",
-                                   "accepted" if ok else "delivery_failed", event_name)
+            _build_delivery_record(
+                alert_id,
+                "pagerduty",
+                "sent" if ok else "failed",
+                "accepted" if ok else "delivery_failed",
+                event_name,
+            )
         )
 
     if "telegram" in channels or not channels:
@@ -304,8 +315,13 @@ def _deliver_to_channels(
         if not ok:
             any_failed = True
         _persist_delivery_record(
-            _build_delivery_record(alert_id, channel_used, "sent" if ok else "failed",
-                                   "accepted" if ok else "delivery_failed", event_name)
+            _build_delivery_record(
+                alert_id,
+                channel_used,
+                "sent" if ok else "failed",
+                "accepted" if ok else "delivery_failed",
+                event_name,
+            )
         )
 
     return any_failed

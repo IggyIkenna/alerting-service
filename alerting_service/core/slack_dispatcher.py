@@ -1,7 +1,7 @@
 from typing import cast
 
 import aiohttp
-from unified_internal_contracts import AlertEvent
+from unified_api_contracts.internal import AlertEvent
 
 SEVERITY_COLORS: dict[str, str] = {
     "DEBUG": "#808080",
