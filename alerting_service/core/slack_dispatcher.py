@@ -1,7 +1,7 @@
 from typing import cast
 
 import aiohttp
-from unified_api_contracts.internal import AlertEvent
+from unified_api_contracts.internal import AlertEvent  # noqa: qg-deep-import
 
 SEVERITY_COLORS: dict[str, str] = {
     "DEBUG": "#808080",

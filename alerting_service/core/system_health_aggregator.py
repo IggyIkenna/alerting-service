@@ -8,7 +8,7 @@ from collections.abc import Callable
 from typing import cast
 
 import httpx
-from unified_trading_library.core.fault_injection import get_fault_transport
+from unified_trading_library import get_fault_transport
 
 from alerting_service.config import AlertingSystemConfig
 

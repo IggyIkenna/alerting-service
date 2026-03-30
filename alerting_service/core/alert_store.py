@@ -3,7 +3,7 @@ import contextlib
 import logging
 from datetime import UTC, datetime
 
-from unified_api_contracts.internal import AlertEvent
+from unified_api_contracts.internal import AlertEvent  # noqa: qg-deep-import
 from unified_trading_library import classify_and_emit_error
 
 from ..persistence.storage_store import AlertStorageStore

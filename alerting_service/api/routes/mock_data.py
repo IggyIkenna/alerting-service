@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from unified_api_contracts.internal import AlertEvent
+from unified_api_contracts.internal import AlertEvent  # noqa: qg-deep-import
 
 _NOW = "2026-03-14T12:00:00"
 

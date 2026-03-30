@@ -16,7 +16,7 @@ from datetime import datetime as dt
 from datetime import timedelta
 from typing import cast
 
-from unified_api_contracts.internal import LifecycleEventType
+from unified_api_contracts.internal import LifecycleEventType  # noqa: qg-deep-import
 from unified_trading_library import (
     GracefulShutdownHandler,
     LogLevel,
@@ -28,6 +28,7 @@ from unified_trading_library import (
 )
 
 from .config import AlertingSystemConfig
+from .engine.mock_data_provider import run_mock_pipeline
 from .notifiers.router import get_batch_stats, set_batch_mode
 from .subscribers.alert_subscriber import AlertSubscriber
 from .subscribers.batch_event_reader import BatchEventReader
@@ -102,11 +103,12 @@ async def _run_batch_replay(
     shutdown_handler: GracefulShutdownHandler,
 ) -> None:
     """Run batch replay: read GCS event logs, route through rules, write audit records."""
-    if not args.date:
+    date_str: str = cast(str, args.date)
+    if not date_str:
         raise SystemExit("--date is required when --mode batch")
-    end_date = getattr(args, "end_date", None) or args.date
-    dates = _build_date_range(args.date, end_date)
-    logger.info("Batch replay: %s → %s (%d days)", args.date, end_date, len(dates))
+    end_date_str: str = cast(str, getattr(args, "end_date", None) or date_str)
+    dates = _build_date_range(date_str, end_date_str)
+    logger.info("Batch replay: %s → %s (%d days)", date_str, end_date_str, len(dates))
 
     set_batch_mode(True)
     reader = BatchEventReader(project_id=config.gcp_project_id, dates=dates)
@@ -114,7 +116,7 @@ async def _run_batch_replay(
     async for event_name, enriched in reader.stream():
         if shutdown_handler.is_shutdown_requested():
             break
-        AlertSubscriber._dispatch_event(event_name, enriched)
+        AlertSubscriber.dispatch_event(event_name, enriched)
 
     set_batch_mode(False)
 
@@ -123,13 +125,15 @@ async def _run_batch_replay(
     logger.info("=" * 60)
     logger.info("Alerting Batch Replay Summary")
     logger.info("=" * 60)
-    logger.info("Date range:     %s → %s", args.date, end_date)
+    logger.info("Date range:     %s → %s", date_str, end_date_str)
     logger.info("Total events:   %d", reader_stats.total_events)
     logger.info("Events matched: %d (routing rule hit)", stats.get("matched", 0))
-    would_deliver = stats.get("would_deliver", {})
-    if isinstance(would_deliver, dict):
-        for channel, count in sorted(would_deliver.items()):
-            logger.info("  %-14s %d", f"{channel}:", count)
+    would_deliver: dict[str, int] = cast(
+        dict[str, int],
+        stats.get("would_deliver", {}),  # noqa: qg-empty-fallback
+    )
+    for channel, count in sorted(would_deliver.items()):
+        logger.info("  %-14s %d", f"{channel}:", count)
     logger.info("Deduplicated:   %d", stats.get("deduplicated", 0))
     logger.info("Services w/data:%d", reader_stats.services_with_data)
     logger.info("Errors:         %d", reader_stats.errors)
@@ -163,8 +167,6 @@ async def main() -> None:
 
     # --- MOCK MODE: use pre-generated seed data ---
     if config.is_mock_mode():
-        from alerting_service.engine.mock_data_provider import run_mock_pipeline
-
         logger.info("MOCK MODE: redirecting to mock pipeline")
         run_mock_pipeline()
         return
@@ -193,7 +195,8 @@ async def main() -> None:
     log_event(LifecycleEventType.STARTED, details={"correlation_id": correlation_id})
 
     try:
-        if args.mode == "live":
+        mode: str = cast(str, args.mode)
+        if mode == "live":
             subscriber = AlertSubscriber(project_id=config.gcp_project_id)
             await _run_subscriber_until_shutdown(subscriber, _shutdown_handler)
         else:

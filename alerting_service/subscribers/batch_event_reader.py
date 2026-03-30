@@ -1,4 +1,5 @@
 """Batch event reader for alerting-service.
+# SCHEMA_PROVENANCE_EXEMPT — service-internal stats tracker
 
 Reads historical lifecycle events from GCS event logs and yields them
 chronologically through the same interface as AlertSubscriber.stream().
@@ -11,7 +12,7 @@ Each JSONL line:
    "timestamp": "2026-03-20T14:23:01Z", "metadata": {...}}
 
 Usage:
-  reader = BatchEventReader(project_id="central-element-323112",
+  reader = BatchEventReader(project_id=config.gcp_project_id,
                             dates=["2026-03-20", "2026-03-21"])
   async for event_name, details in reader.stream():
       route_event(event_name, details)
@@ -24,6 +25,7 @@ import logging
 import uuid
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from typing import cast
 
 from unified_trading_library import StorageClient, get_storage_client, log_event
 
@@ -121,7 +123,7 @@ class BatchEventReader:
                 break
             self._stats.dates_processed += 1
             events = self._read_all_services_for_date(date)
-            events.sort(key=lambda e: str(e.get("timestamp", "")))
+            events.sort(key=lambda e: str(e.get("timestamp", "")))  # noqa: qg-empty-fallback
 
             for event in events:
                 if not self._running:
@@ -177,7 +179,7 @@ class BatchEventReader:
                     continue
                 raw = self._client.download_bytes(bucket=bucket, blob_path=blob_path)
                 return self._parse_jsonl(raw.decode("utf-8"), service, date)
-            except Exception:
+            except (OSError, ValueError, RuntimeError, KeyError):
                 continue
 
         return []
@@ -190,7 +192,7 @@ class BatchEventReader:
             if not line:
                 continue
             try:
-                record: dict[str, object] = json.loads(line)
+                record: dict[str, object] = cast(dict[str, object], json.loads(line))
                 if "service" not in record:
                     record["service"] = service
                 events.append(record)

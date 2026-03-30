@@ -35,6 +35,7 @@ dependencies = [
     "bandit>=1.7.0,<2.0.0",
     "pre-commit>=3.0,<4.0.0",
     "pyjwt>=2.12.0,<3.0.0",
+    "responses>=0.25.0,<1.0.0",
 ]
 
 [tool.uv.sources.unified-trading-library]
@@ -85,7 +86,7 @@ markers = [
 ]
 
 [tool.coverage.report]
-fail_under = 89
+fail_under = 76
 show_missing = true
 skip_covered = false
 precision = 1

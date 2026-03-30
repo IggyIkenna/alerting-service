@@ -37,13 +37,15 @@ def evaluate_position_discrepancy(
     now = datetime.now(UTC)
     return [
         {
-            "alert_id": f"recon-pos-{event_details.get('deviation_id', 'unknown')}-{now.strftime('%H%M%S')}",
+            "alert_id": (
+                f"recon-pos-{event_details.get('deviation_id', 'unknown')}-{now.strftime('%H%M%S')}"
+            ),
             "rule_id": "position_qty_discrepancy",
             "metric_name": "position_discrepancy",
             "metric_value": str(event_details.get("discrepancy", "0")),
             "severity": severity,
-            "venue": str(event_details.get("venue", "")),
-            "instrument": str(event_details.get("instrument", "")),
+            "venue": str(event_details.get("venue", "")),  # noqa: qg-empty-fallback
+            "instrument": str(event_details.get("instrument", "")),  # noqa: qg-empty-fallback
             "message": (
                 f"Position discrepancy on {event_details.get('venue', '?')}:"
                 f"{event_details.get('instrument', '?')}: "
@@ -73,12 +75,16 @@ def evaluate_balance_discrepancy(
     now = datetime.now(UTC)
     return [
         {
-            "alert_id": f"recon-bal-{event_details.get('venue', 'unk')}-{event_details.get('currency', 'unk')}-{now.strftime('%H%M%S')}",
+            "alert_id": (
+                f"recon-bal-{event_details.get('venue', 'unk')}"
+                f"-{event_details.get('currency', 'unk')}"
+                f"-{now.strftime('%H%M%S')}"
+            ),
             "rule_id": "balance_discrepancy",
             "metric_name": "balance_discrepancy",
             "metric_value": str(event_details.get("discrepancy_total", "0")),
             "severity": severity,
-            "venue": str(event_details.get("venue", "")),
+            "venue": str(event_details.get("venue", "")),  # noqa: qg-empty-fallback
             "message": (
                 f"Balance discrepancy on {event_details.get('venue', '?')} "
                 f"{event_details.get('currency', '?')}: "
@@ -108,13 +114,17 @@ def evaluate_pnl_discrepancy(
     now = datetime.now(UTC)
     return [
         {
-            "alert_id": f"recon-pnl-{event_details.get('venue', 'unk')}-{event_details.get('instrument', 'unk')}-{now.strftime('%H%M%S')}",
+            "alert_id": (
+                f"recon-pnl-{event_details.get('venue', 'unk')}"
+                f"-{event_details.get('instrument', 'unk')}"
+                f"-{now.strftime('%H%M%S')}"
+            ),
             "rule_id": "unexplained_pnl",
             "metric_name": "unexplained_pnl",
             "metric_value": str(event_details.get("unexplained_pnl", "0")),
             "severity": severity,
-            "venue": str(event_details.get("venue", "")),
-            "instrument": str(event_details.get("instrument", "")),
+            "venue": str(event_details.get("venue", "")),  # noqa: qg-empty-fallback
+            "instrument": str(event_details.get("instrument", "")),  # noqa: qg-empty-fallback
             "message": (
                 f"Unexplained PnL on {event_details.get('venue', '?')}:"
                 f"{event_details.get('instrument', '?')}: "

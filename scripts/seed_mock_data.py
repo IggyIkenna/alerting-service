@@ -30,7 +30,7 @@ from typing import Final
 
 from unified_api_contracts.internal import AlertEvent
 from unified_api_contracts.internal.modes import MockScenario
-from unified_trading_library.core.seed_writer import LocalWriter, SeedWriter, get_seed_writer
+from unified_trading_library import LocalWriter, SeedWriter, get_seed_writer
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 log = logging.getLogger(__name__)

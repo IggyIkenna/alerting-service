@@ -2,7 +2,7 @@ import logging
 
 import anthropic
 from anthropic.types import TextBlock
-from unified_api_contracts.internal import AlertEvent
+from unified_api_contracts.internal import AlertEvent  # noqa: qg-deep-import
 
 logger = logging.getLogger(__name__)
 

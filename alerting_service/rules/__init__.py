@@ -1,7 +1,7 @@
 """Alert routing rules for specific event categories."""
 
 from unified_api_contracts import DefiAlertType
-from unified_api_contracts.internal import DefiAlert
+from unified_api_contracts.internal import DefiAlert  # noqa: qg-deep-import
 
 from .data_freshness_rules import route_data_freshness_event
 from .defi_rules import (

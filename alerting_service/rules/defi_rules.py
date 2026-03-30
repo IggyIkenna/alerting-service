@@ -16,6 +16,7 @@ Routing matrix
 | weETH depeg           | DEFI_WEETH_DEPEG                | P0       | PagerDuty + Telegram |
 | Aave utilization spike| DEFI_AAVE_UTILIZATION_SPIKE     | P1       | Telegram             |
 | Funding rate flip     | DEFI_FUNDING_RATE_FLIP          | P1       | Telegram             |
+| Rate deviation        | DEFI_RATE_DEVIATION             | P0/P1    | PagerDuty + Telegram |
 | Feature staleness     | DEFI_FEATURE_STALE              | P1       | Telegram             |
 | TX simulation failed  | DEFI_TX_SIMULATION_FAILED       | P1       | Telegram             |
 | Position liquidated   | DEFI_POSITION_LIQUIDATED        | P0       | PagerDuty + Telegram |
@@ -31,7 +32,7 @@ import logging
 from decimal import Decimal
 
 from unified_api_contracts import DefiAlertType
-from unified_api_contracts.internal import DefiAlert
+from unified_api_contracts.internal import DefiAlert  # noqa: qg-deep-import
 from unified_trading_library import log_event
 
 from ..notifiers.router import route_event
@@ -154,6 +155,63 @@ def check_aave_utilization(
         ),
         details={
             "utilization_rate": float(utilization_rate),
+            "pool_name": pool_name,
+            "protocol": protocol,
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Rate deviation (actual vs projected APY)
+# ---------------------------------------------------------------------------
+
+_RATE_DEVIATION_WARNING_BPS = Decimal("50")
+_RATE_DEVIATION_CRITICAL_BPS = Decimal("200")
+
+
+def check_rate_deviation(
+    actual_apy: Decimal,
+    projected_apy: Decimal,
+    pool_name: str,
+    rate_type: str,  # "supply" or "borrow"
+    protocol: str = "aave_v3",
+) -> DefiAlert | None:
+    """Generate alert when actual APY deviates from projected APY.
+
+    Deviation is measured in basis points. >50 bps triggers a P1 warning
+    (Telegram only), >200 bps triggers a P0 critical alert (PagerDuty +
+    Telegram).
+
+    Args:
+        actual_apy: Observed APY as a decimal (e.g. Decimal("0.0350") = 3.50%).
+        projected_apy: Model-projected APY as a decimal.
+        pool_name: Name of the lending pool (e.g. "USDC", "ETH").
+        rate_type: Rate category — "supply" or "borrow".
+        protocol: Protocol name (defaults to "aave_v3").
+
+    Returns:
+        DefiAlert if deviation > 50 bps, None otherwise.
+    """
+    deviation_bps = abs(actual_apy - projected_apy) * Decimal("10000")
+    if deviation_bps <= _RATE_DEVIATION_WARNING_BPS:
+        return None
+    severity = "critical" if deviation_bps > _RATE_DEVIATION_CRITICAL_BPS else "warning"
+    actual_pct = actual_apy * Decimal("100")
+    projected_pct = projected_apy * Decimal("100")
+    return DefiAlert(
+        alert_type=DefiAlertType.RATE_DEVIATION,
+        severity=severity,
+        protocol=protocol,
+        asset=pool_name,
+        message=(
+            f"Rate deviation on {pool_name} ({rate_type}): actual={actual_pct:.2f}%"
+            f" projected={projected_pct:.2f}% deviation={deviation_bps:.0f}bps"
+        ),
+        details={
+            "actual_apy": float(actual_apy),
+            "projected_apy": float(projected_apy),
+            "deviation_bps": float(deviation_bps),
+            "rate_type": rate_type,
             "pool_name": pool_name,
             "protocol": protocol,
         },
@@ -343,6 +401,7 @@ _ALERT_TYPE_TO_EVENT: dict[DefiAlertType, str] = {
     DefiAlertType.HEALTH_FACTOR_CRITICAL: "DEFI_HEALTH_FACTOR_CRITICAL",
     DefiAlertType.WEETH_DEPEG: "DEFI_WEETH_DEPEG",
     DefiAlertType.AAVE_UTILIZATION_SPIKE: "DEFI_AAVE_UTILIZATION_SPIKE",
+    DefiAlertType.RATE_DEVIATION: "DEFI_RATE_DEVIATION",
     DefiAlertType.FUNDING_RATE_FLIP: "DEFI_FUNDING_RATE_FLIP",
     DefiAlertType.FEATURE_STALE: "DEFI_FEATURE_STALE",
     DefiAlertType.TX_SIMULATION_FAILED: "DEFI_TX_SIMULATION_FAILED",

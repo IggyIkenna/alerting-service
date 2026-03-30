@@ -44,9 +44,11 @@ def client_non_mock(
 
 
 @pytest.fixture
-def client_mock_mode() -> Iterator[TestClient]:
+def client_mock_mode(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     """Create a FastAPI test client with mock mode enabled (tests mock code path)."""
     from alerting_service.api.main import app
+
+    monkeypatch.setattr(ds_module._cfg, "data_mode", "mock")
 
     async def _bypass_auth() -> str:
         return "test-key"

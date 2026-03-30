@@ -49,6 +49,16 @@ class CircuitBreaker:
         self._threshold = threshold
         self._cooldown = cooldown_seconds
 
+    @property
+    def window(self) -> float:
+        """Sliding window duration in seconds."""
+        return self._window
+
+    @property
+    def threshold(self) -> int:
+        """Error count threshold for opening the circuit."""
+        return self._threshold
+
     @staticmethod
     def _make_key(service: str, venue: str | None) -> str:
         """Build a composite key for the circuit state map."""

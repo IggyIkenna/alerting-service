@@ -51,7 +51,7 @@ _storage_store_instance: object | None = None
 # Batch mode flag — when True, route_event() writes audit records
 # instead of delivering to PagerDuty/Telegram/Slack.
 # Set from main.py before batch replay starts.
-_BATCH_MODE: bool = False
+_batch_mode: bool = False
 
 # Batch replay stats — accumulated by route_event() in batch mode.
 _batch_would_deliver: dict[str, int] = {}
@@ -61,8 +61,8 @@ _batch_matched: int = 0
 
 def set_batch_mode(enabled: bool) -> None:
     """Enable or disable batch delivery suppression."""
-    global _BATCH_MODE, _batch_would_deliver, _batch_deduplicated, _batch_matched
-    _BATCH_MODE = enabled
+    global _batch_mode, _batch_would_deliver, _batch_deduplicated, _batch_matched
+    _batch_mode = enabled
     _batch_would_deliver = {}
     _batch_deduplicated = 0
     _batch_matched = 0
@@ -219,7 +219,7 @@ def _record_batch_audit(
             "status": "batch_audit",
             "response_detail": "delivery_suppressed_batch_mode",
             "source": source,
-            "original_timestamp": str(details.get("timestamp", "")),
+            "original_timestamp": str(details.get("timestamp", "")),  # noqa: qg-empty-fallback
             "timestamp": datetime.now(UTC).isoformat(),
             "_batch_replay": True,
         }
@@ -247,7 +247,7 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
 
     if _deduplicator.is_duplicate(event_name, details):
         logger.debug("Duplicate alert suppressed: %s", event_name)
-        if _BATCH_MODE:
+        if _batch_mode:
             _batch_deduplicated += 1
         return
 
@@ -261,7 +261,7 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
     # Determine channels from config-driven routing rules
     channels, pd_severity = _match_routing_rules(event_name, config.routing_rules)
 
-    if _BATCH_MODE:
+    if _batch_mode:
         _record_batch_audit(alert_id, event_name, channels, pd_severity, source, details)
         return
 

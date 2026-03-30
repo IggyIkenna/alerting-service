@@ -53,8 +53,8 @@ def _load_upstream_risk_metrics() -> dict[str, object]:
     """Load risk metrics from upstream risk-and-exposure-service seed."""
     metrics_path = _get_seed_base(UPSTREAM_SERVICE) / "metrics" / "risk_metrics.json"
     if metrics_path.exists():
-        raw = json.loads(metrics_path.read_text())
-        return cast(dict[str, object], raw)
+        raw: dict[str, object] = cast(dict[str, object], json.loads(metrics_path.read_text()))
+        return raw
     return {}
 
 
@@ -86,7 +86,7 @@ def run_mock_pipeline() -> int:
         logger.info("MOCK MODE: Loaded risk metrics for client=%s", risk_metrics.get("client_id"))
     else:
         # Fallback with values that will trigger some alerts
-        risk_metrics = {
+        risk_metrics: dict[str, object] = {
             "client_id": "mock-client",
             "leverage": "8.5",
             "concentration": "0.42",

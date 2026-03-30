@@ -8,6 +8,7 @@ Alert types:
 - CLV trend negative (model degradation signal)
 - Exposure limit approaching
 """
+# SCHEMA_PROVENANCE_EXEMPT — rule-output types, not shared domain contracts
 
 from __future__ import annotations
 

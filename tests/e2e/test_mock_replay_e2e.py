@@ -80,9 +80,9 @@ class TestMarketDataFreshnessMonitoring:
         """Deribit ticker cassette provides timestamp for freshness check."""
         body = load_cassette("deribit", "ticker.yaml")
         result = body["result"]
-        assert isinstance(result, dict)
+        assert isinstance(result, list)
 
-        # Ticker data has timestamp or state info for freshness
+        # Ticker data has items for freshness monitoring
         # The presence of result data means the exchange is responding
         assert len(result) > 0
 
@@ -119,8 +119,10 @@ class TestDefiProtocolMonitoring:
         """Hyperliquid meta cassette indicates protocol is healthy."""
         body = load_cassette("hyperliquid", "meta_and_asset_ctxs.yaml")
 
-        # Protocol health check: universe is non-empty
-        universe = body.get("universe", [])
+        # Cassette returns [meta_dict, asset_ctxs_list]; meta_dict has "universe"
+        assert isinstance(body, list) and len(body) >= 1
+        meta = body[0]
+        universe = meta.get("universe", [])
         protocol_healthy = isinstance(universe, list) and len(universe) > 0
         assert protocol_healthy
 
@@ -167,10 +169,11 @@ class TestAlertRuleIntegration:
         body = load_cassette("deribit", "risk_service_health.yaml")
         health_statuses["deribit_risk_service"] = body.get("status") == "healthy"
 
-        # Check Hyperliquid via meta cassette
+        # Check Hyperliquid via meta cassette (list: [meta_dict, asset_ctxs_list])
         hl_body = load_cassette("hyperliquid", "meta_and_asset_ctxs.yaml")
+        hl_meta = hl_body[0] if isinstance(hl_body, list) and len(hl_body) >= 1 else {}
         health_statuses["hyperliquid"] = (
-            isinstance(hl_body.get("universe"), list) and len(hl_body["universe"]) > 0
+            isinstance(hl_meta.get("universe"), list) and len(hl_meta["universe"]) > 0
         )
 
         # All services should be healthy

@@ -88,6 +88,10 @@ class AlertingSystemConfig(UnifiedCloudConfig):
     """Configuration for alerting-service"""
 
     service_name: str = "alerting-service"
+    config_store_bucket: str = Field(
+        default="",
+        description="Cloud storage bucket for domain config store (hot reload)",
+    )
     slack_webhook_url: str = Field(default="", description="Slack incoming webhook URL")
     telegram_bot_token: str = Field(default="", description="Telegram Bot API token")
     telegram_chat_id: str = Field(default="", description="Telegram chat ID for alerts")

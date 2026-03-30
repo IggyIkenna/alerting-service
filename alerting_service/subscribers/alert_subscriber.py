@@ -170,7 +170,7 @@ class AlertSubscriber:
         return event_name, enriched
 
     @staticmethod
-    def _dispatch_event(event_name: str, enriched: dict[str, object]) -> None:
+    def dispatch_event(event_name: str, enriched: dict[str, object]) -> None:
         """Route an event to the appropriate handler.
 
         SERVICE_ERROR events are dispatched to the dedicated error handler
@@ -208,7 +208,7 @@ class AlertSubscriber:
                         _start = time.perf_counter()
                         try:
                             event_name, enriched = self._process_message(data, attrs, subscription)
-                            self._dispatch_event(event_name, enriched)
+                            self.dispatch_event(event_name, enriched)
                             RECORDS_PROCESSED.labels(status="success").inc()
                         except BaseException:  # cleanup: record metric before re-raise
                             RECORDS_PROCESSED.labels(status="error").inc()

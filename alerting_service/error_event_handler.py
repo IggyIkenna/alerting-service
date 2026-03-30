@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 
-from unified_api_contracts.internal import EnhancedError, LifecycleEventType
+from unified_api_contracts.internal import EnhancedError, LifecycleEventType  # noqa: qg-deep-import
 from unified_trading_library import log_event
 
 from .circuit_breaker import CircuitBreaker
@@ -117,15 +117,15 @@ def handle_service_error(event_details: dict[str, object]) -> None:
 
     if new_state == "OPEN":
         # Emit CIRCUIT_OPEN lifecycle event for downstream consumers
-        circuit_details: dict[str, str | int | float | bool | None] = {
+        circuit_details: dict[str, object] = {
             "service": source_service,
             "venue": venue_str,
             "error_count": _circuit_breaker.get_error_count(source_service, venue_str),
-            "window_seconds": _circuit_breaker._window,
-            "threshold": _circuit_breaker._threshold,
+            "window_seconds": _circuit_breaker.window,
+            "threshold": _circuit_breaker.threshold,
             "message": f"Circuit opened for {source_service}:{venue_str or 'global'} "
-            f"({_circuit_breaker._threshold} errors in "
-            f"{_circuit_breaker._window:.0f}s)",
+            f"({_circuit_breaker.threshold} errors in "
+            f"{_circuit_breaker.window:.0f}s)",
         }
         log_event(LifecycleEventType.CIRCUIT_OPEN, details=circuit_details)
         CIRCUIT_STATE_TRANSITIONS.labels(

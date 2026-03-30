@@ -22,9 +22,7 @@ from __future__ import annotations
 import argparse
 import logging
 
-from unified_trading_library import GracefulShutdownHandler
-from unified_trading_library.service_cli import BaseModeHandler
-from unified_trading_library.service_runtime import ServiceRuntime
+from unified_trading_library import BaseModeHandler, GracefulShutdownHandler, ServiceRuntime
 
 from alerting_service.config import AlertingSystemConfig
 from alerting_service.config_reloaders import (
@@ -61,7 +59,7 @@ class AlertHandler(BaseModeHandler):
         """Validate that project_id is set (required for PubSub access)."""
         cfg = self._resolve_config()
         if not cfg.gcp_project_id:
-            logger.error("GCP_PROJECT_ID is not set — cannot connect to PubSub")
+            logger.error("gcp_project_id is not set — cannot connect to PubSub")
             return False
         return True
 
@@ -76,7 +74,7 @@ class AlertHandler(BaseModeHandler):
         if isinstance(raw_cfg, AlertingSystemConfig):
             return raw_cfg
         # Construct from environment (all AlertingSystemConfig fields come from
-        # UnifiedCloudConfig which reads from env, not os.getenv)
+        # UnifiedCloudConfig which reads from env vars automatically)
         return AlertingSystemConfig()
 
     async def run(self) -> dict[str, object]:

@@ -10,6 +10,8 @@ from datetime import date
 from fastapi import FastAPI
 from unified_trading_library import make_health_router
 
+from alerting_service.api.routes.delivery_status import router as delivery_router
+
 _last_processed_date: date | None = None
 
 
@@ -37,6 +39,7 @@ def create_app() -> FastAPI:
         data_freshness=_data_freshness,
     )
     app.include_router(health_router)
+    app.include_router(delivery_router)
     return app
 
 

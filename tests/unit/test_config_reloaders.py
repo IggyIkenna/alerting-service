@@ -64,7 +64,7 @@ class TestConfigReloadersCallbacks:
     def test_start_skips_when_no_bucket(self) -> None:
         import alerting_service.config_reloaders as cr
 
-        mock_cfg = type("C", (), {"config_store_bucket": "", "project_id": None})()
+        mock_cfg = type("C", (), {"config_store_bucket": "", "gcp_project_id": None})()
         cr.start_domain_config_reloaders(mock_cfg)
 
     def test_stop_when_none(self) -> None:

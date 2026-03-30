@@ -21,6 +21,7 @@ from unified_trading_library import ServiceBootstrap
 
 from alerting_service.cli.handlers.alert_handler import AlertHandler
 from alerting_service.config import AlertingSystemConfig
+from alerting_service.engine.mock_data_provider import run_mock_pipeline
 
 _SERVICE_NAME = "alerting-service"  # pragma: no cover
 
@@ -40,6 +41,4 @@ def main_service_cli() -> None:  # pragma: no cover
 
 def _run_mock() -> int:  # pragma: no cover
     """Mock pipeline — delegates to engine mock provider."""
-    from alerting_service.engine.mock_data_provider import run_mock_pipeline
-
     return run_mock_pipeline()
