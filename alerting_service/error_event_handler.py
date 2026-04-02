@@ -7,6 +7,7 @@ all services. Each error is:
 2. Routed to the appropriate alert channel by severity
 3. Fed to the circuit breaker for error-rate tracking
 4. If the circuit opens -> emits a CIRCUIT_OPEN lifecycle event
+5. If retries are exhausted -> creates a DeadLetterRecord and emits it
 
 This module owns the singleton CircuitBreaker instance used by the
 alerting-service.
@@ -15,12 +16,25 @@ alerting-service.
 from __future__ import annotations
 
 import logging
+import uuid
+from datetime import UTC, datetime
 
-from unified_api_contracts.internal import EnhancedError, LifecycleEventType  # noqa: qg-deep-import
+from unified_api_contracts.internal import (  # noqa: qg-deep-import
+    DeadLetterRecord,
+    EnhancedError,
+    ErrorCategory,
+    ErrorRecoveryStrategy,
+    LifecycleEventType,
+)
 from unified_trading_library import log_event
 
 from .circuit_breaker import CircuitBreaker
-from .metrics import CIRCUIT_STATE_TRANSITIONS, CIRCUITS_OPEN, SERVICE_ERRORS_TOTAL
+from .metrics import (
+    CIRCUIT_STATE_TRANSITIONS,
+    CIRCUITS_OPEN,
+    DEAD_LETTERS_TOTAL,
+    SERVICE_ERRORS_TOTAL,
+)
 from .notifiers.router import route_event
 
 logger = logging.getLogger(__name__)
@@ -112,6 +126,9 @@ def handle_service_error(event_details: dict[str, object]) -> None:
     alert_event_name = "SERVICE_ERROR_CRITICAL" if severity_str == "critical" else "SERVICE_ERROR"
     route_event(alert_event_name, event_details)
 
+    # Check for dead letter condition: retries exhausted
+    _check_dead_letter(event_details, source_service, venue_str, enhanced_error)
+
     # Feed to circuit breaker
     new_state = _circuit_breaker.record_error(source_service, venue_str)
 
@@ -149,3 +166,86 @@ def handle_service_error(event_details: dict[str, object]) -> None:
             source_service,
             venue_str or "global",
         )
+
+
+# Default max retries threshold. When an event's retry_count >= this value,
+# the error is sent to the dead letter queue instead of being retried.
+_MAX_RETRIES: int = 3
+
+
+def _check_dead_letter(
+    event_details: dict[str, object],
+    source_service: str,
+    venue_str: str | None,
+    enhanced_error: EnhancedError | None,
+) -> None:
+    """Create a DeadLetterRecord if the event has exhausted retries.
+
+    Checks for ``retry_count`` and ``max_retries`` in event_details.
+    When retry_count >= max_retries, creates a DeadLetterRecord, emits
+    it as a DEAD_LETTER lifecycle event, and increments the metric.
+    """
+    retry_count_raw = event_details.get("retry_count")
+    if retry_count_raw is None:
+        return
+
+    retry_count = int(retry_count_raw) if isinstance(retry_count_raw, (int, float, str)) else 0
+    max_retries_raw = event_details.get("max_retries", _MAX_RETRIES)
+    max_retries = (
+        int(max_retries_raw) if isinstance(max_retries_raw, (int, float, str)) else _MAX_RETRIES
+    )
+
+    if retry_count < max_retries:
+        return
+
+    # Retries exhausted -> dead letter
+    now = datetime.now(UTC)
+    first_failure_raw = event_details.get("first_failure_at")
+    first_failure_at = (
+        datetime.fromisoformat(str(first_failure_raw))
+        if isinstance(first_failure_raw, str)
+        else now
+    )
+
+    error_category = ErrorCategory.UNKNOWN
+    error_message = str(event_details.get("message", "Unknown error"))
+    if enhanced_error is not None:
+        error_category = enhanced_error.category
+        error_message = enhanced_error.message
+
+    record = DeadLetterRecord(
+        record_id=str(uuid.uuid4()),
+        original_event=str(event_details.get("event_name", "SERVICE_ERROR")),
+        original_payload=str(event_details),
+        error_category=error_category,
+        error_message=error_message,
+        retry_count=retry_count,
+        max_retries=max_retries,
+        first_failure_at=first_failure_at,
+        last_failure_at=now,
+        source_service=source_service,
+        dead_lettered_at=now,
+        correlation_id=str(event_details.get("correlation_id"))
+        if event_details.get("correlation_id")
+        else None,
+        trace_id=str(event_details.get("trace_id")) if event_details.get("trace_id") else None,
+        venue=venue_str,
+        recovery_strategy=ErrorRecoveryStrategy.DEAD_LETTER,
+    )
+
+    # Emit as lifecycle event for downstream persistence (GCS sink, dashboards)
+    log_event(
+        "DEAD_LETTER",
+        details=record.model_dump(mode="json"),
+    )
+
+    DEAD_LETTERS_TOTAL.labels(service=source_service, venue=venue_str or "global").inc()
+
+    logger.warning(
+        "Dead-lettered error from %s (venue=%s): %s (retries=%d/%d)",
+        source_service,
+        venue_str or "global",
+        error_message,
+        retry_count,
+        max_retries,
+    )

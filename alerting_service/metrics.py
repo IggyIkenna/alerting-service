@@ -30,3 +30,9 @@ CIRCUITS_OPEN = Gauge(
     "alerting_service_circuits_open",
     "Number of circuits currently in OPEN state",
 )
+
+DEAD_LETTERS_TOTAL = Counter(
+    "alerting_service_dead_letters_total",
+    "Total errors sent to dead letter queue after exhausting retries",
+    ["service", "venue"],
+)
