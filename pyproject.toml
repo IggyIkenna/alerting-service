@@ -35,7 +35,7 @@ dependencies = [
     "bandit>=1.7.0,<2.0.0",
     "pre-commit>=3.0,<4.0.0",
     "pyjwt>=2.12.0,<3.0.0",
-    "responses>=0.25.0,<1.0.0",
+    "responses>=0.24.1,<1.0.0",
 ]
 
 [tool.uv.sources.unified-trading-library]
