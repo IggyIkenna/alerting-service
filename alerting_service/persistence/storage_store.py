@@ -19,6 +19,7 @@ from typing import cast
 
 import yaml
 from unified_trading_library import (
+    ManifestWriter,
     StorageClient,
     UnifiedCloudConfig,
     classify_and_emit_error,
@@ -93,6 +94,19 @@ class AlertStorageStore:
                 data=data,
                 content_type="application/x-ndjson",
             )
+            try:
+                writer = ManifestWriter(
+                    service_name="alerting-service",
+                    catalogue_bucket=self._bucket,
+                )
+                writer.add(
+                    processing_date=now.date(),
+                    row_count=1,
+                    venue="alert_history",
+                )
+                writer.write()
+            except Exception as _mw_err:
+                logger.debug("ManifestWriter failed: %s", _mw_err)
             log_event(
                 "PERSISTENCE_COMPLETED",
                 details={"target": "alert_history", "blob_path": blob_path},
