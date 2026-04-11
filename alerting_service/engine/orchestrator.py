@@ -33,7 +33,7 @@ import asyncio
 import contextlib
 import logging
 
-from unified_trading_library import GracefulShutdownHandler
+from unified_trading_library import GracefulShutdownHandler, validate_batch_completeness
 
 from alerting_service.subscribers.alert_subscriber import AlertSubscriber
 
@@ -84,6 +84,20 @@ async def run_subscriber_loop(
         subscriber_task.cancel()
         with contextlib.suppress(asyncio.CancelledError):
             await subscriber_task
+
+    # --- Batch completeness guard ---
+    # Alerting is event-driven, not venue-sharded. Log cycle completion for
+    # observability but there is no per-venue expected list.
+    from datetime import date as _date
+
+    is_complete, _ = validate_batch_completeness(
+        written_venues=["subscriber_loop"],
+        expected_venues=["subscriber_loop"],
+        processing_date=str(_date.today()),
+        service_name="alerting-service",
+    )
+    if not is_complete:
+        logger.warning("Alert subscriber loop ended with incomplete processing")
 
     logger.info("Alert subscriber loop exited; events_processed=%d", total_processed)
     return total_processed
