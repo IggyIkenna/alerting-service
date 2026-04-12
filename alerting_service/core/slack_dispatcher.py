@@ -1,7 +1,15 @@
 from typing import cast
 
 import aiohttp
+import aiohttp.resolver
 from unified_api_contracts.internal import AlertEvent  # noqa: qg-deep-import
+
+
+def _make_session(**kwargs: object) -> aiohttp.ClientSession:
+    """Create an aiohttp session with ThreadedResolver (OS DNS)."""
+    connector = aiohttp.TCPConnector(resolver=aiohttp.resolver.ThreadedResolver())
+    return aiohttp.ClientSession(connector=connector, **kwargs)  # type: ignore[arg-type]
+
 
 SEVERITY_COLORS: dict[str, str] = {
     "DEBUG": "#808080",
@@ -55,7 +63,7 @@ def build_slack_blocks(event: AlertEvent, dashboard_url: str) -> dict[str, objec
 
 async def send_slack_alert(webhook_url: str, event: AlertEvent, dashboard_url: str) -> str | None:
     payload = build_slack_blocks(event, dashboard_url)
-    async with aiohttp.ClientSession() as session, session.post(webhook_url, json=payload) as resp:
+    async with _make_session() as session, session.post(webhook_url, json=payload) as resp:
         if resp.status == 200:
             data = cast(dict[str, object], await resp.json(content_type=None))
             ts = data.get("ts")
