@@ -102,7 +102,7 @@ class AlertStorageStore:
                 writer.add(
                     processing_date=now.date(),
                     row_count=1,
-                    venue="alert_history",
+                    data_type="alert_history",
                 )
                 writer.write()
             except Exception as _mw_err:

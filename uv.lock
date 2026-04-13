@@ -131,7 +131,7 @@ requires-dist = [
     { name = "pytest-timeout", specifier = ">=2.4.0,<3.0.0" },
     { name = "pytest-xdist", specifier = ">=3.6.0,<4.0.0" },
     { name = "pyyaml", specifier = ">=6.0.1,<7.0.0" },
-    { name = "responses", specifier = ">=0.25.0,<1.0.0" },
+    { name = "responses", specifier = ">=0.24.1,<1.0.0" },
     { name = "ruff", specifier = "==0.15.0" },
     { name = "sse-starlette", specifier = ">=1.6.1,<2.0.0" },
     { name = "unified-api-contracts", editable = "../unified-api-contracts" },
