@@ -63,7 +63,7 @@ class TestUnifiedConfigInterface:
 
 
 # ---------------------------------------------------------------------------
-# unified_trading_library.events_interface
+# unified_trading_library.events
 # ---------------------------------------------------------------------------
 
 
