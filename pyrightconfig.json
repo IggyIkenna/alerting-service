@@ -34,7 +34,6 @@
   "venv": ".venv",
   "extraPaths": [
     "../unified-config-interface",
-    "../unified-events-interface",
     "../unified-internal-contracts",
     "../unified-trading-library",
     "../unified-cloud-interface"
