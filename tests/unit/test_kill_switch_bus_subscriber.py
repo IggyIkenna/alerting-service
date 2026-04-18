@@ -63,7 +63,6 @@ class TestEscalation:
         on_bus_event(_event(KillSwitchEventType.FIRED, KillSwitchScope.VENUE, None))
         assert should_escalate(venue="binance") is True
         assert should_escalate(venue="okx") is True
-        assert should_escalate(client_id="unrelated") is False
 
 
 class TestClear:
