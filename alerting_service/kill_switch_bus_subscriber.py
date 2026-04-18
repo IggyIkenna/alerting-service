@@ -17,7 +17,14 @@ from __future__ import annotations
 import logging
 import threading
 
-from unified_api_contracts.internal.domain.deployment_service import KillSwitchScope
+# `unified_api_contracts.internal.KillSwitchScope` resolves to the risk-domain
+# BaseModel (shape: entity_type / entity_id). We need the deployment-service
+# StrEnum (shape: GLOBAL/CLIENT/VENUE/STRATEGY/ARCHETYPE/INSTRUMENT) — the two
+# classes share a name but live in separate modules, so the deep import is
+# the only unambiguous path until the facade grows a disambiguating alias.
+from unified_api_contracts.internal.domain.deployment_service import (  # noqa: qg-deep-import
+    KillSwitchScope,
+)
 from unified_trading_library import KillSwitchEvent, KillSwitchEventType
 
 logger = logging.getLogger(__name__)

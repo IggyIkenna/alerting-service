@@ -22,16 +22,15 @@ from unified_trading_library import ServiceBootstrap
 from alerting_service.cli.handlers.alert_handler import AlertHandler
 from alerting_service.config import AlertingSystemConfig
 from alerting_service.engine.mock_data_provider import run_mock_pipeline
+from alerting_service.kill_switch_bus_subscriber import (
+    on_bus_event as _kill_switch_bus_subscriber,
+)
 
 _SERVICE_NAME = "alerting-service"  # pragma: no cover
 
 
 def main_service_cli() -> None:  # pragma: no cover
     """ServiceBootstrap entry point for alerting-service."""
-    from alerting_service.kill_switch_bus_subscriber import (
-        on_bus_event as _kill_switch_bus_subscriber,
-    )
-
     ServiceBootstrap(
         service_name=_SERVICE_NAME,
         operations={"alerts": AlertHandler},
