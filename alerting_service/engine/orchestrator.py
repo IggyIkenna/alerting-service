@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+from datetime import date as _date
 
 from unified_trading_library import GracefulShutdownHandler, validate_batch_completeness
 
@@ -88,8 +89,6 @@ async def run_subscriber_loop(
     # --- Batch completeness guard ---
     # Alerting is event-driven, not venue-sharded. Log cycle completion for
     # observability but there is no per-venue expected list.
-    from datetime import date as _date
-
     is_complete, _ = validate_batch_completeness(
         written_venues=["subscriber_loop"],
         expected_venues=["subscriber_loop"],
