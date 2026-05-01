@@ -71,6 +71,19 @@ def _default_routing_rules() -> list[dict[str, object]]:
             "channels": ["pagerduty", "telegram"],
             "severity_filter": "critical",
         },
+        # Unified margin-event ladder (PBM is canonical producer; thresholds
+        # come from UAC LIQUIDATION_PARAMS_REGISTRY). Replaces the prior
+        # service-local re-derivation of HF in risk / strategy / PBM.
+        {
+            "event_pattern": "MARGIN_LIQUIDATION",
+            "channels": ["pagerduty", "telegram"],
+            "severity_filter": "critical",
+        },
+        {
+            "event_pattern": "MARGIN_CRITICAL",
+            "channels": ["pagerduty", "telegram"],
+            "severity_filter": "critical",
+        },
         # ── T2 HIGH — PagerDuty P2 (warning) + Telegram ──────────────────
         # Circuit breaker backoff escalating (repeated recovery failure)
         {
@@ -99,6 +112,13 @@ def _default_routing_rules() -> list[dict[str, object]]:
         # Position discrepancy large enough to escalate
         {
             "event_pattern": "POSITION_CRITICAL_DISCREPANCY",
+            "channels": ["pagerduty", "telegram"],
+            "severity_filter": "warning",
+        },
+        # Margin warning band -- PagerDuty P2 so on-call sees drift before
+        # critical, but no immediate auto-action required.
+        {
+            "event_pattern": "MARGIN_WARNING",
             "channels": ["pagerduty", "telegram"],
             "severity_filter": "warning",
         },

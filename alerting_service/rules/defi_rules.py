@@ -32,7 +32,11 @@ import logging
 from decimal import Decimal
 
 from unified_api_contracts import DefiAlertType
-from unified_api_contracts.internal import DefiAlert  # noqa: qg-deep-import
+from unified_api_contracts.internal import (  # noqa: qg-deep-import
+    DefiAlert,
+    MarginModel,
+    get_liquidation_params,
+)
 from unified_trading_library import log_event
 
 from ..notifiers.router import route_event
@@ -41,10 +45,49 @@ logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Health factor critical (Aave liquidation risk)
+# Health factor critical (DeFi liquidation risk)
 # ---------------------------------------------------------------------------
+#
+# Thresholds come from UAC ``LIQUIDATION_PARAMS_REGISTRY`` — never inlined.
+# Three previously-conflicting Aave HF threshold sets (risk-and-exposure
+# 1.5/1.3/1.1, alerting 1.2, strategy 1.2) are reconciled to one canonical
+# entry: warning=1.30, critical=1.15, severe=1.05, liquidation=1.00.
 
-_HEALTH_FACTOR_CRITICAL_THRESHOLD = Decimal("1.2")
+_PROTOCOL_TO_MARGIN_MODEL: dict[str, MarginModel] = {
+    "aave_v3": MarginModel.AAVE_V3,
+    "compound_v3": MarginModel.COMPOUND_V3,
+    "morpho_blue": MarginModel.MORPHO_BLUE,
+}
+
+
+def _classify_health_factor(
+    health_factor: Decimal,
+    protocol: str,
+) -> str | None:
+    """Return alert severity for a health factor, or None if no alert.
+
+    Severity ladder is read from UAC ``LIQUIDATION_PARAMS_REGISTRY``:
+      HF >= warning           -> None (no alert)
+      HF in [critical,warning) -> "warning"
+      HF in [severe,critical)  -> "critical"
+      HF < severe              -> "critical"   (severe + liquidation collapse to
+                                                "critical" for DefiAlert.severity
+                                                which only carries warning/critical;
+                                                MarginEvent retains the full ladder)
+    """
+    margin_model = _PROTOCOL_TO_MARGIN_MODEL.get(protocol.lower())
+    if margin_model is None:
+        return None
+    params = get_liquidation_params(margin_model)
+    warning = params.health_factor_warning
+    critical = params.health_factor_critical
+    if warning is None or critical is None:
+        return None
+    if health_factor >= warning:
+        return None
+    if health_factor >= critical:
+        return "warning"
+    return "critical"
 
 
 def check_health_factor(
@@ -53,20 +96,22 @@ def check_health_factor(
     position_id: str,
     asset: str,
 ) -> DefiAlert | None:
-    """Generate P0 alert if Aave health factor drops below 1.2.
+    """Generate alert when DeFi health factor breaches the canonical band.
+
+    Thresholds come from UAC ``LIQUIDATION_PARAMS_REGISTRY[protocol]``.
 
     Args:
         health_factor: Current health factor of the position.
-        protocol: DeFi protocol name (e.g. "aave_v3").
+        protocol: DeFi protocol name (e.g. "aave_v3", "compound_v3", "morpho_blue").
         position_id: Unique identifier for the lending position.
         asset: Collateral asset symbol (e.g. "weETH").
 
     Returns:
-        DefiAlert if health_factor < 1.2, None otherwise.
+        DefiAlert if health_factor breaches the warning band, None otherwise.
     """
-    if health_factor >= _HEALTH_FACTOR_CRITICAL_THRESHOLD:
+    severity = _classify_health_factor(health_factor, protocol)
+    if severity is None:
         return None
-    severity = "critical" if health_factor < Decimal("1.05") else "warning"
     return DefiAlert(
         alert_type=DefiAlertType.HEALTH_FACTOR_CRITICAL,
         severity=severity,

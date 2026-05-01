@@ -21,20 +21,26 @@ from alerting_service.rules.defi_rules import (
 
 
 class TestHealthFactor:
-    def test_below_threshold_triggers_alert(self) -> None:
+    """Threshold bands come from UAC LIQUIDATION_PARAMS_REGISTRY[AAVE_V3]:
+    warning=1.30, critical=1.15, severe=1.05, liquidation=1.00. DefiAlert.severity
+    collapses severe + liquidation into ``critical`` (MarginEvent retains the
+    full ladder).
+    """
+
+    def test_in_critical_band_returns_critical(self) -> None:
         alert = check_health_factor(
-            health_factor=Decimal("1.1"),
+            health_factor=Decimal("1.10"),
             protocol="aave_v3",
             position_id="pos_001",
             asset="weETH",
         )
         assert alert is not None
         assert alert.alert_type == DefiAlertType.HEALTH_FACTOR_CRITICAL
+        assert alert.severity == "critical"
         assert alert.protocol == "aave_v3"
         assert alert.asset == "weETH"
-        assert "1.1" in alert.message
 
-    def test_very_low_health_factor_is_critical(self) -> None:
+    def test_below_severe_is_critical(self) -> None:
         alert = check_health_factor(
             health_factor=Decimal("1.02"),
             protocol="aave_v3",
@@ -44,7 +50,9 @@ class TestHealthFactor:
         assert alert is not None
         assert alert.severity == "critical"
 
-    def test_moderate_low_health_factor_is_warning(self) -> None:
+    def test_at_critical_threshold_is_warning(self) -> None:
+        # HF == critical(1.15) -- still below warning band, mapped to "warning"
+        # per `if HF >= critical: warning`.
         alert = check_health_factor(
             health_factor=Decimal("1.15"),
             protocol="aave_v3",
@@ -54,21 +62,50 @@ class TestHealthFactor:
         assert alert is not None
         assert alert.severity == "warning"
 
-    def test_above_threshold_returns_none(self) -> None:
+    def test_in_warning_band_is_warning(self) -> None:
+        alert = check_health_factor(
+            health_factor=Decimal("1.20"),
+            protocol="aave_v3",
+            position_id="pos_004",
+            asset="ETH",
+        )
+        assert alert is not None
+        assert alert.severity == "warning"
+
+    def test_above_warning_threshold_returns_none(self) -> None:
         alert = check_health_factor(
             health_factor=Decimal("1.5"),
             protocol="aave_v3",
-            position_id="pos_004",
+            position_id="pos_005",
             asset="weETH",
         )
         assert alert is None
 
-    def test_exactly_at_threshold_returns_none(self) -> None:
+    def test_at_warning_threshold_returns_none(self) -> None:
         alert = check_health_factor(
-            health_factor=Decimal("1.2"),
+            health_factor=Decimal("1.30"),
             protocol="aave_v3",
-            position_id="pos_005",
+            position_id="pos_006",
             asset="weETH",
+        )
+        assert alert is None
+
+    def test_compound_protocol_uses_compound_thresholds(self) -> None:
+        alert = check_health_factor(
+            health_factor=Decimal("1.10"),
+            protocol="compound_v3",
+            position_id="pos_007",
+            asset="USDC",
+        )
+        assert alert is not None
+        assert alert.severity == "critical"
+
+    def test_unknown_protocol_returns_none(self) -> None:
+        alert = check_health_factor(
+            health_factor=Decimal("0.01"),
+            protocol="unknown_protocol",
+            position_id="pos_008",
+            asset="ETH",
         )
         assert alert is None
 

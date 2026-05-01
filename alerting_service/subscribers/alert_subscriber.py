@@ -47,15 +47,18 @@ from unified_trading_library import QueueClient, get_queue_client, log_event
 from ..error_event_handler import handle_service_error
 from ..metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 from ..notifiers.router import route_event
+from ..rules.margin_rules import route_margin_event_payload
 
 logger = logging.getLogger(__name__)
 
 # PubSub subscriptions to pull from.
+# margin-events: canonical UAC topic, single producer = position-balance-monitor.
 _ALERT_SUBSCRIPTIONS: tuple[str, ...] = (
     "risk_alerts_circuit_breaker_triggers",
     "balance_discrepancy_alerts",
     "order_rejection_spikes",
     "service_error_events",
+    "margin-events",
 )
 
 # Coordination events from execution-service that must also be routed.
@@ -63,6 +66,7 @@ _COORDINATION_EVENTS: frozenset[str] = frozenset({"KILL_SWITCH_ACTIVATED", "CIRC
 
 # Events that have dedicated handlers (not just generic routing).
 _SERVICE_ERROR_EVENT: str = "SERVICE_ERROR"
+_MARGIN_EVENT: str = "MarginEvent"
 
 
 def _extract_event_name(payload: dict[str, object]) -> str:
@@ -173,14 +177,18 @@ class AlertSubscriber:
     def dispatch_event(event_name: str, enriched: dict[str, object]) -> None:
         """Route an event to the appropriate handler.
 
-        SERVICE_ERROR events are dispatched to the dedicated error handler
-        which feeds them into the circuit breaker. All other events go
-        through the standard routing pipeline.
+        SERVICE_ERROR events feed the circuit breaker. ``MarginEvent`` is
+        validated against the UAC schema and severity-mapped to the
+        ``MARGIN_*`` event-name family before going to the standard router.
+        Everything else falls through to the generic router.
         """
         if event_name == _SERVICE_ERROR_EVENT:
             handle_service_error(enriched)
-        else:
-            route_event(event_name, enriched)
+            return
+        if event_name == _MARGIN_EVENT:
+            route_margin_event_payload(enriched)
+            return
+        route_event(event_name, enriched)
 
     async def stream(self) -> AsyncIterator[tuple[str, dict[str, object]]]:
         """Yield (event_name, details) pairs from all subscribed topics.
