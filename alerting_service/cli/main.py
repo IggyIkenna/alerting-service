@@ -37,7 +37,7 @@ def main_service_cli() -> None:  # pragma: no cover
         config=AlertingSystemConfig(),
         modes=["live", "batch"],
         add_date_args=False,
-        add_category_arg=False,
+        add_asset_group_arg=False,
         mock_pipeline_fn=_run_mock,
         kill_switch_subscriber=_kill_switch_bus_subscriber,
     ).run()

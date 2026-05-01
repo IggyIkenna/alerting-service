@@ -334,7 +334,7 @@ class TestKillSwitchRouting:
         slack_secret = _patch_slack_secret()
         event_details: dict[str, object] = {
             "strategy": "momentum-v2",
-            "venue": "kraken",
+            "venue": "bybit",
             "source": "execution-service",
         }
 
@@ -434,7 +434,7 @@ class TestCircuitBreakerRouting:
             patch("alerting_service.notifiers.pagerduty.log_event"),
             patch("alerting_service.notifiers.telegram.log_event"),
         ):
-            route_event("CIRCUIT_BREAKER_OPEN", {"venue": "kraken"})
+            route_event("CIRCUIT_BREAKER_OPEN", {"venue": "bybit"})
 
         pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
         assert pd_calls, "PagerDuty httpx.post was not called"
