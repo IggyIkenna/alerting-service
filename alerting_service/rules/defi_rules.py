@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from unified_api_contracts import DefiAlertType
+from unified_api_contracts import ALERT_THRESHOLDS, DefiAlertType, ThresholdUnit
 from unified_api_contracts.internal import (  # noqa: qg-deep-import
     DefiAlert,
     MarginModel,
@@ -168,26 +168,48 @@ def check_weeth_depeg(
 # ---------------------------------------------------------------------------
 # Aave utilization spike
 # ---------------------------------------------------------------------------
+#
+# Threshold comes from UAC ``ALERT_THRESHOLDS`` — never inlined. The legacy
+# ``_AAVE_UTILIZATION_THRESHOLD = Decimal("0.95")`` was migrated to UAC in
+# Phase 2 of ``alerting_service_live_rules_2026_05_07`` and now reads from
+# ``ALERT_THRESHOLDS["defi_aave_utilization_spike_bps"]`` with explicit
+# ``ThresholdUnit.BPS_OF_ONE`` (9500 bps_of_one = 95.00 %). Per-archetype
+# overrides supported via ``threshold.for_archetype(archetype)``.
 
-_AAVE_UTILIZATION_THRESHOLD = Decimal("0.95")
+
+def _aave_utilization_threshold_ratio(archetype: str | None = None) -> Decimal:
+    """Return the AAVE utilization threshold as a ratio (0.0 to 1.0)."""
+    threshold = ALERT_THRESHOLDS["defi_aave_utilization_spike_bps"]
+    if threshold.unit is not ThresholdUnit.BPS_OF_ONE:
+        msg = (
+            "defi_aave_utilization_spike_bps unit drifted from BPS_OF_ONE; "
+            "alerting-service consumer expects bps_of_one normalisation"
+        )
+        raise ValueError(msg)
+    bps = threshold.for_archetype(archetype)
+    return bps / Decimal("10000")
 
 
 def check_aave_utilization(
     utilization_rate: Decimal,
     pool_name: str,
     protocol: str = "aave_v3",
+    archetype: str | None = None,
 ) -> DefiAlert | None:
-    """Generate P1 alert if Aave pool utilization exceeds 95%.
+    """Generate P1 alert if Aave pool utilization exceeds the UAC threshold.
 
     Args:
         utilization_rate: Current utilization rate (0.0 to 1.0).
         pool_name: Name of the Aave lending pool (e.g. "USDC", "ETH").
         protocol: Protocol name (defaults to "aave_v3").
+        archetype: Optional strategy-archetype key for per-archetype overrides
+            (e.g. "leveraged_funding_arb" gets a tighter 90 % threshold).
 
     Returns:
-        DefiAlert if utilization > 0.95, None otherwise.
+        DefiAlert if utilization > threshold, None otherwise.
     """
-    if utilization_rate <= _AAVE_UTILIZATION_THRESHOLD:
+    threshold_ratio = _aave_utilization_threshold_ratio(archetype)
+    if utilization_rate <= threshold_ratio:
         return None
     return DefiAlert(
         alert_type=DefiAlertType.AAVE_UTILIZATION_SPIKE,
@@ -197,11 +219,14 @@ def check_aave_utilization(
         message=(
             f"Aave utilization spike: {pool_name} pool at"
             f" {float(utilization_rate) * 100:.1f}% on {protocol}"
+            f" (threshold {float(threshold_ratio) * 100:.1f}%)"
         ),
         details={
             "utilization_rate": float(utilization_rate),
+            "threshold_ratio": float(threshold_ratio),
             "pool_name": pool_name,
             "protocol": protocol,
+            "archetype": archetype if archetype is not None else "default",
         },
     )
 
