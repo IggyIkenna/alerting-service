@@ -24,7 +24,7 @@ def _default_routing_rules() -> list[dict[str, object]]:
     AlertCode / threshold_key / KILL_SWITCH-flag-on-non-KILL_SWITCH-code) so
     drift between this service and the UAC SSOT cannot creep back.
 
-    Plan: `unified-trading-pm/plans/active/alerting_service_live_rules_2026_05_07.plan.md`
+    Plan: `unified-trading-pm/plans/active/alerting_service_live_rules_2026_05_07.md`
     Phase 2.
 
     Operator overrides via the `routing_rules` field on
