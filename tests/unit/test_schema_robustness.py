@@ -63,11 +63,15 @@ class TestEventRouter:
         assert len(rules) > 0
 
     def test_kill_switch_rule_routes_to_pagerduty(self) -> None:
+        # 2026-05-08 — UAC LIVE_ALERT_RULES split the legacy KILL_SWITCH_* wildcard
+        # rule into 3 atomic per-code rules so each can carry its own
+        # kill_switch_scope (GLOBAL / VENUE / ARCHETYPE). Test now uses one of the
+        # real AlertCode values that maps to a kill-switch rule.
         from alerting_service.config import _default_routing_rules
         from alerting_service.notifiers.router import _match_routing_rules
 
         rules = _default_routing_rules()
-        channels, severity = _match_routing_rules("KILL_SWITCH_ACTIVATED", rules)
+        channels, severity = _match_routing_rules("KILL_SWITCH_DEFI_LIQUIDATION_RISK", rules)
         assert "pagerduty" in channels
         assert severity == "critical"
 

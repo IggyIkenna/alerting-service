@@ -166,7 +166,12 @@ def test_check_aave_utilization_per_archetype_override() -> None:
 
 
 _LEGACY_PATTERNS_MUST_BE_PRESENT: tuple[str, ...] = (
-    "KILL_SWITCH_*",
+    # 2026-05-08 — UAC LIVE_ALERT_RULES split the legacy KILL_SWITCH_* wildcard
+    # into 3 atomic per-code rules so each can carry its own kill_switch_scope.
+    # Routing equivalence preserved (each code routes to PAGERDUTY+TELEGRAM CRITICAL).
+    "KILL_SWITCH_DEFI_LIQUIDATION_RISK",
+    "KILL_SWITCH_PORTFOLIO_DRAWDOWN",
+    "KILL_SWITCH_VENUE_DISCONNECT",
     "CIRCUIT_BREAKER_OPEN",
     "UNHEDGED_POSITION_ALERT",
     "MULTI_LEG_COMPENSATION_FAILED",
