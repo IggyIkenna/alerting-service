@@ -22,6 +22,7 @@ Service event taxonomy (for observability and test compliance):
 """
 
 import logging
+import time
 import uuid
 from datetime import UTC, datetime
 from fnmatch import fnmatch
@@ -49,6 +50,91 @@ _VALID_SEVERITIES: frozenset[str] = frozenset(get_args(PagerDutySeverity))
 
 # Module-level deduplicator (shared across all route_event calls).
 _deduplicator = AlertDeduplicator(ttl_seconds=60.0)
+
+# ── Tick-staleness + connectivity-gap coalesce window ────────────────────
+# Per alerting_service_live_rules_2026_05_07 § "Tick-staleness +
+# connectivity-gap event taxonomy", when both TICK_STALENESS (MDPS) and
+# CONNECTIVITY_GAP_DETECTED (MTDS) fire on the same (venue, instrument)
+# within a 30-second window, operators see ONE merged alert rather than
+# two separate fires. The 30s window keys on ``(venue, instrument)``
+# extracted from the alert payload ``details`` dict.
+#
+# Coalesce state: maps (venue, instrument) → (last_fire_monotonic, last_event_name,
+# merged_payload). The first event in the window fires normally + records
+# the timestamp; subsequent events within 30s short-circuit return after
+# logging a COALESCE_MERGED event with the merged payload (no second fire,
+# no second persistence record, no second channel dispatch).
+#
+# Non-staleness / non-connectivity alerts pass through untouched — the
+# coalesce only fires for the closed set ``_COALESCED_EVENT_NAMES``.
+_COALESCE_WINDOW_SECONDS: float = 30.0
+_COALESCED_EVENT_NAMES: frozenset[str] = frozenset(
+    {
+        "TICK_STALENESS",
+        "CONNECTIVITY_GAP_DETECTED",
+    }
+)
+_coalesce_window: dict[tuple[str, str], tuple[float, str, dict[str, object]]] = {}
+
+
+def _coalesce_key(event_name: str, details: dict[str, object]) -> tuple[str, str] | None:
+    """Extract the (venue, instrument) coalesce key from an alert payload.
+
+    Returns ``None`` if either field is missing — caller MUST pass through
+    without coalescing in that case (operator-visible over-broad alert is
+    preferred to a silent merge that drops the second fire).
+    """
+    venue_raw = details.get("venue")
+    instrument_raw = details.get("instrument")
+    if venue_raw is None or instrument_raw is None:
+        return None
+    return (str(venue_raw), str(instrument_raw))
+
+
+def _check_coalesce_window(
+    event_name: str,
+    details: dict[str, object],
+    now_monotonic: float,
+) -> bool:
+    """Return True if this event should be COALESCED (suppressed); False if it should fire.
+
+    Side-effect: when False (fires normally), records the (key, now, event_name, details)
+    entry in ``_coalesce_window`` for future suppression. When True (suppressed),
+    merges the new payload into the in-flight entry so the original fire's
+    audit trail captures the union of both signals.
+
+    Cleanup: stale entries (>30s old) are evicted on every call to keep
+    the dict bounded under high-frequency emission. Eviction is O(N)
+    over the window dict, which is bounded by the operator's distinct
+    (venue, instrument) set per 30s — small.
+    """
+    if event_name not in _COALESCED_EVENT_NAMES:
+        return False
+    key = _coalesce_key(event_name, details)
+    if key is None:
+        return False
+    # Evict stale entries
+    for stale_key in [k for k, (ts, _, _) in _coalesce_window.items() if now_monotonic - ts >= _COALESCE_WINDOW_SECONDS]:
+        del _coalesce_window[stale_key]
+    existing = _coalesce_window.get(key)
+    if existing is not None and now_monotonic - existing[0] < _COALESCE_WINDOW_SECONDS:
+        # Merge new payload into in-flight entry; suppress this fire.
+        merged = dict(existing[2])
+        merged.update(details)
+        merged["_coalesced_with"] = event_name
+        _coalesce_window[key] = (existing[0], existing[1], merged)
+        return True
+    # Record this fire as the in-flight entry; do not suppress.
+    _coalesce_window[key] = (now_monotonic, event_name, dict(details))
+    return False
+
+
+def _reset_coalesce_window_for_tests() -> None:
+    """Test-only helper: clear the coalesce-window dict.
+
+    Used by ``tests/unit/test_router_coalesce.py`` between cases so each
+    test starts from a clean window. Not part of the public API."""
+    _coalesce_window.clear()
 
 # Module-level GCS store (lazily initialised).
 _storage_store_instance: object | None = None
@@ -380,6 +466,23 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
         logger.debug("Duplicate alert suppressed: %s", event_name)
         if _batch_mode:
             _batch_deduplicated += 1
+        return
+
+    # Tick-staleness + connectivity-gap coalesce window — merge concurrent
+    # TICK_STALENESS + CONNECTIVITY_GAP_DETECTED fires on the same
+    # (venue, instrument) within 30s into ONE operator-visible alert.
+    # See ``_check_coalesce_window`` docstring above; non-staleness /
+    # non-connectivity events pass through unchanged.
+    if _check_coalesce_window(event_name, details, time.monotonic()):
+        log_event(
+            "ALERT_COALESCED",
+            details={
+                "event_name": event_name,
+                "venue": details.get("venue"),
+                "instrument": details.get("instrument"),
+                "window_seconds": _COALESCE_WINDOW_SECONDS,
+            },
+        )
         return
 
     log_event("ALERT_ROUTED", details={"event_name": event_name})
