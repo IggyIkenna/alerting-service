@@ -245,7 +245,7 @@ def _find_kill_switch_rule(event_name: str) -> AlertRule | None:
     normal channel dispatch path.
     """
     for rule in LIVE_ALERT_RULES:
-        if not fnmatch(event_name, rule.pattern):
+        if not fnmatch(event_name, rule.event_pattern):
             continue
         if not rule.triggers_kill_switch:
             return None
