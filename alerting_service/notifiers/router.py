@@ -77,6 +77,30 @@ _COALESCED_EVENT_NAMES: frozenset[str] = frozenset(
 _coalesce_window: dict[tuple[str, str], tuple[float, str, dict[str, object]]] = {}
 
 
+# ── Synthetic-event paging suppression (Phase 3.F of simulation_scenarios) ──
+# When a scenario harness drives the pipeline via AdversarialMatchingEngine /
+# arm_breaker(synthetic=True), downstream alerts carry ``synthetic=True`` in
+# their ``details`` payload. The router logs the synthetic alert + persists
+# the delivery record (so operator-visible dashboards still see it) but does
+# NOT dispatch to PagerDuty / Telegram — paging during synthetic scenario
+# drills is unnecessary noise and could confuse on-call.
+#
+# Per CLAUDE.md "Live = batch" rule, real-fire alerts continue to page
+# normally — the ONLY distinction is the ``synthetic`` flag on the payload.
+
+_SYNTHETIC_TRUTHY: frozenset[object] = frozenset({True, "True", "true", "TRUE", "1"})
+
+
+def _is_synthetic(details: dict[str, object]) -> bool:
+    """Return True iff the details payload signals a synthetic scenario fire.
+
+    Per Phase 3.F the producer stamps ``synthetic=True`` (bool) — we accept
+    common string serialisations as well so handlers that re-serialise via
+    JSON / Pub/Sub envelope conventions still match.
+    """
+    return details.get("synthetic") in _SYNTHETIC_TRUTHY
+
+
 def _coalesce_key(event_name: str, details: dict[str, object]) -> tuple[str, str] | None:
     """Extract the (venue, instrument) coalesce key from an alert payload.
 
@@ -280,6 +304,55 @@ def _build_delivery_record(
         "event_name": event_name,
         "timestamp": datetime.now(UTC).isoformat(),
     }
+
+
+def _route_synthetic_log_only(
+    *,
+    event_name: str,
+    details: dict[str, object],
+    alert_id: str,
+    source: str,
+) -> None:
+    """Synthetic-event short-circuit: log + persist record, NO channel dispatch.
+
+    Phase 3.F (``simulation_scenarios_topology_price_shocks_2026_05_09.md``):
+    scenario-fire alerts carry ``synthetic=True`` in their details payload.
+    The router emits an ``ALERT_SUPPRESSED_SYNTHETIC`` audit event + persists
+    a log-only AlertDeliveryRecord (so operator-visible dashboards still see
+    the synthetic alert) but skips PagerDuty + Telegram dispatch.
+
+    Per CLAUDE.md "Live = batch": real-fire alerts still page normally — the
+    ONLY distinction from prod alerts is the ``synthetic`` flag on the
+    payload.
+
+    Does NOT call ``_get_cloud_config`` / ``_persist_config_snapshot`` — the
+    synthetic short-circuit must work in scenario runs that may not have GCP /
+    AWS credentials available (CI / local mock runs).
+    """
+    log_event(
+        "ALERT_SUPPRESSED_SYNTHETIC",
+        details={
+            "event_name": event_name,
+            "alert_id": alert_id,
+            "source": source,
+            "scenario_id": str(details.get("scenario_id", "")),
+            "reason": "synthetic=True in alert payload — paging suppressed per Phase 3.F",
+        },
+    )
+    if _batch_mode:
+        # Batch mode: record the synthetic dispatch in the per-batch audit log
+        # using the LOG_ONLY channel set. Mirrors _record_batch_audit's shape
+        # without paging-channel resolution.
+        _record_batch_audit(alert_id, event_name, {"log_only"}, None, source, details)
+        return
+    record = _build_delivery_record(
+        alert_id=alert_id,
+        channel="log_only",
+        status="suppressed_synthetic",
+        response_detail="paging suppressed — synthetic=True",
+        event_name=event_name,
+    )
+    _persist_delivery_record(record)
 
 
 def _persist_delivery_record(record: dict[str, object]) -> None:
@@ -508,10 +581,24 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
 
     log_event("ALERT_ROUTED", details={"event_name": event_name})
 
-    config = _get_cloud_config()
     alert_id = uuid.uuid4().hex[:16]
-    summary = f"[{event_name}] {details.get('message', event_name)}"
     source = str(details.get("source", "alerting-service"))
+
+    # Phase 3.F synthetic-paging-suppression: log + persist + short-circuit
+    # BEFORE _get_cloud_config + channel resolution + dispatch when details
+    # carries synthetic=True. Avoids touching cloud config during synthetic
+    # scenario runs (which may run without GCP/AWS credentials in CI).
+    if _is_synthetic(details):
+        _route_synthetic_log_only(
+            event_name=event_name,
+            details=details,
+            alert_id=alert_id,
+            source=source,
+        )
+        return
+
+    config = _get_cloud_config()
+    summary = f"[{event_name}] {details.get('message', event_name)}"
 
     # Determine channels from config-driven routing rules
     channels, pd_severity = _match_routing_rules(event_name, config.routing_rules)
@@ -570,10 +657,23 @@ def route_event_with_explicit_channels(
 
     log_event("ALERT_ROUTED", details={"event_name": event_name})
 
-    config = _get_cloud_config()
     alert_id = uuid.uuid4().hex[:16]
-    summary = f"[{event_name}] {details.get('message', event_name)}"
     source = str(details.get("source", "alerting-service"))
+
+    # Phase 3.F synthetic-paging-suppression: log + persist + short-circuit
+    # BEFORE _get_cloud_config + channel dispatch when details carries
+    # synthetic=True.
+    if _is_synthetic(details):
+        _route_synthetic_log_only(
+            event_name=event_name,
+            details=details,
+            alert_id=alert_id,
+            source=source,
+        )
+        return
+
+    config = _get_cloud_config()
+    summary = f"[{event_name}] {details.get('message', event_name)}"
 
     if _batch_mode:
         _record_batch_audit(alert_id, event_name, channels, pd_severity, source, details)
