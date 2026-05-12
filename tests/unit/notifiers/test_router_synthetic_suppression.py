@@ -1,4 +1,4 @@
-# ruff: noqa: N802 - test method names use NOT in upper case for visual contrast
+
 """Tests for Phase 3.F synthetic-paging-suppression in alerting router.
 
 When ``details["synthetic"] = True`` (or any of the truthy serialisations

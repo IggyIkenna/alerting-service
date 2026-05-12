@@ -19,10 +19,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from alerting_service.notifiers.router import (
+    _COALESCE_WINDOW_SECONDS,
+    _COALESCED_EVENT_NAMES,
     _check_coalesce_window,
     _coalesce_key,
-    _COALESCED_EVENT_NAMES,
-    _COALESCE_WINDOW_SECONDS,
     _reset_coalesce_window_for_tests,
     route_event,
 )
@@ -208,7 +208,11 @@ class TestCheckCoalesceWindow:
         )
         suppressed = _check_coalesce_window(
             "CONNECTIVITY_GAP_DETECTED",
-            {"venue": "binance", "instrument": "BTC-USDT", "gap_window_start": "2026-05-11T12:00:00Z"},
+            {
+                "venue": "binance",
+                "instrument": "BTC-USDT",
+                "gap_window_start": "2026-05-11T12:00:00Z",
+            },
             now_monotonic=115.0,
         )
         assert suppressed is True
