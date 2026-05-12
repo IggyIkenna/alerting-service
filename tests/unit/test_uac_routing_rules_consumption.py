@@ -72,17 +72,40 @@ def test_default_routing_rules_have_legacy_shape() -> None:
 # ---------------------------------------------------------------------------
 
 
+# Kill-switch RECOVERY AlertCodes (DR plan Phase 5.A) are *de-escalation* signals
+# — a switch was disarmed / unkilled — so they are INFO → Telegram, NOT CRITICAL.
+# They are excluded from the "every KILL_SWITCH_* arm pages on-call" invariant.
+_KILL_SWITCH_RECOVERY_CODES: frozenset[AlertCode] = frozenset(
+    {AlertCode.KILL_SWITCH_AUTO_RECOVERED, AlertCode.KILL_SWITCH_MANUAL_UNKILLED}
+)
+
+
 def test_kill_switch_rules_are_critical_with_pagerduty() -> None:
-    """KILL_SWITCH_* family must page PagerDuty + carry CRITICAL severity so
-    on-call is alerted within SLA."""
+    """KILL_SWITCH_* arm-family must page PagerDuty + carry CRITICAL severity so
+    on-call is alerted within SLA. Recovery (de-escalation) codes are INFO/Telegram
+    and are excluded."""
     kill_switch_rules = [
-        rule for rule in LIVE_ALERT_RULES if rule.code.value.startswith("KILL_SWITCH_")
+        rule
+        for rule in LIVE_ALERT_RULES
+        if rule.code.value.startswith("KILL_SWITCH_")
+        and rule.code not in _KILL_SWITCH_RECOVERY_CODES
     ]
-    assert kill_switch_rules, "KILL_SWITCH_* family must have at least one rule"
+    assert kill_switch_rules, "KILL_SWITCH_* family must have at least one arm rule"
     for rule in kill_switch_rules:
         assert rule.severity is AlertSeverity.CRITICAL
         assert AlertChannel.PAGERDUTY in rule.channels
         assert rule.triggers_kill_switch is True
+
+
+def test_kill_switch_recovery_rules_are_info_telegram() -> None:
+    """The two RECOVERY AlertCodes (DR plan Phase 5.A) are INFO → Telegram —
+    a disarm / unkill is good news, not a page."""
+    recovery_rules = [rule for rule in LIVE_ALERT_RULES if rule.code in _KILL_SWITCH_RECOVERY_CODES]
+    assert len(recovery_rules) == 2, "both KILL_SWITCH recovery codes must have rules"
+    for rule in recovery_rules:
+        assert rule.severity is AlertSeverity.INFO
+        assert AlertChannel.TELEGRAM in rule.channels
+        assert AlertChannel.PAGERDUTY not in rule.channels
 
 
 def test_cross_cloud_egress_detected_routed_to_pagerduty() -> None:

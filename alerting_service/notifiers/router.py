@@ -114,7 +114,11 @@ def _check_coalesce_window(
     if key is None:
         return False
     # Evict stale entries
-    for stale_key in [k for k, (ts, _, _) in _coalesce_window.items() if now_monotonic - ts >= _COALESCE_WINDOW_SECONDS]:
+    for stale_key in [
+        k
+        for k, (ts, _, _) in _coalesce_window.items()
+        if now_monotonic - ts >= _COALESCE_WINDOW_SECONDS
+    ]:
         del _coalesce_window[stale_key]
     existing = _coalesce_window.get(key)
     if existing is not None and now_monotonic - existing[0] < _COALESCE_WINDOW_SECONDS:
@@ -135,6 +139,7 @@ def _reset_coalesce_window_for_tests() -> None:
     Used by ``tests/unit/test_router_coalesce.py`` between cases so each
     test starts from a clean window. Not part of the public API."""
     _coalesce_window.clear()
+
 
 # Module-level GCS store (lazily initialised).
 _storage_store_instance: object | None = None
@@ -182,13 +187,46 @@ def _get_storage_store() -> AlertStorageStore:
     return cast("AlertStorageStore", _storage_store_instance)
 
 
+def _parse_rule_channels(raw_channels: object) -> set[str]:
+    """Parse a routing rule's ``channels`` value into a channel-name set.
+
+    A matched rule with an empty channel list is a LOG_ONLY rule —
+    ``AlertRule.to_routing_dict()`` strips ``AlertChannel.LOG_ONLY`` (UAC has no
+    legacy "log_only" routing concept), leaving ``[]``. We return the sentinel
+    ``{"log_only"}`` so the downstream ``_deliver_to_channels`` distinguishes
+    "rule matched → INFO, no delivery" from "no rule matched → telegram fallback".
+    """
+    channels: set[str] = set()
+    if isinstance(raw_channels, list):
+        for channel_name in cast("list[object]", raw_channels):
+            channels.add(str(channel_name))
+    return channels or {"log_only"}
+
+
+def _parse_rule_severity(severity_raw: object, pattern: str) -> PagerDutySeverity | None:
+    """Parse a routing rule's ``severity_filter`` value, defaulting to ``warning``
+    on an unrecognised string (with a log warning)."""
+    if severity_raw is None:
+        return None
+    severity_str = str(severity_raw).lower()
+    if severity_str in _VALID_SEVERITIES:
+        return cast("PagerDutySeverity", severity_str)
+    logger.warning(
+        "Unknown severity %r in routing rule for %s, defaulting to 'warning'",
+        severity_raw,
+        pattern,
+    )
+    return "warning"
+
+
 def _match_routing_rules(
     event_name: str,
     rules: list[dict[str, object]],
 ) -> tuple[set[str], PagerDutySeverity | None]:
     """Match event_name against routing rules and return channels + severity.
 
-    Rules are evaluated in order; the FIRST matching rule wins.
+    Rules are evaluated in order; the FIRST matching rule wins. When no rule
+    matches, fall back to telegram only.
 
     Returns:
         Tuple of (channel_set, pagerduty_severity_or_none).
@@ -196,25 +234,8 @@ def _match_routing_rules(
     for rule in rules:
         pattern = str(rule.get("event_pattern", ""))  # noqa: qg-empty-fallback
         if fnmatch(event_name, pattern):
-            raw_channels = rule.get("channels", [])  # noqa: qg-empty-fallback
-            channels: set[str] = set()
-            if isinstance(raw_channels, list):
-                for channel_name in cast("list[object]", raw_channels):
-                    channels.add(str(channel_name))
-            severity_raw = rule.get("severity_filter")
-            severity: PagerDutySeverity | None = None
-            if severity_raw is not None:
-                severity_str = str(severity_raw).lower()
-                if severity_str in _VALID_SEVERITIES:
-                    severity = cast("PagerDutySeverity", severity_str)
-                else:
-                    logger.warning(
-                        "Unknown severity %r in routing rule for %s, defaulting to 'warning'",
-                        severity_raw,
-                        pattern,
-                    )
-                    severity = "warning"
-            return channels, severity
+            channels = _parse_rule_channels(rule.get("channels", []))  # noqa: qg-empty-fallback
+            return channels, _parse_rule_severity(rule.get("severity_filter"), pattern)
 
     # No rule matched — fallback to telegram only
     return {"telegram"}, None
@@ -516,6 +537,60 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
     # even if the bus publish errors. Side-effect-free vs channel dispatch.
     _publish_kill_switch_event(event_name, details, alert_id)
 
+    _persist_config_snapshot(config)
+
+
+def route_event_with_explicit_channels(
+    event_name: str,
+    details: dict[str, object],
+    *,
+    channels: set[str],
+    pd_severity: PagerDutySeverity | None,
+) -> None:
+    """Route an event to an explicitly-supplied channel set, bypassing config rules.
+
+    Used by consumers that compute the severity tier themselves rather than
+    relying on a matching ``LIVE_ALERT_RULES`` ``event_pattern`` — e.g. the
+    disaster-recovery kill-switch arm/disarm + circuit-breaker fire handlers,
+    where the severity is a function of ``KillSwitchId`` scope / ``BreakerAction``
+    rather than of a static AlertCode.
+
+    Shares the dedup / persistence / log-event machinery with :func:`route_event`;
+    the ONLY difference is that channel resolution is supplied by the caller.
+    ``channels == {"log_only"}`` (or any set excluding pagerduty/telegram) results
+    in no delivery — only the ``ALERT_ROUTED`` / ``ALERT_SENT`` audit trail.
+    """
+    global _batch_deduplicated
+
+    if _deduplicator.is_duplicate(event_name, details):
+        logger.debug("Duplicate alert suppressed (explicit channels): %s", event_name)
+        if _batch_mode:
+            _batch_deduplicated += 1
+        return
+
+    log_event("ALERT_ROUTED", details={"event_name": event_name})
+
+    config = _get_cloud_config()
+    alert_id = uuid.uuid4().hex[:16]
+    summary = f"[{event_name}] {details.get('message', event_name)}"
+    source = str(details.get("source", "alerting-service"))
+
+    if _batch_mode:
+        _record_batch_audit(alert_id, event_name, channels, pd_severity, source, details)
+        return
+
+    failed = _deliver_to_channels(
+        alert_id,
+        event_name,
+        summary,
+        source,
+        channels,
+        pd_severity,
+        config,
+        details,
+    )
+    status_event = "ALERT_FAILED" if failed else "ALERT_SENT"
+    log_event(status_event, details={"event_name": event_name, "alert_id": alert_id})
     _persist_config_snapshot(config)
 
 

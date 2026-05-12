@@ -44,9 +44,15 @@ from typing import cast
 
 from unified_trading_library import QueueClient, get_queue_client, log_event
 
+from ..dr_event_handler import (
+    handle_circuit_breaker_fire_payload,
+    handle_kill_switch_armed_payload,
+    handle_kill_switch_disarm_payload,
+)
 from ..error_event_handler import handle_service_error
 from ..metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 from ..notifiers.router import route_event
+from ..risk_rule_event_handler import handle_risk_rule_fired_payload
 from ..rules.margin_rules import route_margin_event_payload
 
 logger = logging.getLogger(__name__)
@@ -67,6 +73,11 @@ _COORDINATION_EVENTS: frozenset[str] = frozenset({"KILL_SWITCH_ACTIVATED", "CIRC
 # Events that have dedicated handlers (not just generic routing).
 _SERVICE_ERROR_EVENT: str = "SERVICE_ERROR"
 _MARGIN_EVENT: str = "MarginEvent"
+# Disaster-recovery + risk-rule typed events (Phase 5.B risk plan / Phase 4.C DR plan).
+_RISK_RULE_FIRED_EVENT: str = "RiskRuleFiredEvent"
+_KILL_SWITCH_ARMED_EVENT: str = "KillSwitchArmedEvent"
+_KILL_SWITCH_DISARM_EVENT: str = "KillSwitchDisarmEvent"
+_CIRCUIT_BREAKER_FIRED_EVENT: str = "CircuitBreakerFired"
 
 
 def _extract_event_name(payload: dict[str, object]) -> str:
@@ -187,6 +198,18 @@ class AlertSubscriber:
             return
         if event_name == _MARGIN_EVENT:
             route_margin_event_payload(enriched)
+            return
+        if event_name == _RISK_RULE_FIRED_EVENT:
+            handle_risk_rule_fired_payload(enriched)
+            return
+        if event_name == _KILL_SWITCH_ARMED_EVENT:
+            handle_kill_switch_armed_payload(enriched)
+            return
+        if event_name == _KILL_SWITCH_DISARM_EVENT:
+            handle_kill_switch_disarm_payload(enriched)
+            return
+        if event_name == _CIRCUIT_BREAKER_FIRED_EVENT:
+            handle_circuit_breaker_fire_payload(enriched)
             return
         route_event(event_name, enriched)
 
