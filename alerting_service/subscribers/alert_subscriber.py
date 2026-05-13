@@ -39,11 +39,15 @@ import json
 import logging
 import time
 import uuid
-from collections.abc import AsyncIterator
-from typing import cast
+from collections.abc import AsyncIterator, Callable
+from typing import ClassVar, cast
 
 from unified_trading_library import QueueClient, get_queue_client, log_event
 
+from ..defi_feature_event_handler import (
+    DEFI_FEATURE_EVENT_NAMES,
+    handle_defi_feature_event,
+)
 from ..dr_event_handler import (
     handle_circuit_breaker_fire_payload,
     handle_kill_switch_armed_payload,
@@ -184,32 +188,35 @@ class AlertSubscriber:
         )
         return event_name, enriched
 
-    @staticmethod
-    def dispatch_event(event_name: str, enriched: dict[str, object]) -> None:
+    # Closed-set typed-event handler dispatch (each handler signature:
+    # ``payload: dict[str, object]) -> None``). Kept at module-level via a
+    # tuple to satisfy ruff C901 (dispatch_event complexity ≤ 7).
+    _TYPED_HANDLERS: ClassVar[dict[str, Callable[[dict[str, object]], None]]] = {
+        _SERVICE_ERROR_EVENT: handle_service_error,
+        _MARGIN_EVENT: route_margin_event_payload,
+        _RISK_RULE_FIRED_EVENT: handle_risk_rule_fired_payload,
+        _KILL_SWITCH_ARMED_EVENT: handle_kill_switch_armed_payload,
+        _KILL_SWITCH_DISARM_EVENT: handle_kill_switch_disarm_payload,
+        _CIRCUIT_BREAKER_FIRED_EVENT: handle_circuit_breaker_fire_payload,
+    }
+
+    @classmethod
+    def dispatch_event(cls, event_name: str, enriched: dict[str, object]) -> None:
         """Route an event to the appropriate handler.
 
         SERVICE_ERROR events feed the circuit breaker. ``MarginEvent`` is
         validated against the UAC schema and severity-mapped to the
         ``MARGIN_*`` event-name family before going to the standard router.
-        Everything else falls through to the generic router.
+        DeFi feature events (FEATURE_*) bridge to the DeFi rule check_*
+        functions via ``handle_defi_feature_event``. Everything else falls
+        through to the generic router.
         """
-        if event_name == _SERVICE_ERROR_EVENT:
-            handle_service_error(enriched)
+        typed_handler = cls._TYPED_HANDLERS.get(event_name)
+        if typed_handler is not None:
+            typed_handler(enriched)
             return
-        if event_name == _MARGIN_EVENT:
-            route_margin_event_payload(enriched)
-            return
-        if event_name == _RISK_RULE_FIRED_EVENT:
-            handle_risk_rule_fired_payload(enriched)
-            return
-        if event_name == _KILL_SWITCH_ARMED_EVENT:
-            handle_kill_switch_armed_payload(enriched)
-            return
-        if event_name == _KILL_SWITCH_DISARM_EVENT:
-            handle_kill_switch_disarm_payload(enriched)
-            return
-        if event_name == _CIRCUIT_BREAKER_FIRED_EVENT:
-            handle_circuit_breaker_fire_payload(enriched)
+        if event_name in DEFI_FEATURE_EVENT_NAMES:
+            handle_defi_feature_event(event_name, enriched)
             return
         route_event(event_name, enriched)
 

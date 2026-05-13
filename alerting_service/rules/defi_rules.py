@@ -31,7 +31,7 @@ from __future__ import annotations
 import logging
 from decimal import Decimal
 
-from unified_api_contracts import ALERT_THRESHOLDS, DefiAlertType, ThresholdUnit
+from unified_api_contracts import ALERT_THRESHOLDS, AlertCode, DefiAlertType, ThresholdUnit
 from unified_api_contracts.internal import (  # noqa: qg-deep-import
     DefiAlert,
     MarginModel,
@@ -162,6 +162,7 @@ def check_weeth_depeg(
             "weeth_eth_rate": float(weeth_eth_rate),
             "deviation_pct": float(deviation_pct),
         },
+        code=AlertCode.DEFI_WEETH_DEPEG,
     )
 
 
@@ -228,6 +229,7 @@ def check_aave_utilization(
             "protocol": protocol,
             "archetype": archetype if archetype is not None else "default",
         },
+        code=AlertCode.DEFI_AAVE_UTILIZATION_SPIKE,
     )
 
 
@@ -328,6 +330,7 @@ def check_funding_rate_flip(
             "symbol": symbol,
             "venue": venue,
         },
+        code=AlertCode.DEFI_FUNDING_RATE_FLIP,
     )
 
 
@@ -367,6 +370,7 @@ def check_feature_staleness(
             "sla_seconds": sla_seconds,
             "staleness_ratio": staleness_ratio,
         },
+        code=AlertCode.DEFI_FEATURE_STALE,
     )
 
 
@@ -489,13 +493,21 @@ def route_defi_alert(alert: DefiAlert) -> None:
     Args:
         alert: The DeFi alert to route.
     """
-    event_name = _ALERT_TYPE_TO_EVENT.get(alert.alert_type, f"DEFI_{alert.alert_type.upper()}")
+    # Prefer canonical AlertCode for routing when set (producer-migration window
+    # 2026-05-08+, per Phase 3 of alerting_service_live_rules_2026_05_07.md).
+    # Fall back to legacy DefiAlertType mapping when code is absent.
+    if alert.code is not None:
+        event_name = alert.code.value
+    else:
+        event_name = _ALERT_TYPE_TO_EVENT.get(alert.alert_type, f"DEFI_{alert.alert_type.upper()}")
 
     details: dict[str, object] = {
         "message": alert.message,
         "severity": alert.severity,
         "source": "alerting-service/defi-rules",
     }
+    if alert.code is not None:
+        details["code"] = alert.code.value
     if alert.protocol is not None:
         details["protocol"] = alert.protocol
     if alert.asset is not None:
