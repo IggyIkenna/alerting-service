@@ -265,14 +265,30 @@ def _match_routing_rules(
     return {"telegram"}, None
 
 
+def _is_runtime_alert(event_name: str) -> bool:
+    """Return True when event_name matches a LIVE_ALERT_RULES entry (runtime ops alert).
+
+    Used by _deliver_message to route to telegram_chat_id_ops when configured.
+    Non-LIVE_ALERT_RULES events (CI/QG/internal) use the standard telegram_chat_id.
+    """
+    return any(fnmatch(event_name, rule.event_pattern) for rule in LIVE_ALERT_RULES)
+
+
 def _deliver_message(event_name: str, summary: str) -> bool:
     """Deliver a message via Telegram (primary) or Slack (deprecated fallback).
+
+    Runtime alerts (matched by LIVE_ALERT_RULES) route to telegram_chat_id_ops when
+    configured; CI/QG/internal events use the standard telegram_chat_id.
 
     Returns True if delivery succeeded, False otherwise.
     """
     config = _get_cloud_config()
     bot_token = config.telegram_bot_token
-    chat_id = config.telegram_chat_id
+    ops_chat_id = config.telegram_chat_id_ops
+    if ops_chat_id and _is_runtime_alert(event_name):
+        chat_id = ops_chat_id
+    else:
+        chat_id = config.telegram_chat_id
 
     if bot_token and chat_id:
         ok = send_telegram(message=summary, bot_token=bot_token, chat_id=chat_id)

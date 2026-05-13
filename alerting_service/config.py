@@ -45,6 +45,11 @@ class AlertingSystemConfig(UnifiedCloudConfig):
     slack_webhook_url: str = Field(default="", description="Slack incoming webhook URL")
     telegram_bot_token: str = Field(default="", description="Telegram Bot API token")
     telegram_chat_id: str = Field(default="", description="Telegram chat ID for alerts")
+    telegram_chat_id_ops: str = Field(
+        default="",
+        description="Telegram chat ID for live-ops runtime alerts (ops team channel). "
+        "LIVE_ALERT_RULES events route here when set; CI/QG events use telegram_chat_id.",
+    )
     pagerduty_routing_key: str | None = None
     routing_rules: list[dict[str, object]] = Field(default_factory=_default_routing_rules)
     email_smtp_host: str | None = None
