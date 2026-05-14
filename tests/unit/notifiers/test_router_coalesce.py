@@ -104,14 +104,14 @@ class TestCoalescedEventNames:
     def test_connectivity_gap_detected_is_coalesced(self) -> None:
         assert "CONNECTIVITY_GAP_DETECTED" in _COALESCED_EVENT_NAMES
 
-    def test_recovery_events_NOT_coalesced(self) -> None:
+    def test_recovery_events_not_coalesced(self) -> None:
         """Recovery events (CONNECTIVITY_RECOVERED, CONNECTIVITY_GAP_BACKFILLED)
         are INFO-severity Telegram-only fires; coalescing them would silently
         drop the recovery signal that closes the loop on the gap alert."""
         assert "CONNECTIVITY_RECOVERED" not in _COALESCED_EVENT_NAMES
         assert "CONNECTIVITY_GAP_BACKFILLED" not in _COALESCED_EVENT_NAMES
 
-    def test_unrelated_events_NOT_coalesced(self) -> None:
+    def test_unrelated_events_not_coalesced(self) -> None:
         assert "CIRCUIT_BREAKER_OPEN" not in _COALESCED_EVENT_NAMES
         assert "KILL_SWITCH_VENUE_DISCONNECT" not in _COALESCED_EVENT_NAMES
         assert "DEFI_HEALTH_FACTOR_CRITICAL" not in _COALESCED_EVENT_NAMES
@@ -141,7 +141,7 @@ class TestCheckCoalesceWindow:
         )
         assert suppressed is True
 
-    def test_second_fire_DIFFERENT_key_does_not_suppress(self) -> None:
+    def test_second_fire_different_key_does_not_suppress(self) -> None:
         _check_coalesce_window(
             "TICK_STALENESS",
             {"venue": "binance", "instrument": "BTC-USDT"},

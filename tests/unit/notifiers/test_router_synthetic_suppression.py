@@ -1,4 +1,3 @@
-
 """Tests for Phase 3.F synthetic-paging-suppression in alerting router.
 
 When ``details["synthetic"] = True`` (or any of the truthy serialisations
@@ -111,7 +110,7 @@ class TestRouteEventSyntheticSuppression:
         assert record["channel"] == "log_only"
         assert record["status"] == "suppressed_synthetic"
 
-    def test_synthetic_false_does_NOT_log_suppressed_event(
+    def test_synthetic_false_does_not_log_suppressed_event(
         self,
         mock_pd_send_event,  # type: ignore[no-untyped-def]
         mock_send_telegram,  # type: ignore[no-untyped-def]
