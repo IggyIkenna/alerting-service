@@ -643,7 +643,8 @@ class TestTelegramOpsChannelRouting:
         mock_persist_config: MagicMock,
         mock_config_with_ops_channel: MagicMock,
     ) -> None:
-        # KILL_SWITCH_VENUE_DISCONNECT is explicitly in LIVE_ALERT_RULES (runtime ops alert)
+        # Use a real AlertCode that is explicitly in LIVE_ALERT_RULES (not just the catch-all *).
+        # KILL_SWITCH_ACTIVATED is not a UAC AlertCode — use KILL_SWITCH_VENUE_DISCONNECT instead.
         route_event("KILL_SWITCH_VENUE_DISCONNECT", {"strategy": "s1"})
 
         mock_send_telegram.assert_called_once()
@@ -661,7 +662,7 @@ class TestTelegramOpsChannelRouting:
         mock_persist_config: MagicMock,
         mock_config_with_telegram: MagicMock,
     ) -> None:
-        route_event("KILL_SWITCH_ACTIVATED", {"strategy": "s1"})
+        route_event("KILL_SWITCH_VENUE_DISCONNECT", {"strategy": "s1"})
 
         mock_send_telegram.assert_called_once()
         tg_kwargs = mock_send_telegram.call_args.kwargs

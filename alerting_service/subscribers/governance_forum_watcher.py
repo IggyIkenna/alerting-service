@@ -1,3 +1,4 @@
+# SCHEMA_PROVENANCE_EXEMPT: GovernanceProposal is subscriber-internal (not a domain contract)
 """Governance forum watcher (D.7).
 
 Polls governance forums for proposals tagged with depeg-risk keywords:
@@ -36,7 +37,7 @@ import logging
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Protocol
+from typing import Protocol, cast
 
 import httpx
 from unified_api_contracts.alerting import AlertCode
@@ -176,10 +177,10 @@ class SnapshotForumPoller:
                 headers={"Content-Type": "application/json"},
             )
             response.raise_for_status()
-            data: dict[str, object] = response.json()
+            data = cast(dict[str, object], response.json())
             proposals = data.get("data", {})
             if isinstance(proposals, dict):
-                raw_proposals = proposals.get("proposals", [])
+                raw_proposals = cast(dict[str, object], proposals).get("proposals", [])
                 if isinstance(raw_proposals, list):
                     return raw_proposals  # type: ignore[return-value]
             return []
@@ -201,8 +202,6 @@ class SnapshotForumPoller:
         results: list[GovernanceProposal] = []
 
         for p in raw_proposals:
-            if not isinstance(p, dict):
-                continue
             proposal_id = str(p.get("id", ""))
             title = str(p.get("title", ""))
             body = str(p.get("body", ""))
@@ -302,12 +301,12 @@ class TallyForumPoller:
                 headers=self._headers(),
             )
             response.raise_for_status()
-            data: dict[str, object] = response.json()
+            data = cast(dict[str, object], response.json())
             proposals_data = data.get("data", {})
             if isinstance(proposals_data, dict):
-                proposals_wrapper = proposals_data.get("proposals", {})
+                proposals_wrapper = cast(dict[str, object], proposals_data).get("proposals", {})
                 if isinstance(proposals_wrapper, dict):
-                    nodes = proposals_wrapper.get("nodes", [])
+                    nodes = cast(dict[str, object], proposals_wrapper).get("nodes", [])
                     if isinstance(nodes, list):
                         return nodes  # type: ignore[return-value]
             return []
@@ -366,8 +365,6 @@ class TallyForumPoller:
         raw_proposals = await self.fetch_proposals(client)
         results: list[GovernanceProposal] = []
         for p in raw_proposals:
-            if not isinstance(p, dict):
-                continue
             proposal = self._parse_proposal(p)
             if proposal is not None:
                 results.append(proposal)
@@ -388,7 +385,7 @@ class GovernanceForumWatcher:
 
         class _RouterEmitter:
             def emit(self, payload: dict[str, object]) -> None:
-                route_event(str(payload.get("event_name", "")), payload)
+                route_event(str(payload["event_name"]), payload)
 
         watcher = GovernanceForumWatcher(emitter=_RouterEmitter())
         await watcher.run_until_stopped()

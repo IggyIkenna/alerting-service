@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import cast
 
 from unified_api_contracts.internal import (  # noqa: qg-deep-import
     MarginEvent,
@@ -151,7 +150,7 @@ def route_margin_event_payload(payload: dict[str, object]) -> None:
         logger.warning(
             "Dropping malformed MarginEvent payload: %s | payload=%s",
             exc,
-            json.dumps(cast("dict[str, object]", payload), default=str)[:512],
+            json.dumps(payload, default=str)[:512],
         )
         return
     route_margin_event(event)

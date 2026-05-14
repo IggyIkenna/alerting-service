@@ -1,3 +1,4 @@
+# SCHEMA_PROVENANCE_EXEMPT: IssuePauseEvent is subscriber-internal (not a domain contract)
 """Stablecoin issuer-pause subscriber (D.5).
 
 Polls three issuer signals for pause/halt conditions:
@@ -27,9 +28,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Protocol
+from typing import Protocol, cast
 
 import httpx
 from unified_api_contracts.alerting import AlertCode
@@ -193,7 +195,7 @@ class MakerDAOPSMPoller:
         self,
         rpc_url: str | None = None,
         psm_address: str = _MAKERDAO_PSM_ADDRESS,
-        web3_call_fn: object | None = None,
+        web3_call_fn: Callable[[str], int] | None = None,
     ) -> None:
         """
         :param rpc_url: Ethereum JSON-RPC endpoint (ADC-resolved in production).
@@ -217,7 +219,7 @@ class MakerDAOPSMPoller:
                 result: int = await loop.run_in_executor(
                     None,
                     self._web3_call_fn,
-                    self._psm_address,  # type: ignore[arg-type]
+                    self._psm_address,
                 )
                 return result
             except Exception as exc:
@@ -243,7 +245,7 @@ class MakerDAOPSMPoller:
             async with httpx.AsyncClient(timeout=10.0) as client:
                 resp = await client.post(self._rpc_url, json=call_data)
                 resp.raise_for_status()
-                result_hex: str = resp.json().get("result", "0x1")
+                result_hex = str(cast(dict[str, object], resp.json()).get("result", "0x1"))
                 return int(result_hex, 16)
         except Exception as exc:
             logger.warning("MakerDAOPSMPoller RPC call failed: %s", exc)

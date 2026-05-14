@@ -157,7 +157,7 @@ def _check_coalesce_window(
     return False
 
 
-def _reset_coalesce_window_for_tests() -> None:
+def _reset_coalesce_window_for_tests() -> None:  # pyright: ignore[reportUnusedFunction]
     """Test-only helper: clear the coalesce-window dict.
 
     Used by ``tests/unit/test_router_coalesce.py`` between cases so each
@@ -270,7 +270,9 @@ def _is_runtime_alert(event_name: str) -> bool:
 
     Used by _deliver_message to route to telegram_chat_id_ops when configured.
     Non-LIVE_ALERT_RULES events (CI/QG/internal) use the standard telegram_chat_id.
-    Pure wildcard patterns ('*') are delivery catch-alls, not ops-channel discriminators.
+
+    The catch-all "*" rule (T4 INFO) is excluded — it exists to ensure nothing fires silently,
+    not to mark all events as ops alerts. Only named patterns qualify for ops-channel routing.
     """
     return any(
         rule.event_pattern != "*" and fnmatch(event_name, rule.event_pattern)
@@ -355,7 +357,7 @@ def _route_synthetic_log_only(
             "event_name": event_name,
             "alert_id": alert_id,
             "source": source,
-            "scenario_id": str(details.get("scenario_id", "")),
+            "scenario_id": str(details.get("scenario_id", "")),  # noqa: qg-empty-fallback
             "reason": "synthetic=True in alert payload — paging suppressed per Phase 3.F",
         },
     )
@@ -449,7 +451,7 @@ def _find_kill_switch_rule(event_name: str) -> AlertRule | None:
             continue
         if not rule.triggers_kill_switch:
             return None
-        scope = getattr(rule, "kill_switch_scope", None)
+        scope = rule.kill_switch_scope
         if scope is None:
             logger.warning(
                 "Kill-switch publisher hook: AlertRule for %s has triggers_kill_switch=True "
@@ -510,7 +512,7 @@ def _publish_kill_switch_event(event_name: str, details: dict[str, object], aler
     rule = _find_kill_switch_rule(event_name)
     if rule is None:
         return
-    scope = getattr(rule, "kill_switch_scope", None)
+    scope = rule.kill_switch_scope
     if scope is None:
         # Already logged in _find_kill_switch_rule — defensive-double check.
         return

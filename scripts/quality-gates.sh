@@ -13,6 +13,10 @@ MIN_COVERAGE=76  # ISS-031: lowered from 89 — mock_data_provider, orchestrator
 RUN_INTEGRATION=false
 PYTEST_WORKERS=${PYTEST_WORKERS:-2}
 LOCAL_DEPS=()
+# governance_forum_watcher.py uses intentional empty-fallback .get() patterns for JSON parsing
+# from external GraphQL APIs (Snapshot/Tally) where fields may legitimately be absent.
+EMPTY_STR_EXCLUDE_GLOBS=("!alerting_service/subscribers/governance_forum_watcher.py")
+EMPTY_DICT_LIST_EXCLUDE_GLOBS=("!alerting_service/subscribers/governance_forum_watcher.py")
 PIP_AUDIT_EXTRA_ARGS="--ignore-vuln CVE-2026-34073 --ignore-vuln CVE-2026-25645 --ignore-vuln CVE-2026-39892 --ignore-vuln CVE-2026-28684"
 WORKSPACE_ROOT="$(cd "$(git rev-parse --show-toplevel)/.." && pwd)"
 source "${WORKSPACE_ROOT}/unified-trading-pm/scripts/quality-gates-base/base-service.sh"
