@@ -209,7 +209,8 @@ class SnapshotForumPoller:
             space_name = ""
             space = p.get("space")
             if isinstance(space, dict):
-                space_name = str(space.get("name", ""))
+                _sn = space.get("name")
+                space_name = _sn if isinstance(_sn, str) else ""
 
             matched_keywords = _matches_risk_keywords(title, body, space_name)
             if not matched_keywords:
@@ -224,7 +225,8 @@ class SnapshotForumPoller:
 
             space_id = ""
             if isinstance(space, dict):
-                space_id = str(space.get("id", ""))
+                _si = space.get("id")
+                space_id = _si if isinstance(_si, str) else ""
             url = f"https://snapshot.org/#/{space_id}/proposal/{proposal_id}"
 
             results.append(
@@ -325,7 +327,11 @@ class TallyForumPoller:
         title = str(p.get("title", ""))
         description = str(p.get("description", ""))
         governor = p.get("governor")
-        governor_name = str(governor.get("name", "")) if isinstance(governor, dict) else ""
+        if isinstance(governor, dict):
+            _gn = governor.get("name")
+            governor_name = _gn if isinstance(_gn, str) else ""
+        else:
+            governor_name = ""
 
         matched_keywords = _matches_risk_keywords(title, description, governor_name)
         if not matched_keywords:
@@ -340,7 +346,11 @@ class TallyForumPoller:
         else:
             posted_at = datetime.now(UTC)
 
-        governor_id = str(governor.get("id", "")) if isinstance(governor, dict) else ""
+        if isinstance(governor, dict):
+            _gi = governor.get("id")
+            governor_id = _gi if isinstance(_gi, str) else ""
+        else:
+            governor_id = ""
         url = f"https://www.tally.xyz/gov/{governor_id}/proposal/{proposal_id}"
         return GovernanceProposal(
             forum="Tally",

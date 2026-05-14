@@ -266,12 +266,16 @@ def _match_routing_rules(
 
 
 def _is_runtime_alert(event_name: str) -> bool:
-    """Return True when event_name matches a LIVE_ALERT_RULES entry (runtime ops alert).
+    """Return True when event_name matches a specific LIVE_ALERT_RULES entry (runtime ops alert).
 
     Used by _deliver_message to route to telegram_chat_id_ops when configured.
     Non-LIVE_ALERT_RULES events (CI/QG/internal) use the standard telegram_chat_id.
+    Pure wildcard patterns ('*') are delivery catch-alls, not ops-channel discriminators.
     """
-    return any(fnmatch(event_name, rule.event_pattern) for rule in LIVE_ALERT_RULES)
+    return any(
+        rule.event_pattern != "*" and fnmatch(event_name, rule.event_pattern)
+        for rule in LIVE_ALERT_RULES
+    )
 
 
 def _deliver_message(event_name: str, summary: str) -> bool:

@@ -643,7 +643,8 @@ class TestTelegramOpsChannelRouting:
         mock_persist_config: MagicMock,
         mock_config_with_ops_channel: MagicMock,
     ) -> None:
-        route_event("KILL_SWITCH_ACTIVATED", {"strategy": "s1"})
+        # KILL_SWITCH_VENUE_DISCONNECT is explicitly in LIVE_ALERT_RULES (runtime ops alert)
+        route_event("KILL_SWITCH_VENUE_DISCONNECT", {"strategy": "s1"})
 
         mock_send_telegram.assert_called_once()
         tg_kwargs = mock_send_telegram.call_args.kwargs

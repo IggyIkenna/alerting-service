@@ -63,12 +63,14 @@ DEFI_FEATURE_PERP_FUNDING_RATE: Final[str] = "DEFI_FEATURE_PERP_FUNDING_RATE"
 DEFI_FEATURE_WEETH_ETH_RATE: Final[str] = "DEFI_FEATURE_WEETH_ETH_RATE"
 DEFI_FEATURE_STALENESS: Final[str] = "DEFI_FEATURE_STALENESS"
 
-DEFI_FEATURE_EVENT_NAMES: Final[frozenset[str]] = frozenset({
-    DEFI_FEATURE_AAVE_UTILIZATION,
-    DEFI_FEATURE_PERP_FUNDING_RATE,
-    DEFI_FEATURE_WEETH_ETH_RATE,
-    DEFI_FEATURE_STALENESS,
-})
+DEFI_FEATURE_EVENT_NAMES: Final[frozenset[str]] = frozenset(
+    {
+        DEFI_FEATURE_AAVE_UTILIZATION,
+        DEFI_FEATURE_PERP_FUNDING_RATE,
+        DEFI_FEATURE_WEETH_ETH_RATE,
+        DEFI_FEATURE_STALENESS,
+    }
+)
 
 
 def _coerce_decimal(value: object, field: str) -> Decimal | None:
@@ -109,9 +111,7 @@ def _build_aave_utilization_alert(payload: dict[str, object]):  # type: ignore[n
         return None
     protocol = _coerce_str(payload.get("protocol"), "protocol", required=False) or "aave_v3"
     archetype = _coerce_str(payload.get("archetype"), "archetype", required=False)
-    return check_aave_utilization(
-        utilization, pool_name, protocol=protocol, archetype=archetype
-    )
+    return check_aave_utilization(utilization, pool_name, protocol=protocol, archetype=archetype)
 
 
 def _build_funding_rate_flip_alert(payload: dict[str, object]):  # type: ignore[no-untyped-def]
