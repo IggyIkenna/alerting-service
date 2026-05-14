@@ -1,4 +1,3 @@
-# SCHEMA_PROVENANCE_EXEMPT: GovernanceProposal is subscriber-internal (not a domain contract)
 """Governance forum watcher (D.7).
 
 Polls governance forums for proposals tagged with depeg-risk keywords:
@@ -34,13 +33,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
-from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
-from typing import Protocol, cast
+from typing import Protocol
 
 import httpx
-from unified_api_contracts.alerting import AlertCode
+from pydantic import BaseModel
+from unified_api_contracts.internal.alerting import GovernanceForumProposal
+
+# Re-export under the historic name so existing consumers import unchanged.
+GovernanceProposal = GovernanceForumProposal
 
 logger = logging.getLogger(__name__)
 
@@ -80,32 +81,6 @@ RISK_KEYWORDS: frozenset[str] = frozenset(
 _PROPOSAL_LOOKBACK_HOURS: int = 24
 
 
-@dataclass
-class GovernanceProposal:
-    """A governance proposal detected by the forum watcher."""
-
-    forum: str  # 'Snapshot' or 'Tally'
-    proposal_id: str
-    title: str
-    tags: list[str]
-    posted_at: datetime
-    url: str
-    correlation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-
-    def to_alert_payload(self) -> dict[str, object]:
-        """Serialize to alert event payload dict."""
-        return {
-            "event_name": AlertCode.GOVERNANCE_INCIDENT_DETECTED.value,
-            "forum": self.forum,
-            "proposal_id": self.proposal_id,
-            "title": self.title,
-            "tags": self.tags,
-            "posted_at": self.posted_at.isoformat(),
-            "url": self.url,
-            "correlation_id": self.correlation_id,
-        }
-
-
 class AlertEmitter(Protocol):
     """Protocol for emitting alert payloads."""
 
@@ -121,6 +96,78 @@ def _matches_risk_keywords(title: str, body: str = "", space: str = "") -> list[
     """
     combined = f"{title} {body} {space}".lower()
     return [kw for kw in RISK_KEYWORDS if kw in combined]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Private Pydantic models for raw API response shapes (parser-internal).
+# Underscore prefix: excluded from schema-provenance check.
+# Using Optional[X] fields with None defaults for API fields that may be absent.
+# ─────────────────────────────────────────────────────────────────────────────
+
+
+class _SnapshotSpace(BaseModel):  # CORRECT-LOCAL
+    """Snapshot proposal space sub-object."""
+
+    id: str | None = None
+    name: str | None = None
+
+
+class _SnapshotRawProposal(BaseModel):  # CORRECT-LOCAL
+    """Raw Snapshot.org proposal record as returned by GraphQL."""
+
+    id: str
+    title: str
+    body: str | None = None
+    created: int | None = None
+    space: _SnapshotSpace | None = None
+    state: str | None = None
+
+
+class _SnapshotProposalsData(BaseModel):  # CORRECT-LOCAL
+    """``data.proposals`` wrapper from Snapshot GraphQL response."""
+
+    proposals: list[_SnapshotRawProposal] = []
+
+
+class _SnapshotApiResponse(BaseModel):  # CORRECT-LOCAL
+    """Top-level Snapshot.org GraphQL response envelope."""
+
+    data: _SnapshotProposalsData | None = None
+
+
+class _TallyGovernor(BaseModel):  # CORRECT-LOCAL
+    """Tally proposal governor sub-object."""
+
+    id: str | None = None
+    name: str | None = None
+
+
+class _TallyRawProposal(BaseModel):  # CORRECT-LOCAL
+    """Raw Tally proposal record as returned by GraphQL."""
+
+    id: str
+    title: str
+    description: str | None = None
+    createdAt: str | None = None  # noqa: N815 — mirrors API field name
+    governor: _TallyGovernor | None = None
+
+
+class _TallyProposalsNodes(BaseModel):  # CORRECT-LOCAL
+    """``data.proposals`` wrapper from Tally GraphQL response."""
+
+    nodes: list[_TallyRawProposal] = []
+
+
+class _TallyProposalsData(BaseModel):  # CORRECT-LOCAL
+    """``data`` wrapper from Tally GraphQL response."""
+
+    proposals: _TallyProposalsNodes | None = None
+
+
+class _TallyApiResponse(BaseModel):  # CORRECT-LOCAL
+    """Top-level Tally GraphQL response envelope."""
+
+    data: _TallyProposalsData | None = None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -162,7 +209,7 @@ class SnapshotForumPoller:
         self._lookback_hours = lookback_hours
         self._timeout = timeout_seconds
 
-    async def fetch_proposals(self, client: httpx.AsyncClient) -> list[dict[str, object]]:
+    async def fetch_proposals(self, client: httpx.AsyncClient) -> list[_SnapshotRawProposal]:
         """Fetch recent proposals from Snapshot.org GraphQL API."""
         cutoff_ts = int((datetime.now(UTC) - timedelta(hours=self._lookback_hours)).timestamp())
         payload = {
@@ -177,12 +224,9 @@ class SnapshotForumPoller:
                 headers={"Content-Type": "application/json"},
             )
             response.raise_for_status()
-            data = cast(dict[str, object], response.json())
-            proposals = data.get("data", {})
-            if isinstance(proposals, dict):
-                raw_proposals = cast(dict[str, object], proposals).get("proposals", [])
-                if isinstance(raw_proposals, list):
-                    return raw_proposals  # type: ignore[return-value]
+            api_response = _SnapshotApiResponse.model_validate(response.json())
+            if api_response.data is not None:
+                return api_response.data.proposals
             return []
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 429:
@@ -196,42 +240,33 @@ class SnapshotForumPoller:
             logger.warning("SnapshotForumPoller fetch error: %s", exc)
             return []
 
-    async def check(self, client: httpx.AsyncClient) -> list[GovernanceProposal]:
+    async def check(self, client: httpx.AsyncClient) -> list[GovernanceForumProposal]:
         """Return proposals matching risk keywords from Snapshot."""
         raw_proposals = await self.fetch_proposals(client)
-        results: list[GovernanceProposal] = []
+        results: list[GovernanceForumProposal] = []
 
         for p in raw_proposals:
-            proposal_id = str(p.get("id", ""))
-            title = str(p.get("title", ""))
-            body = str(p.get("body", ""))
-            space_name = ""
-            space = p.get("space")
-            if isinstance(space, dict):
-                _sn = space.get("name")
-                space_name = _sn if isinstance(_sn, str) else ""
+            title = p.title
+            body = p.body or ""
+            space_name = p.space.name if p.space and p.space.name else ""
 
             matched_keywords = _matches_risk_keywords(title, body, space_name)
             if not matched_keywords:
                 continue
 
-            created_ts = p.get("created")
             posted_at: datetime
-            if isinstance(created_ts, int):
-                posted_at = datetime.fromtimestamp(created_ts, tz=UTC)
+            if p.created is not None:
+                posted_at = datetime.fromtimestamp(p.created, tz=UTC)
             else:
                 posted_at = datetime.now(UTC)
 
-            space_id = ""
-            if isinstance(space, dict):
-                _si = space.get("id")
-                space_id = _si if isinstance(_si, str) else ""
-            url = f"https://snapshot.org/#/{space_id}/proposal/{proposal_id}"
+            space_id = p.space.id if p.space and p.space.id else ""
+            url = f"https://snapshot.org/#/{space_id}/proposal/{p.id}"
 
             results.append(
-                GovernanceProposal(
+                GovernanceForumProposal(
                     forum="Snapshot",
-                    proposal_id=proposal_id,
+                    proposal_id=p.id,
                     title=title,
                     tags=matched_keywords,
                     posted_at=posted_at,
@@ -286,7 +321,7 @@ class TallyForumPoller:
             headers["Api-Key"] = self._api_key
         return headers
 
-    async def fetch_proposals(self, client: httpx.AsyncClient) -> list[dict[str, object]]:
+    async def fetch_proposals(self, client: httpx.AsyncClient) -> list[_TallyRawProposal]:
         """Fetch recent proposals from Tally GraphQL API."""
         after_time = (datetime.now(UTC) - timedelta(hours=self._lookback_hours)).isoformat()
         payload = {
@@ -301,14 +336,9 @@ class TallyForumPoller:
                 headers=self._headers(),
             )
             response.raise_for_status()
-            data = cast(dict[str, object], response.json())
-            proposals_data = data.get("data", {})
-            if isinstance(proposals_data, dict):
-                proposals_wrapper = cast(dict[str, object], proposals_data).get("proposals", {})
-                if isinstance(proposals_wrapper, dict):
-                    nodes = cast(dict[str, object], proposals_wrapper).get("nodes", [])
-                    if isinstance(nodes, list):
-                        return nodes  # type: ignore[return-value]
+            api_response = _TallyApiResponse.model_validate(response.json())
+            if api_response.data is not None and api_response.data.proposals is not None:
+                return api_response.data.proposals.nodes
             return []
         except httpx.HTTPStatusError as exc:
             if exc.response.status_code == 429:
@@ -320,50 +350,40 @@ class TallyForumPoller:
             logger.warning("TallyForumPoller fetch error: %s", exc)
             return []
 
-    def _parse_proposal(self, p: dict[str, object]) -> GovernanceProposal | None:
-        """Parse a raw Tally proposal dict; return None if keywords don't match."""
-        proposal_id = str(p.get("id", ""))
-        title = str(p.get("title", ""))
-        description = str(p.get("description", ""))
-        governor = p.get("governor")
-        if isinstance(governor, dict):
-            _gn = governor.get("name")
-            governor_name = _gn if isinstance(_gn, str) else ""
-        else:
-            governor_name = ""
+    def _parse_proposal(self, p: _TallyRawProposal) -> GovernanceForumProposal | None:
+        """Parse a Tally proposal; return None if keywords don't match."""
+        title = p.title
+        description = p.description or ""
+        governor_name = p.governor.name if p.governor and p.governor.name else ""
 
         matched_keywords = _matches_risk_keywords(title, description, governor_name)
         if not matched_keywords:
             return None
 
-        created_at_raw = p.get("createdAt")
-        if isinstance(created_at_raw, str):
+        posted_at: datetime
+        if p.createdAt is not None:
             try:
-                posted_at: datetime = datetime.fromisoformat(created_at_raw.replace("Z", "+00:00"))
+                posted_at = datetime.fromisoformat(p.createdAt.replace("Z", "+00:00"))
             except ValueError:
                 posted_at = datetime.now(UTC)
         else:
             posted_at = datetime.now(UTC)
 
-        if isinstance(governor, dict):
-            _gi = governor.get("id")
-            governor_id = _gi if isinstance(_gi, str) else ""
-        else:
-            governor_id = ""
-        url = f"https://www.tally.xyz/gov/{governor_id}/proposal/{proposal_id}"
-        return GovernanceProposal(
+        governor_id = p.governor.id if p.governor and p.governor.id else ""
+        url = f"https://www.tally.xyz/gov/{governor_id}/proposal/{p.id}"
+        return GovernanceForumProposal(
             forum="Tally",
-            proposal_id=proposal_id,
+            proposal_id=p.id,
             title=title,
             tags=matched_keywords,
             posted_at=posted_at,
             url=url,
         )
 
-    async def check(self, client: httpx.AsyncClient) -> list[GovernanceProposal]:
+    async def check(self, client: httpx.AsyncClient) -> list[GovernanceForumProposal]:
         """Return proposals matching risk keywords from Tally."""
         raw_proposals = await self.fetch_proposals(client)
-        results: list[GovernanceProposal] = []
+        results: list[GovernanceForumProposal] = []
         for p in raw_proposals:
             proposal = self._parse_proposal(p)
             if proposal is not None:
@@ -410,9 +430,9 @@ class GovernanceForumWatcher:
         """Signal the polling loop to stop."""
         self._running = False
 
-    async def poll_once(self) -> list[GovernanceProposal]:
+    async def poll_once(self) -> list[GovernanceForumProposal]:
         """Run one full poll cycle; return NEW proposals not seen before."""
-        all_proposals: list[GovernanceProposal] = []
+        all_proposals: list[GovernanceForumProposal] = []
 
         async with httpx.AsyncClient() as client:
             snapshot_proposals = await self._snapshot.check(client)
@@ -422,7 +442,7 @@ class GovernanceForumWatcher:
             all_proposals.extend(tally_proposals)
 
         # Dedup on proposal_id
-        new_proposals: list[GovernanceProposal] = []
+        new_proposals: list[GovernanceForumProposal] = []
         for proposal in all_proposals:
             dedup_key = f"{proposal.forum}:{proposal.proposal_id}"
             if dedup_key not in self._seen_ids:
@@ -459,6 +479,7 @@ class GovernanceForumWatcher:
 
 __all__ = [
     "RISK_KEYWORDS",
+    "GovernanceForumProposal",
     "GovernanceForumWatcher",
     "GovernanceProposal",
     "SnapshotForumPoller",

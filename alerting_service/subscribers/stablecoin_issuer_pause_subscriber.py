@@ -1,4 +1,3 @@
-# SCHEMA_PROVENANCE_EXEMPT: IssuePauseEvent is subscriber-internal (not a domain contract)
 """Stablecoin issuer-pause subscriber (D.5).
 
 Polls three issuer signals for pause/halt conditions:
@@ -27,14 +26,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Protocol, cast
 
 import httpx
-from unified_api_contracts.alerting import AlertCode
+from unified_api_contracts.internal.alerting import IssuePauseEvent
 
 logger = logging.getLogger(__name__)
 
@@ -67,30 +64,6 @@ _TETHER_HALT_KEYWORDS: tuple[str, ...] = (
     "freeze active",
     "redemptions paused",
 )
-
-
-@dataclass
-class IssuePauseEvent:
-    """A detected issuer-pause event, ready to emit as an alert."""
-
-    stable: str
-    issuer: str
-    paused_at: datetime
-    source_url: str
-    reason: str
-    correlation_id: str = field(default_factory=lambda: str(uuid.uuid4()))
-
-    def to_alert_payload(self) -> dict[str, object]:
-        """Serialize to alert event payload dict."""
-        return {
-            "event_name": AlertCode.STABLECOIN_ISSUER_PAUSED.value,
-            "stable": self.stable,
-            "issuer": self.issuer,
-            "paused_at": self.paused_at.isoformat(),
-            "source_url": self.source_url,
-            "reason": self.reason,
-            "correlation_id": self.correlation_id,
-        }
 
 
 class AlertEmitter(Protocol):
