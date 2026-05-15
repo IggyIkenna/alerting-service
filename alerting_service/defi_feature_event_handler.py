@@ -43,6 +43,7 @@ import logging
 from decimal import Decimal, InvalidOperation
 from typing import Final
 
+from unified_api_contracts.internal import DefiAlert  # noqa: qg-deep-import  # pyright: ignore[reportPrivateUsage]
 from unified_trading_library import log_event
 
 from .rules.defi_rules import (
@@ -89,7 +90,7 @@ def _coerce_float(value: object, field: str) -> float | None:
     if value is None:
         return None
     try:
-        return float(value)  # type: ignore[arg-type]
+        return float(str(value))
     except (ValueError, TypeError):
         logger.warning("DEFI_FEATURE_EVENT_INVALID: field=%s value=%r", field, value)
         return None
@@ -104,7 +105,7 @@ def _coerce_str(value: object, field: str, *, required: bool = True) -> str | No
     return str(value)
 
 
-def _build_aave_utilization_alert(payload: dict[str, object]):  # type: ignore[no-untyped-def]
+def _build_aave_utilization_alert(payload: dict[str, object]) -> DefiAlert | None:
     utilization = _coerce_decimal(payload.get("utilization_rate"), "utilization_rate")
     pool_name = _coerce_str(payload.get("pool_name"), "pool_name")
     if utilization is None or pool_name is None:
@@ -114,7 +115,7 @@ def _build_aave_utilization_alert(payload: dict[str, object]):  # type: ignore[n
     return check_aave_utilization(utilization, pool_name, protocol=protocol, archetype=archetype)
 
 
-def _build_funding_rate_flip_alert(payload: dict[str, object]):  # type: ignore[no-untyped-def]
+def _build_funding_rate_flip_alert(payload: dict[str, object]) -> DefiAlert | None:
     funding_rate = _coerce_decimal(payload.get("funding_rate"), "funding_rate")
     position_side = _coerce_str(payload.get("position_side"), "position_side")
     symbol = _coerce_str(payload.get("symbol"), "symbol")
@@ -124,14 +125,14 @@ def _build_funding_rate_flip_alert(payload: dict[str, object]):  # type: ignore[
     return check_funding_rate_flip(funding_rate, position_side, symbol, venue=venue)
 
 
-def _build_weeth_depeg_alert(payload: dict[str, object]):  # type: ignore[no-untyped-def]
+def _build_weeth_depeg_alert(payload: dict[str, object]) -> DefiAlert | None:
     rate = _coerce_decimal(payload.get("weeth_eth_rate"), "weeth_eth_rate")
     if rate is None:
         return None
     return check_weeth_depeg(rate)
 
 
-def _build_feature_staleness_alert(payload: dict[str, object]):  # type: ignore[no-untyped-def]
+def _build_feature_staleness_alert(payload: dict[str, object]) -> DefiAlert | None:
     feature_name = _coerce_str(payload.get("feature_name"), "feature_name")
     age = _coerce_float(payload.get("age_seconds"), "age_seconds")
     sla = _coerce_float(payload.get("sla_seconds"), "sla_seconds")
