@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+import threading
 
 from unified_trading_library import (
     AlertRuleDomainConfig,
     DomainConfigReloader,
     InstrumentDomainConfig,
+    SecretManagerClient,
     VenueDomainConfig,
     log_event,
 )
@@ -15,6 +17,154 @@ from unified_trading_library import (
 from alerting_service.config import AlertingSystemConfig
 
 logger = logging.getLogger(__name__)
+
+# ── Paging credentials SM secret names ───────────────────────────────────────
+_SM_BOT_TOKEN = "alerting-telegram-bot-token"
+_SM_CHAT_ID = "alerting-telegram-chat-id"
+_SM_CHAT_ID_OPS = "alerting-telegram-chat-id-ops"
+
+_PAGING_REFRESH_INTERVAL = 300.0  # 5 minutes
+
+
+class _PagingCredentialsReloader:
+    """Periodic SM hot-reload for Telegram paging credentials.
+
+    Reads ``alerting-telegram-bot-token`` and ``alerting-telegram-chat-id``
+    from GCP Secret Manager every 300 s.  Thread-safe atomic swap.
+    Falls back to empty strings (caller should use env-var values from config)
+    when SM is unavailable or project_id is unset (mock mode).
+    """
+
+    def __init__(self, refresh_interval: float = _PAGING_REFRESH_INTERVAL) -> None:
+        self._project_id: str | None = None
+        self._refresh_interval = refresh_interval
+        self._credentials: dict[str, str] = {}
+        self._lock = threading.Lock()
+        self._stop_event = threading.Event()
+        self._thread: threading.Thread | None = None
+        self._started = False
+
+    def get_bot_token(self) -> str:
+        with self._lock:
+            return self._credentials.get("bot_token") or ""  # noqa: qg-empty-fallback
+
+    def get_chat_id(self) -> str:
+        with self._lock:
+            return self._credentials.get("chat_id") or ""  # noqa: qg-empty-fallback
+
+    def get_chat_id_ops(self) -> str:
+        with self._lock:
+            return self._credentials.get("chat_id_ops") or ""  # noqa: qg-empty-fallback
+
+    def start(self, project_id: str | None) -> None:
+        if self._started:
+            return
+        self._project_id = project_id
+        initial = self._fetch()
+        with self._lock:
+            self._credentials = initial
+        self._started = True
+        if not initial or not project_id:
+            logger.info(
+                "PagingCredentialsReloader: no SM credentials loaded (mock mode or no project_id)"
+            )
+            return
+        self._stop_event.clear()
+        self._thread = threading.Thread(
+            target=self._poll_loop, daemon=True, name="paging-creds-reloader"
+        )
+        self._thread.start()
+        logger.info(
+            "PagingCredentialsReloader started: refresh every %ds", int(self._refresh_interval)
+        )
+
+    def stop(self) -> None:
+        self._started = False
+        self._stop_event.set()
+        if self._thread is not None:
+            self._thread.join(timeout=10.0)
+            self._thread = None
+
+    def _fetch(self) -> dict[str, str]:
+        if not self._project_id:
+            return {}
+        try:
+            client = SecretManagerClient(project_id=self._project_id)
+            raw = client.get_secrets([_SM_BOT_TOKEN, _SM_CHAT_ID, _SM_CHAT_ID_OPS])
+            result: dict[str, str] = {}
+            bot = raw.get(_SM_BOT_TOKEN)
+            chat = raw.get(_SM_CHAT_ID)
+            chat_ops = raw.get(_SM_CHAT_ID_OPS)
+            if bot:
+                result["bot_token"] = bot
+            if chat:
+                result["chat_id"] = chat
+            if chat_ops:
+                result["chat_id_ops"] = chat_ops
+            return result
+        except Exception as exc:
+            logger.warning("PagingCredentialsReloader: SM fetch failed (keeping old): %s", exc)
+            return {}
+
+    def _refresh(self) -> None:
+        new_creds = self._fetch()
+        if not new_creds:
+            return
+        with self._lock:
+            old_creds = self._credentials
+            self._credentials = new_creds
+        changed = {
+            k for k in set(new_creds) | set(old_creds) if new_creds.get(k) != old_creds.get(k)
+        }
+        if changed:
+            logger.info("Paging credentials refreshed from SM: %s", sorted(changed))
+            log_event(
+                "CONFIG_CHANGED",
+                details={
+                    "domain": "paging-credentials",
+                    "service": "alerting-service",
+                    "changed": sorted(changed),
+                },
+            )
+
+    def _poll_loop(self) -> None:
+        while not self._stop_event.is_set():
+            self._stop_event.wait(timeout=self._refresh_interval)
+            if self._stop_event.is_set():
+                break
+            try:
+                self._refresh()
+            except Exception as exc:
+                logger.warning("Paging credentials refresh failed (keeping old): %s", exc)
+
+
+# Module-level singleton — shared between alert_handler + router
+_paging_creds_reloader = _PagingCredentialsReloader()
+
+
+def get_paging_credentials() -> dict[str, str]:
+    """Return current SM-loaded paging credentials.
+
+    Keys: ``bot_token``, ``chat_id``, ``chat_id_ops`` (last two may be absent).
+    Empty dict when SM is unavailable — caller should fall back to env-var config values.
+    """
+    return {
+        "bot_token": _paging_creds_reloader.get_bot_token(),
+        "chat_id": _paging_creds_reloader.get_chat_id(),
+        "chat_id_ops": _paging_creds_reloader.get_chat_id_ops(),
+    }
+
+
+def start_paging_credentials_reloader(service_config: AlertingSystemConfig) -> None:
+    """Start the SM paging-credentials hot-reload. Call on service startup."""
+    _paging_creds_reloader.start(project_id=service_config.gcp_project_id)
+
+
+def stop_paging_credentials_reloader() -> None:
+    """Stop the SM paging-credentials hot-reload. Call on service shutdown."""
+    _paging_creds_reloader.stop()
+    logger.info("Paging credentials reloader stopped")
+
 
 _instrument_reloader: DomainConfigReloader[InstrumentDomainConfig] | None = None
 _venue_reloader: DomainConfigReloader[VenueDomainConfig] | None = None

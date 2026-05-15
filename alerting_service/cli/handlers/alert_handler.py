@@ -27,7 +27,9 @@ from unified_trading_library import BaseModeHandler, GracefulShutdownHandler, Se
 from alerting_service.config import AlertingSystemConfig
 from alerting_service.config_reloaders import (
     start_domain_config_reloaders,
+    start_paging_credentials_reloader,
     stop_domain_config_reloaders,
+    stop_paging_credentials_reloader,
 )
 from alerting_service.engine import orchestrator as alert_orchestrator
 
@@ -85,8 +87,9 @@ class AlertHandler(BaseModeHandler):
         """
         cfg = self._resolve_config()
 
-        # Start domain config hot-reload wiring
+        # Start domain config hot-reload wiring + SM paging credentials
         start_domain_config_reloaders(cfg)
+        start_paging_credentials_reloader(cfg)
 
         shutdown_handler = GracefulShutdownHandler()
         try:
@@ -100,3 +103,4 @@ class AlertHandler(BaseModeHandler):
             return {"status": "error", "message": str(exc)}
         finally:
             stop_domain_config_reloaders()
+            stop_paging_credentials_reloader()

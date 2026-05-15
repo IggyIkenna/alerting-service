@@ -37,6 +37,7 @@ from unified_trading_library import (
 )
 
 from ..config import AlertingSystemConfig
+from ..config_reloaders import get_paging_credentials
 from ..core.dedup import AlertDeduplicator
 from ..persistence.storage_store import AlertStorageStore
 from .pagerduty import PagerDutySeverity
@@ -286,15 +287,21 @@ def _deliver_message(event_name: str, summary: str) -> bool:
     Runtime alerts (matched by LIVE_ALERT_RULES) route to telegram_chat_id_ops when
     configured; CI/QG/internal events use the standard telegram_chat_id.
 
+    SM credentials (hot-reloaded every 300 s by _PagingCredentialsReloader) take
+    precedence over env-var values from AlertingSystemConfig when non-empty.
+
     Returns True if delivery succeeded, False otherwise.
     """
     config = _get_cloud_config()
-    bot_token = config.telegram_bot_token
-    ops_chat_id = config.telegram_chat_id_ops
+    sm_creds = get_paging_credentials()
+
+    # SM credentials take precedence over env-var values when non-empty
+    bot_token = sm_creds.get("bot_token") or config.telegram_bot_token
+    ops_chat_id = sm_creds.get("chat_id_ops") or config.telegram_chat_id_ops
     if ops_chat_id and _is_runtime_alert(event_name):
         chat_id = ops_chat_id
     else:
-        chat_id = config.telegram_chat_id
+        chat_id = sm_creds.get("chat_id") or config.telegram_chat_id
 
     if bot_token and chat_id:
         ok = send_telegram(message=summary, bot_token=bot_token, chat_id=chat_id)
