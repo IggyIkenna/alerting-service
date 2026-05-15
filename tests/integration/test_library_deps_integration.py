@@ -230,9 +230,7 @@ class TestUnifiedCloudInterface:
         mock_client = MagicMock()
         store = AlertStorageStore(storage_client=mock_client, bucket="test-bucket")
 
-        config_data: dict[str, object] = {
-            "routing_rules": [{"event_pattern": "*", "channels": ["telegram"]}]
-        }
+        config_data: dict[str, object] = {"routing_rules": [{"event_pattern": "*", "channels": ["telegram"]}]}
         store.write_config_snapshot(config_data, name="test_rules")
 
         mock_client.upload_bytes.assert_called_once()

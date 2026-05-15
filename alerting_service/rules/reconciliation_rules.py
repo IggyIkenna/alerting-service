@@ -37,9 +37,7 @@ def evaluate_position_discrepancy(
     now = datetime.now(UTC)
     return [
         {
-            "alert_id": (
-                f"recon-pos-{event_details.get('deviation_id', 'unknown')}-{now.strftime('%H%M%S')}"
-            ),
+            "alert_id": (f"recon-pos-{event_details.get('deviation_id', 'unknown')}-{now.strftime('%H%M%S')}"),
             "rule_id": "position_qty_discrepancy",
             "metric_name": "position_discrepancy",
             "metric_value": str(event_details.get("discrepancy", "0")),

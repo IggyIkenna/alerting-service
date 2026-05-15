@@ -50,9 +50,7 @@ def test_default_routing_rules_count_matches_uac_rule_count() -> None:
 def test_default_routing_rules_catch_all_is_last() -> None:
     """fnmatch first-match-wins requires the catch-all `*` rule to be last."""
     rules = _default_routing_rules()
-    assert rules[-1]["event_pattern"] == "*", (
-        "catch-all `*` rule must be last; otherwise specific rules never match"
-    )
+    assert rules[-1]["event_pattern"] == "*", "catch-all `*` rule must be last; otherwise specific rules never match"
 
 
 def test_default_routing_rules_have_legacy_shape() -> None:
@@ -87,8 +85,7 @@ def test_kill_switch_rules_are_critical_with_pagerduty() -> None:
     kill_switch_rules = [
         rule
         for rule in LIVE_ALERT_RULES
-        if rule.code.value.startswith("KILL_SWITCH_")
-        and rule.code not in _KILL_SWITCH_RECOVERY_CODES
+        if rule.code.value.startswith("KILL_SWITCH_") and rule.code not in _KILL_SWITCH_RECOVERY_CODES
     ]
     assert kill_switch_rules, "KILL_SWITCH_* family must have at least one arm rule"
     for rule in kill_switch_rules:
@@ -111,9 +108,7 @@ def test_kill_switch_recovery_rules_are_info_telegram() -> None:
 def test_cross_cloud_egress_detected_routed_to_pagerduty() -> None:
     """Audit 2026-05-07 §dual-cloud-active: the safety-net AlertCode must
     page on-call — a UI in cloud A reading data from cloud B is a bug."""
-    cross_cloud_rules = [
-        rule for rule in LIVE_ALERT_RULES if rule.code is AlertCode.CROSS_CLOUD_EGRESS_DETECTED
-    ]
+    cross_cloud_rules = [rule for rule in LIVE_ALERT_RULES if rule.code is AlertCode.CROSS_CLOUD_EGRESS_DETECTED]
     assert cross_cloud_rules, "CROSS_CLOUD_EGRESS_DETECTED must have a rule"
     for rule in cross_cloud_rules:
         assert AlertChannel.PAGERDUTY in rule.channels
@@ -229,8 +224,7 @@ def test_legacy_routing_pattern_present_in_uac(pattern: str) -> None:
     routing_dicts = _default_routing_rules()
     patterns = {entry["event_pattern"] for entry in routing_dicts}
     assert pattern in patterns, (
-        f"legacy pattern {pattern!r} dropped during UAC migration — "
-        "alerting-service Phase 2 is incomplete"
+        f"legacy pattern {pattern!r} dropped during UAC migration — alerting-service Phase 2 is incomplete"
     )
 
 

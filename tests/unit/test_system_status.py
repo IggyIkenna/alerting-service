@@ -86,9 +86,7 @@ class TestGetSystemHealth:
         cfg = AlertingSystemConfig()
         mock_resp = _mock_resp({"status": "ok", "checks": {"db": "ok"}})
 
-        with patch(
-            "alerting_service.core.system_health_aggregator.httpx.get", return_value=mock_resp
-        ):
+        with patch("alerting_service.core.system_health_aggregator.httpx.get", return_value=mock_resp):
             result = get_system_health(cfg, get_service_urls=_inject_urls)
 
         assert result["overall"] == "ok"
@@ -107,9 +105,7 @@ class TestGetSystemHealth:
                 raise httpx_mod.ConnectError("refused")
             return _mock_resp({"status": "ok"})
 
-        with patch(
-            "alerting_service.core.system_health_aggregator.httpx.get", side_effect=side_effect
-        ):
+        with patch("alerting_service.core.system_health_aggregator.httpx.get", side_effect=side_effect):
             result = get_system_health(cfg, get_service_urls=_inject_urls)
 
         assert result["overall"] == "degraded"
@@ -143,9 +139,7 @@ class TestGetSystemHealth:
             call_count += 1
             return _mock_resp({"status": "ok"})
 
-        with patch(
-            "alerting_service.core.system_health_aggregator.httpx.get", side_effect=counting_get
-        ):
+        with patch("alerting_service.core.system_health_aggregator.httpx.get", side_effect=counting_get):
             result = get_system_health(cfg, get_service_urls=_inject_urls)
 
         assert call_count == 0
@@ -189,9 +183,7 @@ class TestSystemStatusRoute:
     def test_route_returns_dict_with_overall_and_services(self) -> None:
         cfg = AlertingSystemConfig()
 
-        with patch(
-            "alerting_service.api.routes.system_status.AlertingSystemConfig", return_value=cfg
-        ):
+        with patch("alerting_service.api.routes.system_status.AlertingSystemConfig", return_value=cfg):
             original_fn = __import__(
                 "alerting_service.core.system_health_aggregator", fromlist=["get_system_health"]
             ).get_system_health
@@ -203,9 +195,7 @@ class TestSystemStatusRoute:
                 ):
                     return original_fn(c, get_service_urls=_inject_urls)
 
-            with patch(
-                "alerting_service.api.routes.system_status.get_system_health", patched_health
-            ):
+            with patch("alerting_service.api.routes.system_status.get_system_health", patched_health):
                 from alerting_service.api.routes.system_status import system_status
 
                 result = system_status()

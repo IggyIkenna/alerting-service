@@ -172,11 +172,7 @@ class TestAlertRuleIntegration:
         # Check Hyperliquid via meta cassette (list: [meta_dict, asset_ctxs_list])
         hl_body = load_cassette("hyperliquid", "meta_and_asset_ctxs.yaml")
         hl_meta = hl_body[0] if isinstance(hl_body, list) and len(hl_body) >= 1 else {}
-        health_statuses["hyperliquid"] = (
-            isinstance(hl_meta.get("universe"), list) and len(hl_meta["universe"]) > 0
-        )
+        health_statuses["hyperliquid"] = isinstance(hl_meta.get("universe"), list) and len(hl_meta["universe"]) > 0
 
         # All services should be healthy
-        assert all(health_statuses.values()), (
-            f"Unhealthy services: {[k for k, v in health_statuses.items() if not v]}"
-        )
+        assert all(health_statuses.values()), f"Unhealthy services: {[k for k, v in health_statuses.items() if not v]}"

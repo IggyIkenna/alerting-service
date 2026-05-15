@@ -87,9 +87,7 @@ async def test_main_runs_successfully() -> None:
         patch("alerting_service.main.GracefulShutdownHandler") as mock_handler_cls,
         patch("alerting_service.main.log_event"),
         patch("alerting_service.main.AlertSubscriber") as mock_subscriber_cls,
-        patch(
-            "alerting_service.main._run_subscriber_until_shutdown", new_callable=AsyncMock
-        ) as mock_run,
+        patch("alerting_service.main._run_subscriber_until_shutdown", new_callable=AsyncMock) as mock_run,
     ):
         mock_handler = MagicMock()
         mock_handler.is_shutdown_requested.return_value = True

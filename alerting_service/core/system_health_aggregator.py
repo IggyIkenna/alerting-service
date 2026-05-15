@@ -49,9 +49,7 @@ def _parse_health_response(resp: httpx.Response) -> tuple[str, dict[str, object]
     status_val = data.get("status", "unknown")
     status = str(status_val) if status_val is not None else "unknown"
     checks_val = data.get("checks")
-    checks: dict[str, object] = (
-        cast(dict[str, object], checks_val) if isinstance(checks_val, dict) else {}
-    )
+    checks: dict[str, object] = cast(dict[str, object], checks_val) if isinstance(checks_val, dict) else {}
     return status, checks
 
 

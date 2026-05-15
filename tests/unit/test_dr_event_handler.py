@@ -108,9 +108,7 @@ _HIGH_SWITCHES = [
 class TestKillSwitchArmed:
     @pytest.mark.parametrize("switch_id", _CRITICAL_SWITCHES)
     def test_critical_arm_pages_critical(self, switch_id: KillSwitchId) -> None:
-        with patch(
-            "alerting_service.dr_event_handler.route_event_with_explicit_channels"
-        ) as mock_route:
+        with patch("alerting_service.dr_event_handler.route_event_with_explicit_channels") as mock_route:
             handle_kill_switch_armed_event(_armed(switch_id))
         mock_route.assert_called_once()
         kwargs = mock_route.call_args.kwargs
@@ -122,9 +120,7 @@ class TestKillSwitchArmed:
 
     @pytest.mark.parametrize("switch_id", _HIGH_SWITCHES)
     def test_scoped_arm_pages_high(self, switch_id: KillSwitchId) -> None:
-        with patch(
-            "alerting_service.dr_event_handler.route_event_with_explicit_channels"
-        ) as mock_route:
+        with patch("alerting_service.dr_event_handler.route_event_with_explicit_channels") as mock_route:
             handle_kill_switch_armed_event(_armed(switch_id))
         kwargs = mock_route.call_args.kwargs
         assert kwargs["channels"] == {"pagerduty", "telegram"}
@@ -134,16 +130,12 @@ class TestKillSwitchArmed:
 
     def test_payload_path_valid(self) -> None:
         ev = _armed(KillSwitchId.KILL_ALL_LIVE)
-        with patch(
-            "alerting_service.dr_event_handler.route_event_with_explicit_channels"
-        ) as mock_route:
+        with patch("alerting_service.dr_event_handler.route_event_with_explicit_channels") as mock_route:
             handle_kill_switch_armed_payload(ev.model_dump(mode="json"))
         mock_route.assert_called_once()
 
     def test_payload_path_malformed_dropped(self) -> None:
-        with patch(
-            "alerting_service.dr_event_handler.route_event_with_explicit_channels"
-        ) as mock_route:
+        with patch("alerting_service.dr_event_handler.route_event_with_explicit_channels") as mock_route:
             handle_kill_switch_armed_payload({"switch_id": "NOT_A_SWITCH"})
         mock_route.assert_not_called()
 
@@ -163,9 +155,7 @@ class TestKillSwitchDisarm:
 
     def test_manual_unkill_routes_manual_unkilled_code(self) -> None:
         with patch("alerting_service.dr_event_handler.route_event") as mock_route:
-            handle_kill_switch_disarm_event(
-                _disarm(BreakerRecoveryMode.MANUAL_UNKILL, elapsed=None)
-            )
+            handle_kill_switch_disarm_event(_disarm(BreakerRecoveryMode.MANUAL_UNKILL, elapsed=None))
         event_name, details = mock_route.call_args[0]
         assert event_name == AlertCode.KILL_SWITCH_MANUAL_UNKILLED.value
         assert details["severity"] == AlertSeverity.INFO.value
@@ -179,9 +169,7 @@ class TestKillSwitchDisarm:
 
     def test_payload_path_malformed_dropped(self) -> None:
         with patch("alerting_service.dr_event_handler.route_event") as mock_route:
-            handle_kill_switch_disarm_payload(
-                {"switch_id": "KILL_ALL_LIVE"}
-            )  # missing required fields
+            handle_kill_switch_disarm_payload({"switch_id": "KILL_ALL_LIVE"})  # missing required fields
         mock_route.assert_not_called()
 
 
@@ -209,12 +197,8 @@ class TestCircuitBreakerFire:
     def test_severity_tier_per_action(self, action: BreakerAction) -> None:
         breaker_id = _breaker_with_action(action)
         expected_sev, expected_channels, expected_pd = _ACTION_EXPECTED[action]
-        with patch(
-            "alerting_service.dr_event_handler.route_event_with_explicit_channels"
-        ) as mock_route:
-            handle_circuit_breaker_fire(
-                breaker_id, {"applies_to": "CARRY_STAKED_BASIS", "observed": "9.0"}
-            )
+        with patch("alerting_service.dr_event_handler.route_event_with_explicit_channels") as mock_route:
+            handle_circuit_breaker_fire(breaker_id, {"applies_to": "CARRY_STAKED_BASIS", "observed": "9.0"})
         mock_route.assert_called_once()
         kwargs = mock_route.call_args.kwargs
         assert kwargs["channels"] == expected_channels
@@ -231,9 +215,7 @@ class TestCircuitBreakerFire:
         # All registry ids ARE present, so simulate by patching the lookup.
         with (
             patch("alerting_service.dr_event_handler._breaker_action_for", return_value=None),
-            patch(
-                "alerting_service.dr_event_handler.route_event_with_explicit_channels"
-            ) as mock_route,
+            patch("alerting_service.dr_event_handler.route_event_with_explicit_channels") as mock_route,
         ):
             handle_circuit_breaker_fire(CircuitBreakerId.CLOCK_SKEW_MS, {})
         kwargs = mock_route.call_args.kwargs
@@ -241,19 +223,13 @@ class TestCircuitBreakerFire:
         assert kwargs["pd_severity"] is None
 
     def test_payload_path_unknown_id_dropped(self) -> None:
-        with patch(
-            "alerting_service.dr_event_handler.route_event_with_explicit_channels"
-        ) as mock_route:
+        with patch("alerting_service.dr_event_handler.route_event_with_explicit_channels") as mock_route:
             handle_circuit_breaker_fire_payload({"breaker_id": "NOPE"})
         mock_route.assert_not_called()
 
     def test_payload_path_valid(self) -> None:
-        with patch(
-            "alerting_service.dr_event_handler.route_event_with_explicit_channels"
-        ) as mock_route:
-            handle_circuit_breaker_fire_payload(
-                {"breaker_id": CircuitBreakerId.LIQUIDATION_CASCADE_RISK.value}
-            )
+        with patch("alerting_service.dr_event_handler.route_event_with_explicit_channels") as mock_route:
+            handle_circuit_breaker_fire_payload({"breaker_id": CircuitBreakerId.LIQUIDATION_CASCADE_RISK.value})
         mock_route.assert_called_once()
 
     def test_breaker_action_lookup_resolves_registry_entries(self) -> None:
