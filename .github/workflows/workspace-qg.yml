@@ -64,7 +64,9 @@ jobs:
     name: Quality Gates (alerting-service)
     uses: IggyIkenna/unified-trading-pm/.github/workflows/python-quality-gates.yml@live-defi-rollout
     with:
-      service_name: alerting-service
-      source_dir: alerting_service
       dep_repos: "unified-trading-library unified-api-contracts"
     secrets: inherit
+    # Note: reusable workflow inputs are intentionally minimal — service_name + source_dir
+    # are derived inside the reusable workflow from github.repository (caller's repo name)
+    # and the conventional `<repo>_<underscored>` source-dir layout per workspace SSOT.
+    # See `.github/workflows/python-quality-gates.yml` in unified-trading-pm.
