@@ -25,6 +25,7 @@ from __future__ import annotations
 import json
 import logging
 
+from unified_api_contracts import AlertCode
 from unified_api_contracts.internal import (  # noqa: qg-deep-import
     MarginEvent,
     MarginEventSeverity,
@@ -38,10 +39,10 @@ logger = logging.getLogger(__name__)
 
 
 _SEVERITY_TO_EVENT_NAME: dict[MarginEventSeverity, str] = {
-    MarginEventSeverity.INFO: "MARGIN_INFO",
-    MarginEventSeverity.WARNING: "MARGIN_WARNING",
-    MarginEventSeverity.CRITICAL: "MARGIN_CRITICAL",
-    MarginEventSeverity.LIQUIDATION: "MARGIN_LIQUIDATION",
+    MarginEventSeverity.INFO: AlertCode.MARGIN_INFO.value,
+    MarginEventSeverity.WARNING: AlertCode.MARGIN_WARNING.value,
+    MarginEventSeverity.CRITICAL: AlertCode.MARGIN_CRITICAL.value,
+    MarginEventSeverity.LIQUIDATION: AlertCode.MARGIN_LIQUIDATION.value,
 }
 
 

@@ -23,6 +23,7 @@ Service event taxonomy:
 
 import logging
 
+from unified_api_contracts import AlertCode
 from unified_trading_library import log_event
 
 from ..notifiers.pagerduty import PagerDutySeverity
@@ -31,10 +32,10 @@ from ..notifiers.slack import send_message as slack_send_message
 
 logger = logging.getLogger(__name__)
 
-# Freshness event names handled by these rules.
-FEED_UNHEALTHY = "FEED_UNHEALTHY"
-DATA_STALE = "DATA_STALE"
-DATA_GAP_DETECTED = "DATA_GAP_DETECTED"
+# Freshness event names — sourced from the closed-set UAC AlertCode taxonomy.
+FEED_UNHEALTHY: str = AlertCode.FEED_UNHEALTHY.value
+DATA_STALE: str = AlertCode.DATA_STALE.value
+DATA_GAP_DETECTED: str = AlertCode.DATA_GAP_DETECTED.value
 
 _FRESHNESS_EVENTS: frozenset[str] = frozenset({FEED_UNHEALTHY, DATA_STALE, DATA_GAP_DETECTED})
 
