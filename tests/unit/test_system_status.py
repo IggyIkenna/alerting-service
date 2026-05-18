@@ -53,12 +53,12 @@ class TestBuildServiceUrls:
         custom = {"my-service": "http://custom:9000"}
         original = AlertingSystemConfig.metrics_endpoints
         try:
-            AlertingSystemConfig.metrics_endpoints = custom  # type: ignore[assignment]
+            AlertingSystemConfig.metrics_endpoints = custom
             cfg = AlertingSystemConfig()
             urls = _build_service_urls(cfg)
             assert urls == custom
         finally:
-            AlertingSystemConfig.metrics_endpoints = original  # type: ignore[assignment]
+            AlertingSystemConfig.metrics_endpoints = original
 
 
 class TestParseHealthResponse:
@@ -92,8 +92,8 @@ class TestGetSystemHealth:
         assert result["overall"] == "ok"
         services = result["services"]
         assert isinstance(services, dict)
-        assert services["svc-a"]["status"] == "ok"  # type: ignore[index]
-        assert services["svc-b"]["status"] == "ok"  # type: ignore[index]
+        assert services["svc-a"]["status"] == "ok"
+        assert services["svc-b"]["status"] == "ok"
 
     def test_overall_degraded_when_service_unreachable(self) -> None:
         cfg = AlertingSystemConfig()
@@ -111,7 +111,7 @@ class TestGetSystemHealth:
         assert result["overall"] == "degraded"
         services = result["services"]
         assert isinstance(services, dict)
-        assert services["svc-a"]["status"] == "unreachable"  # type: ignore[index]
+        assert services["svc-a"]["status"] == "unreachable"
 
     def test_overall_degraded_when_service_unhealthy(self) -> None:
         cfg = AlertingSystemConfig()

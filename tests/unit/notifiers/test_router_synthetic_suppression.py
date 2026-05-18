@@ -20,41 +20,41 @@ from alerting_service.notifiers.router import (
 
 
 @pytest.fixture
-def mock_pd_send_event():  # type: ignore[no-untyped-def]
+def mock_pd_send_event():
     with patch("alerting_service.notifiers.router.pd_send_event", return_value=True) as mock:
         yield mock
 
 
 @pytest.fixture
-def mock_send_telegram():  # type: ignore[no-untyped-def]
+def mock_send_telegram():
     with patch("alerting_service.notifiers.router.send_telegram", return_value=True) as mock:
         yield mock
 
 
 @pytest.fixture
-def mock_log_event():  # type: ignore[no-untyped-def]
+def mock_log_event():
     with patch("alerting_service.notifiers.router.log_event") as mock:
         yield mock
 
 
 @pytest.fixture
-def mock_persist_delivery():  # type: ignore[no-untyped-def]
+def mock_persist_delivery():
     with patch("alerting_service.notifiers.router._persist_delivery_record") as mock:
         yield mock
 
 
 @pytest.fixture
-def mock_persist_config():  # type: ignore[no-untyped-def]
+def mock_persist_config():
     with patch("alerting_service.notifiers.router._persist_config_snapshot") as mock:
         yield mock
 
 
 @pytest.fixture(autouse=True)
-def _reset_deduplicator():  # type: ignore[no-untyped-def]
+def _reset_deduplicator():
     """Ensure every test sees a fresh dedup cache (router uses TTL=60s)."""
     from alerting_service.notifiers.router import _deduplicator
 
-    _deduplicator._seen.clear()  # type: ignore[reportPrivateUsage]
+    _deduplicator._seen.clear()
     yield
 
 
@@ -86,11 +86,11 @@ class TestIsSyntheticHelper:
 class TestRouteEventSyntheticSuppression:
     def test_synthetic_true_suppresses_pagerduty_and_telegram(
         self,
-        mock_pd_send_event,  # type: ignore[no-untyped-def]
-        mock_send_telegram,  # type: ignore[no-untyped-def]
-        mock_log_event,  # type: ignore[no-untyped-def]
-        mock_persist_delivery,  # type: ignore[no-untyped-def]
-        mock_persist_config,  # type: ignore[no-untyped-def]
+        mock_pd_send_event,
+        mock_send_telegram,
+        mock_log_event,
+        mock_persist_delivery,
+        mock_persist_config,
     ) -> None:
         del mock_persist_config  # unused — kept for fixture parity
         route_event(
@@ -110,11 +110,11 @@ class TestRouteEventSyntheticSuppression:
 
     def test_synthetic_false_does_not_log_suppressed_event(
         self,
-        mock_pd_send_event,  # type: ignore[no-untyped-def]
-        mock_send_telegram,  # type: ignore[no-untyped-def]
-        mock_log_event,  # type: ignore[no-untyped-def]
-        mock_persist_delivery,  # type: ignore[no-untyped-def]
-        mock_persist_config,  # type: ignore[no-untyped-def]
+        mock_pd_send_event,
+        mock_send_telegram,
+        mock_log_event,
+        mock_persist_delivery,
+        mock_persist_config,
     ) -> None:
         """Real-fire alerts (synthetic=False) must NOT trigger the suppression
         short-circuit. We patch ``_get_cloud_config`` to a stub config so the
@@ -146,11 +146,11 @@ class TestRouteEventSyntheticSuppression:
 class TestRouteEventExplicitChannelsSyntheticSuppression:
     def test_synthetic_true_skips_explicit_channels(
         self,
-        mock_pd_send_event,  # type: ignore[no-untyped-def]
-        mock_send_telegram,  # type: ignore[no-untyped-def]
-        mock_log_event,  # type: ignore[no-untyped-def]
-        mock_persist_delivery,  # type: ignore[no-untyped-def]
-        mock_persist_config,  # type: ignore[no-untyped-def]
+        mock_pd_send_event,
+        mock_send_telegram,
+        mock_log_event,
+        mock_persist_delivery,
+        mock_persist_config,
     ) -> None:
         del mock_persist_config
         route_event_with_explicit_channels(

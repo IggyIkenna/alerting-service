@@ -72,13 +72,13 @@ class TestVerifyApiKey:
         original_api_key = auth_module._auth_cfg.api_key
         try:
             auth_module.DISABLE_AUTH = False
-            auth_module._auth_cfg.api_key = "correct-key"  # type: ignore[assignment]
+            auth_module._auth_cfg.api_key = "correct-key"
             with pytest.raises(HTTPException) as exc_info:
                 await auth_module.verify_api_key(api_key="wrong-key")
             assert exc_info.value.status_code == 401
         finally:
             auth_module.DISABLE_AUTH = original_disable
-            auth_module._auth_cfg.api_key = original_api_key  # type: ignore[assignment]
+            auth_module._auth_cfg.api_key = original_api_key
 
     @pytest.mark.asyncio
     async def test_verify_returns_key_when_correct(self) -> None:
@@ -88,9 +88,9 @@ class TestVerifyApiKey:
         original_api_key = auth_module._auth_cfg.api_key
         try:
             auth_module.DISABLE_AUTH = False
-            auth_module._auth_cfg.api_key = "my-secret-key"  # type: ignore[assignment]
+            auth_module._auth_cfg.api_key = "my-secret-key"
             result = await auth_module.verify_api_key(api_key="my-secret-key")
             assert result == "my-secret-key"
         finally:
             auth_module.DISABLE_AUTH = original_disable
-            auth_module._auth_cfg.api_key = original_api_key  # type: ignore[assignment]
+            auth_module._auth_cfg.api_key = original_api_key

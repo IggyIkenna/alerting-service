@@ -349,7 +349,7 @@ class TestPagerDutyNotifierIntegration:
             patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)) as mock_post,
             patch("alerting_service.notifiers.pagerduty.log_event"),
         ):
-            result = send_event(summary="test", severity=severity, source="alerting-service", details={})  # type: ignore[arg-type]
+            result = send_event(summary="test", severity=severity, source="alerting-service", details={})
 
         assert result is True
         pd_json: dict[str, object] = mock_post.call_args.kwargs["json"]
