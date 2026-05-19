@@ -101,14 +101,11 @@ def _list_codes() -> None:
 def main() -> None:
     setup_events(service_name="alerting-service", mode="local")
 
-    parser = argparse.ArgumentParser(
-        description="Inject synthetic DefiAlerts for Phase 8 rehearsal."
-    )
+    parser = argparse.ArgumentParser(description="Inject synthetic DefiAlerts for Phase 8 rehearsal.")
     parser.add_argument(
         "--code",
         metavar="CODE",
-        help="Inject a single AlertCode value (e.g. KILL_SWITCH_DEFI_LIQUIDATION_RISK). "
-        "Omit to inject all codes.",
+        help="Inject a single AlertCode value (e.g. KILL_SWITCH_DEFI_LIQUIDATION_RISK). Omit to inject all codes.",
     )
     parser.add_argument("--list", action="store_true", help="List all AlertCode values and exit.")
     parser.add_argument(

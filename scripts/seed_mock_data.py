@@ -189,16 +189,10 @@ def _generate_defi_health_factor_warning(
     fund_rate = f"{-0.001 - rng_values[3] * 0.005:.4f}"
     stale_age = f"{120 + rng_values[3] * 600:.0f}"
     messages_by_type: dict[str, str] = {
-        "health_factor_critical": (
-            f"Health factor {hf_val} on {protocol} (asset={asset}) -- liquidation risk"
-        ),
+        "health_factor_critical": (f"Health factor {hf_val} on {protocol} (asset={asset}) -- liquidation risk"),
         "weeth_depeg": (f"weETH depeg detected: rate={depeg_rate} (deviation={depeg_dev}%)"),
-        "aave_utilization_spike": (
-            f"Aave utilization spike: {asset} pool at {util_pct}% on {protocol}"
-        ),
-        "funding_rate_flip": (
-            f"Funding rate flip: {asset} rate={fund_rate} on {protocol} -- shorts paying longs"
-        ),
+        "aave_utilization_spike": (f"Aave utilization spike: {asset} pool at {util_pct}% on {protocol}"),
+        "funding_rate_flip": (f"Funding rate flip: {asset} rate={fund_rate} on {protocol} -- shorts paying longs"),
         "feature_stale": (f"DeFi feature stale: {alert_type} age={stale_age}s (SLA=60s)"),
     }
     msg = messages_by_type[alert_type]
@@ -246,9 +240,7 @@ def _generate_execution_anomaly(
         "EXECUTION_LATENCY_BREACH": (f"Execution latency p99={lat_val}ms on {venue} (SLO 500ms)"),
         "SLIPPAGE_ANOMALY": (f"Slippage {slip_val}bps on {venue} (expected <10bps)"),
         "FILL_RATE_DEVIATION": (f"Fill rate {fill_pct}% on {venue} (expected >95%)"),
-        "PREFLIGHT_FAILED": (
-            f"Preflight check failed for {strategy}: insufficient liquidity on {venue}"
-        ),
+        "PREFLIGHT_FAILED": (f"Preflight check failed for {strategy}: insufficient liquidity on {venue}"),
     }
     msg = messages_map[rule_id]
 
@@ -320,9 +312,7 @@ def _generate_delivery_records(
                     "alert_id": alert.alert_id,
                     "channel": channel,
                     "status": "delivered" if success else "failed",
-                    "delivered_at": (
-                        alert.triggered_at + timedelta(seconds=rng.randint(1, 5))
-                    ).isoformat()
+                    "delivered_at": (alert.triggered_at + timedelta(seconds=rng.randint(1, 5))).isoformat()
                     if success
                     else "",
                     "acknowledged": rng.random() > 0.5 if success else False,
