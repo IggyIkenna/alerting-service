@@ -32,6 +32,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import time
 from datetime import date as _date
 
 from unified_trading_library import GracefulShutdownHandler, validate_batch_completeness
@@ -42,6 +43,10 @@ logger = logging.getLogger(__name__)
 
 # Poll interval for shutdown checks (seconds).
 _SHUTDOWN_POLL_INTERVAL: float = 0.5
+
+# Periodic "still alive" heartbeat to prevent vm-exec stall watchdog kills.
+# Phase 7 quietness baseline observed SIGKILL at 1h when log was silent.
+_HEARTBEAT_LOG_INTERVAL: float = 1800.0  # 30 minutes
 
 
 async def run_subscriber_loop(
@@ -70,6 +75,7 @@ async def run_subscriber_loop(
     subscriber = AlertSubscriber(project_id=project_id)
     subscriber_task = asyncio.create_task(subscriber.run_until_stopped())
     total_processed = 0
+    _last_heartbeat = time.monotonic()
 
     try:
         while not shutdown_handler.is_shutdown_requested():
@@ -80,6 +86,15 @@ async def run_subscriber_loop(
                     logger.error("AlertSubscriber task exited with error: %s", exc)
                 break
             await asyncio.sleep(poll_interval)
+            # Periodic heartbeat so vm-exec stall watchdog does not SIGKILL during quiet periods.
+            now = time.monotonic()
+            if now - _last_heartbeat >= _HEARTBEAT_LOG_INTERVAL:
+                logger.info(
+                    "AlertSubscriber loop active: events_processed=%d (heartbeat every %.0fs)",
+                    total_processed,
+                    _HEARTBEAT_LOG_INTERVAL,
+                )
+                _last_heartbeat = now
     finally:
         subscriber.stop()
         subscriber_task.cancel()
