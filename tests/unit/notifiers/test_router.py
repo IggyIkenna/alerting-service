@@ -60,6 +60,8 @@ def mock_config_with_telegram():
     mock_cfg.telegram_chat_id = "chat-456"
     mock_cfg.telegram_chat_id_ops = ""
     mock_cfg.gcp_project_id = "test-project"
+    mock_cfg.pagerduty_disabled = False
+    mock_cfg.quietness_baseline_mode = False
     # Default routing rules matching legacy behavior
     mock_cfg.routing_rules = [
         {
@@ -88,6 +90,8 @@ def mock_config_without_telegram():
     mock_cfg.telegram_chat_id = ""
     mock_cfg.telegram_chat_id_ops = ""
     mock_cfg.gcp_project_id = "test-project"
+    mock_cfg.pagerduty_disabled = False
+    mock_cfg.quietness_baseline_mode = False
     mock_cfg.routing_rules = [
         {
             "event_pattern": "KILL_SWITCH_*",
@@ -594,6 +598,8 @@ class TestCustomRoutingRules:
         mock_cfg.telegram_bot_token = "bot-token-123"
         mock_cfg.telegram_chat_id = "chat-456"
         mock_cfg.gcp_project_id = "test-project"
+        mock_cfg.pagerduty_disabled = False
+        mock_cfg.quietness_baseline_mode = False
         mock_cfg.routing_rules = [
             {"event_pattern": "CUSTOM_*", "channels": ["pagerduty"], "severity_filter": "warning"},
         ]
@@ -621,6 +627,8 @@ class TestTelegramOpsChannelRouting:
         mock_cfg.telegram_chat_id = "chat-456"
         mock_cfg.telegram_chat_id_ops = "ops-chat-789"
         mock_cfg.gcp_project_id = "test-project"
+        mock_cfg.pagerduty_disabled = False
+        mock_cfg.quietness_baseline_mode = False
         mock_cfg.routing_rules = [
             {
                 "event_pattern": "KILL_SWITCH_*",

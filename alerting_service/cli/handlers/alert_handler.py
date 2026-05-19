@@ -20,6 +20,7 @@ No direct imports from UCI, UMI, UEI, or URDI.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import logging
 
 from unified_trading_library import BaseModeHandler, GracefulShutdownHandler, ServiceRuntime
@@ -92,6 +93,17 @@ class AlertHandler(BaseModeHandler):
         start_paging_credentials_reloader(cfg)
 
         shutdown_handler = GracefulShutdownHandler()
+
+        if cfg.run_duration_hours > 0:
+            logger.info("Auto-shutdown scheduled in %dh (run_duration_hours)", cfg.run_duration_hours)
+            asyncio.get_event_loop().call_later(
+                cfg.run_duration_hours * 3600,
+                shutdown_handler.request_shutdown,
+            )
+
+        if cfg.quietness_baseline_mode:
+            logger.info("QUIETNESS_BASELINE_MODE active — PagerDuty suppressed, routing to Telegram staging only")
+
         try:
             total_processed = await alert_orchestrator.run_subscriber_loop(
                 project_id=cfg.gcp_project_id,

@@ -41,6 +41,8 @@ def mock_route_dependencies():
     mock_cfg.telegram_bot_token = "bot-token-123"
     mock_cfg.telegram_chat_id = "chat-456"
     mock_cfg.gcp_project_id = "test-project"
+    mock_cfg.pagerduty_disabled = False
+    mock_cfg.quietness_baseline_mode = False
     mock_cfg.routing_rules = [
         {
             "event_pattern": "TICK_STALENESS",

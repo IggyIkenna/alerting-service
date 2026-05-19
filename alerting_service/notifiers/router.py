@@ -727,7 +727,8 @@ def _deliver_to_channels(
     """Deliver to all matched channels. Returns True if any delivery failed."""
     any_failed = False
 
-    if "pagerduty" in channels:
+    pd_suppressed = config.pagerduty_disabled or config.quietness_baseline_mode
+    if "pagerduty" in channels and not pd_suppressed:
         severity: PagerDutySeverity = pd_severity or "critical"
         ok = pd_send_event(summary=summary, severity=severity, source=source, details=details)
         if not ok:
@@ -742,6 +743,8 @@ def _deliver_to_channels(
                 event_name,
             )
         )
+    elif "pagerduty" in channels and pd_suppressed:
+        logger.info("PagerDuty suppressed (quietness_baseline_mode/pagerduty_disabled) for event %s", event_name)
 
     if "telegram" in channels or not channels:
         ok = _deliver_message(event_name, summary)

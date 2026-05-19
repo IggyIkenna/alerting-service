@@ -52,6 +52,18 @@ class AlertingSystemConfig(UnifiedCloudConfig):
     )
     pagerduty_routing_key: str | None = None
     routing_rules: list[dict[str, object]] = Field(default_factory=_default_routing_rules)
+    quietness_baseline_mode: bool = Field(
+        default=False,
+        description="Phase 7 quietness baseline — 48h staging noise run with PagerDuty disabled",
+    )
+    pagerduty_disabled: bool = Field(
+        default=False,
+        description="Disable PagerDuty delivery (set true for quietness baseline or staging runs)",
+    )
+    run_duration_hours: int = Field(
+        default=0,
+        description="Auto-shutdown after N hours (0 = run indefinitely until SIGTERM)",
+    )
     email_smtp_host: str | None = None
     email_smtp_port: int = 587
     email_to: ClassVar[list[str]] = []
