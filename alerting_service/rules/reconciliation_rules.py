@@ -9,6 +9,7 @@ Events consumed:
 - DEVIATION_ESCALATED — a confirmed deviation was escalated to human attention
 - BALANCE_DISCREPANCY_DETECTED — balance mismatch on a venue/currency
 - UNEXPLAINED_PNL_RESIDUAL — PnL component sum doesn't match exchange
+- BATCH_VS_LIVE_RECON_DRIFTED — batch-vs-live P&L gap exceeds archetype threshold
 """
 
 from __future__ import annotations
@@ -128,6 +129,42 @@ def evaluate_pnl_discrepancy(
                 f"{event_details.get('instrument', '?')}: "
                 f"residual={event_details.get('unexplained_pnl', '?')} "
                 f"({event_details.get('unexplained_pct', '?')})"
+            ),
+            "created_at": now.isoformat(),
+            "delivered": False,
+            "delivery_channel": "telegram" if severity == "WARNING" else "pagerduty+telegram",
+        }
+    ]
+
+
+def evaluate_batch_vs_live_recon_drifted(
+    event_details: dict[str, object],
+) -> list[dict[str, object]]:
+    """Evaluate a BATCH_VS_LIVE_RECON_DRIFTED event from batch-live-reconciliation-service.
+
+    Args:
+        event_details: Event payload with keys: date, run_id, archetype,
+            alpha_pnl_gap_bps, threshold_bps, routing.
+    """
+    alpha_pnl_gap_bps = float(str(event_details.get("alpha_pnl_gap_bps", "0")))
+    threshold_bps = float(str(event_details.get("threshold_bps", "50")))
+    archetype = str(event_details.get("archetype", "unknown"))  # noqa: qg-empty-fallback
+    date = str(event_details.get("date", ""))  # noqa: qg-empty-fallback
+
+    # P&L gap >2x threshold is CRITICAL; between 1x-2x is WARNING
+    severity: Literal["WARNING", "CRITICAL"] = "CRITICAL" if alpha_pnl_gap_bps > threshold_bps * 2 else "WARNING"
+    now = datetime.now(UTC)
+    return [
+        {
+            "alert_id": f"batch-live-drift-{archetype}-{date}-{now.strftime('%H%M%S')}",
+            "rule_id": "batch_vs_live_recon_drifted",
+            "metric_name": "alpha_pnl_gap_bps",
+            "metric_value": f"{alpha_pnl_gap_bps:.1f}",
+            "severity": severity,
+            "archetype": archetype,
+            "message": (
+                f"Batch-vs-live P&L gap {alpha_pnl_gap_bps:.1f} bps "
+                f"exceeds threshold {threshold_bps:.0f} bps for {archetype} on {date}"
             ),
             "created_at": now.isoformat(),
             "delivered": False,

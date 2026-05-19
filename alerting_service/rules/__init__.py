@@ -14,6 +14,7 @@ from .defi_rules import (
 )
 from .reconciliation_rules import (
     evaluate_balance_discrepancy,
+    evaluate_batch_vs_live_recon_drifted,
     evaluate_pnl_discrepancy,
     evaluate_position_discrepancy,
 )
@@ -41,6 +42,7 @@ __all__ = [
     "check_steam_alert",
     "check_weeth_depeg",
     "evaluate_balance_discrepancy",
+    "evaluate_batch_vs_live_recon_drifted",
     "evaluate_pnl_discrepancy",
     "evaluate_position_discrepancy",
     "route_data_freshness_event",

@@ -78,6 +78,7 @@ async def test_main_runs_successfully() -> None:
     mock_config.is_mock_mode.return_value = False
     mock_config.gcp_project_id = "test-project"
     mock_config.service_name = "alerting-service"
+    mock_config.log_level = "INFO"
 
     with (
         patch.object(sys, "argv", ["alerting-service", "--mode", "live"]),
