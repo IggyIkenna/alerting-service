@@ -1,16 +1,20 @@
 {
-  "include": ["alerting_service", "tests"],
+  "include": [
+    "alerting_service",
+    "tests"
+  ],
   "exclude": [
     "tests",
     "build",
     "dist",
     "*.egg-info",
     ".eggs",
-    "__pycache__",
+    "**/__pycache__",
     ".pytest_cache",
     ".ruff_cache",
-    ".venv",
-    ".venv.backup"
+    ".venv*",
+    ".venv.backup",
+    "node_modules"
   ],
   "typeCheckingMode": "strict",
   "reportMissingImports": "error",
