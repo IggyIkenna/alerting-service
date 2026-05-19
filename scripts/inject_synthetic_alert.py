@@ -20,6 +20,9 @@ Usage:
     # Verbose output (show details dict per injection):
     python scripts/inject_synthetic_alert.py --verbose
 
+    # Phase 8 rehearsal extension — verify KILL_SWITCH_* codes propagate to KillSwitchBus:
+    python scripts/inject_synthetic_alert.py --verify-kill-switch
+
 Phase 8 of alerting_service_live_rules_2026_05_07.md.
 """
 
@@ -30,9 +33,15 @@ import logging
 import sys
 import time
 
-from unified_api_contracts import AlertCode, DefiAlertType
+from unified_api_contracts import AlertCode, DefiAlertType, KillSwitchScope
 from unified_api_contracts.internal import DefiAlert
-from unified_trading_library import setup_events
+from unified_trading_library import (
+    KillSwitchEvent,
+    KillSwitchEventType,
+    get_kill_switch_bus,
+    reset_kill_switch_bus,
+    setup_events,
+)
 
 from alerting_service.rules.defi_rules import route_defi_alert
 
@@ -92,6 +101,81 @@ def _inject(code: AlertCode, *, verbose: bool = False) -> None:
     log.info("INJECTED code=%s (synthetic — paging suppressed)", code.value)
 
 
+def _verify_kill_switch_propagation(*, verbose: bool = False) -> int:
+    """Verify KILL_SWITCH_* alerts propagate to KillSwitchBus (Phase 8 rehearsal extension).
+
+    Injects 3 canonical KILL_SWITCH_* codes and asserts that each one:
+    (a) emits exactly one KillSwitchEvent to the in-process bus, and
+    (b) carries the expected scope (GLOBAL vs VENUE).
+
+    Returns 0 on all-pass, 1 if any assertion fails.
+
+    NOTE: This verifies in-process bus propagation only. Production verification that
+    execution-service receives and halts requires the kill-switch-bus PubSub topic to be
+    active and execution-service's KillSwitchBus subscriber thread running. Run this script
+    on a VM with alerting-service running against the live PubSub topic for full end-to-end
+    verification.
+    """
+    # (scope, expected_scope_type) — VENUE codes must carry a venue in details
+    _kill_switch_cases: list[tuple[AlertCode, KillSwitchScope]] = [
+        (AlertCode.KILL_SWITCH_DEFI_LIQUIDATION_RISK, KillSwitchScope.GLOBAL),
+        (AlertCode.KILL_SWITCH_PORTFOLIO_DRAWDOWN, KillSwitchScope.GLOBAL),
+        (AlertCode.KILL_SWITCH_VENUE_DISCONNECT, KillSwitchScope.VENUE),
+    ]
+
+    failures = 0
+    log.info("=== Phase 8 rehearsal extension: kill-switch propagation verification ===")
+
+    for code, expected_scope in _kill_switch_cases:
+        received: list[KillSwitchEvent] = []
+        reset_kill_switch_bus()
+        get_kill_switch_bus().subscribe(received.append)
+
+        _inject(code, verbose=verbose)
+
+        if not received:
+            log.error("FAIL %s — no KillSwitchEvent on bus (expected 1)", code.value)
+            failures += 1
+            continue
+
+        if len(received) != 1:
+            log.error("FAIL %s — got %d KillSwitchEvents (expected 1)", code.value, len(received))
+            failures += 1
+            continue
+
+        event = received[0]
+
+        if event.event_type is not KillSwitchEventType.FIRED:
+            log.error("FAIL %s — event_type=%s (expected FIRED)", code.value, event.event_type)
+            failures += 1
+            continue
+
+        if event.scope is not expected_scope:
+            log.error("FAIL %s — scope=%s (expected %s)", code.value, event.scope, expected_scope)
+            failures += 1
+            continue
+
+        log.info(
+            "PASS %s → KillSwitchEvent(scope=%s, type=FIRED, fired_by=%s)",
+            code.value,
+            event.scope.value,
+            event.fired_by,
+        )
+
+    reset_kill_switch_bus()
+
+    if failures == 0:
+        log.info("=== RESULT: PASS (%d/%d kill-switch codes verified) ===", len(_kill_switch_cases), len(_kill_switch_cases))
+        log.info(
+            "In-process KillSwitchBus propagation verified. "
+            "For full end-to-end (execution-service halt), run on live alerting-service VM."
+        )
+    else:
+        log.error("=== RESULT: FAIL (%d/%d assertions failed) ===", failures, len(_kill_switch_cases))
+
+    return 1 if failures else 0
+
+
 def _list_codes() -> None:
     for code in AlertCode:
         severity_tag = "CRITICAL" if code in _CRITICAL_CODES else "warning"
@@ -116,11 +200,23 @@ def main() -> None:
         help="Delay between injections when running all codes (default 0.1s).",
     )
     parser.add_argument("--verbose", action="store_true", help="Log details dict per injection.")
+    parser.add_argument(
+        "--verify-kill-switch",
+        action="store_true",
+        help=(
+            "Phase 8 rehearsal extension: inject 3 KILL_SWITCH_* codes and assert each one "
+            "emits a KillSwitchEvent to the in-process bus with the correct scope."
+        ),
+    )
     args = parser.parse_args()
 
     if args.list:
         _list_codes()
         return
+
+    if args.verify_kill_switch:
+        rc = _verify_kill_switch_propagation(verbose=args.verbose)
+        sys.exit(rc)
 
     if args.code:
         try:
