@@ -5,10 +5,10 @@ import aiohttp.resolver
 from unified_api_contracts.internal import AlertEvent  # noqa: qg-deep-import
 
 
-def _make_session(**kwargs: object) -> aiohttp.ClientSession:
+def _make_session() -> aiohttp.ClientSession:
     """Create an aiohttp session with ThreadedResolver (OS DNS)."""
     connector = aiohttp.TCPConnector(resolver=aiohttp.resolver.ThreadedResolver())
-    return aiohttp.ClientSession(connector=connector, **kwargs)  # type: ignore[arg-type]  # **kwargs typed as object; aiohttp accepts arbitrary connector kwargs
+    return aiohttp.ClientSession(connector=connector)
 
 
 SEVERITY_COLORS: dict[str, str] = {
