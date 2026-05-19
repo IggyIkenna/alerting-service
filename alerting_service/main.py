@@ -10,7 +10,6 @@ import argparse
 import asyncio
 import contextlib
 import logging
-import os
 import uuid
 from datetime import datetime as dt
 from datetime import timedelta
@@ -144,13 +143,13 @@ async def main() -> None:
     """Main service logic."""
     global _shutdown_handler
 
-    # LOG_LEVEL env var validation (SSOT for log levels)
-    _raw_log_level = os.environ.get("LOG_LEVEL", "INFO")  # config-bootstrap: before UCC init
+    config = AlertingSystemConfig()
+
     try:
-        _log_level = LogLevel(_raw_log_level)
+        _log_level = LogLevel(config.log_level)
     except ValueError as err:
         valid = ", ".join(v.value for v in LogLevel)
-        raise SystemExit(f"Invalid LOG_LEVEL={_raw_log_level!r}. Must be one of: {valid}") from err
+        raise SystemExit(f"Invalid LOG_LEVEL={config.log_level!r}. Must be one of: {valid}") from err
     _level_map: dict[str, int] = {
         "DEBUG": logging.DEBUG,
         "INFO": logging.INFO,
@@ -162,8 +161,6 @@ async def main() -> None:
 
     parser = _build_parser()
     args = parser.parse_args()
-
-    config = AlertingSystemConfig()
 
     # --- MOCK MODE: use pre-generated seed data ---
     if config.is_mock_mode():
