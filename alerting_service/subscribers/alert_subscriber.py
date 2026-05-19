@@ -56,6 +56,10 @@ from ..dr_event_handler import (
 from ..error_event_handler import handle_service_error
 from ..metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 from ..notifiers.router import route_event
+from ..recon_drift_event_handler import (
+    handle_batch_live_recon_drift_payload,
+    handle_batch_vs_live_recon_drifted_payload,
+)
 from ..risk_rule_event_handler import handle_risk_rule_fired_payload
 from ..rules.margin_rules import route_margin_event_payload
 
@@ -82,6 +86,8 @@ _RISK_RULE_FIRED_EVENT: str = "RiskRuleFiredEvent"
 _KILL_SWITCH_ARMED_EVENT: str = "KillSwitchArmedEvent"
 _KILL_SWITCH_DISARM_EVENT: str = "KillSwitchDisarmEvent"
 _CIRCUIT_BREAKER_FIRED_EVENT: str = "CircuitBreakerFired"
+_BATCH_VS_LIVE_RECON_DRIFTED_EVENT: str = "BATCH_VS_LIVE_RECON_DRIFTED"
+_BATCH_LIVE_RECON_DRIFT_EVENT: str = "BATCH_LIVE_RECON_DRIFT"
 
 
 def _extract_event_name(payload: dict[str, object]) -> str:
@@ -198,6 +204,8 @@ class AlertSubscriber:
         _KILL_SWITCH_ARMED_EVENT: handle_kill_switch_armed_payload,
         _KILL_SWITCH_DISARM_EVENT: handle_kill_switch_disarm_payload,
         _CIRCUIT_BREAKER_FIRED_EVENT: handle_circuit_breaker_fire_payload,
+        _BATCH_VS_LIVE_RECON_DRIFTED_EVENT: handle_batch_vs_live_recon_drifted_payload,
+        _BATCH_LIVE_RECON_DRIFT_EVENT: handle_batch_live_recon_drift_payload,
     }
 
     @classmethod

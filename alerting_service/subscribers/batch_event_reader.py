@@ -50,6 +50,7 @@ _EVENT_SOURCE_SERVICES: tuple[str, ...] = (
     "ml-training-service",
     "ml-inference-service",
     "pnl-attribution-service",
+    "batch-live-reconciliation-service",
     "alerting-service",
 )
 
