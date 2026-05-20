@@ -118,7 +118,8 @@ def check_health_factor(
         protocol=protocol,
         asset=asset,
         message=(
-            f"Health factor {health_factor} on {protocol} position {position_id} (asset={asset}) — liquidation risk"
+            f"Health factor {health_factor} on {protocol}"
+            f" position {position_id} (asset={asset}) — liquidation risk"
         ),
         details={
             "health_factor": float(health_factor),
@@ -320,7 +321,9 @@ def check_funding_rate_flip(
         severity="warning",
         protocol=venue,
         asset=symbol,
-        message=(f"Funding rate flip: {symbol} rate={funding_rate} on {venue} — shorts paying longs"),
+        message=(
+            f"Funding rate flip: {symbol} rate={funding_rate} on {venue} — shorts paying longs"
+        ),
         details={
             "funding_rate": float(funding_rate),
             "position_side": position_side,
@@ -511,6 +514,8 @@ def route_defi_alert(alert: DefiAlert) -> None:
         details["asset"] = alert.asset
     details.update(alert.details)
 
-    log_event("DEFI_ALERT_ROUTED", details={"event_name": event_name, "alert_type": alert.alert_type})
+    log_event(
+        "DEFI_ALERT_ROUTED", details={"event_name": event_name, "alert_type": alert.alert_type}
+    )
 
     route_event(event_name, details)

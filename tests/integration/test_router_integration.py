@@ -153,7 +153,9 @@ class TestKillSwitchRouting:
             patch("alerting_service.notifiers.pagerduty.log_event"),
             patch("alerting_service.notifiers.slack.log_event"),
         ):
-            route_event("KILL_SWITCH_ACTIVATED", {"strategy": "strat-1", "source": "execution-service"})
+            route_event(
+                "KILL_SWITCH_ACTIVATED", {"strategy": "strat-1", "source": "execution-service"}
+            )
 
         pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
         assert pd_calls, "PagerDuty httpx.post was not called"
@@ -195,7 +197,9 @@ class TestKillSwitchRouting:
             patch("alerting_service.notifiers.pagerduty.log_event"),
             patch("alerting_service.notifiers.slack.log_event"),
         ):
-            route_event("KILL_SWITCH_ACTIVATED", {"strategy": "strat-1", "source": "execution-service"})
+            route_event(
+                "KILL_SWITCH_ACTIVATED", {"strategy": "strat-1", "source": "execution-service"}
+            )
 
         slack_calls = [c for c in mock_http_post.call_args_list if "slack.com" in c.args[0]]
         assert slack_calls, "Slack httpx.post was not called (fallback)"
@@ -226,7 +230,9 @@ class TestKillSwitchRouting:
             patch("alerting_service.notifiers.pagerduty.log_event"),
             patch("alerting_service.notifiers.telegram.log_event"),
         ):
-            route_event("KILL_SWITCH_ACTIVATED", {"strategy": "strat-1", "source": "execution-service"})
+            route_event(
+                "KILL_SWITCH_ACTIVATED", {"strategy": "strat-1", "source": "execution-service"}
+            )
 
         pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
         tg_calls = [c for c in mock_http_post.call_args_list if "api.telegram.org" in c.args[0]]
@@ -250,12 +256,16 @@ class TestKillSwitchRouting:
                 "alerting_service.notifiers.pagerduty._get_cloud_config",
                 return_value=mock_pd_config,
             ),
-            patch("alerting_service.notifiers.pagerduty.get_secret_client", return_value=pd_secret) as mock_pd_sm,
+            patch(
+                "alerting_service.notifiers.pagerduty.get_secret_client", return_value=pd_secret
+            ) as mock_pd_sm,
             patch(
                 "alerting_service.notifiers.slack._get_cloud_config",
                 return_value=mock_slack_config,
             ),
-            patch("alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret) as mock_slack_sm,
+            patch(
+                "alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret
+            ) as mock_slack_sm,
             patch(
                 "alerting_service.notifiers.router.AlertingSystemConfig",
                 return_value=mock_router_config_no_telegram,
@@ -974,8 +984,14 @@ class TestSeverityFilterPropagation:
             patch("alerting_service.notifiers.router._persist_config_snapshot"),
             patch("alerting_service.notifiers.telegram.log_event"),
         ):
-            for non_critical_event in ("PREFLIGHT_FAILED", "SERVICE_DEGRADED", "OPERATIONAL_METRIC"):
+            for non_critical_event in (
+                "PREFLIGHT_FAILED",
+                "SERVICE_DEGRADED",
+                "OPERATIONAL_METRIC",
+            ):
                 mock_http_post.reset_mock()
                 route_event(non_critical_event, {"source": "test"})
-                pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
+                pd_calls = [
+                    c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]
+                ]
                 assert not pd_calls, f"PagerDuty must NOT be called for {non_critical_event}"

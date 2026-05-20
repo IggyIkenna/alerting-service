@@ -23,8 +23,7 @@ _DEFAULT_SERVICE_URLS: dict[str, str] = {
     "client-reporting-api": "http://localhost:8003",
     "deployment-api": "http://localhost:8004",
     "execution-service": "http://localhost:8005",
-    "risk-and-exposure-service": "http://localhost:8006",
-    "position-balance-monitor": "http://localhost:8007",
+    "strategy-service": "http://localhost:8006",
 }
 
 
@@ -49,7 +48,9 @@ def _parse_health_response(resp: httpx.Response) -> tuple[str, dict[str, object]
     status_val = data.get("status", "unknown")
     status = str(status_val) if status_val is not None else "unknown"
     checks_val = data.get("checks")
-    checks: dict[str, object] = cast(dict[str, object], checks_val) if isinstance(checks_val, dict) else {}
+    checks: dict[str, object] = (
+        cast(dict[str, object], checks_val) if isinstance(checks_val, dict) else {}
+    )
     return status, checks
 
 

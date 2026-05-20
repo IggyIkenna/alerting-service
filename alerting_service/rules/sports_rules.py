@@ -53,7 +53,13 @@ def check_arb_alert(
     """Generate alert if arb edge exceeds threshold."""
     if edge_pct < min_edge_pct:
         return None
-    severity = "critical" if edge_pct > Decimal("3.0") else "warning" if edge_pct > Decimal("2.0") else "info"
+    severity = (
+        "critical"
+        if edge_pct > Decimal("3.0")
+        else "warning"
+        if edge_pct > Decimal("2.0")
+        else "info"
+    )
     return SportsAlert(
         alert_type=SportsAlertType.ARB_OPPORTUNITY,
         severity=severity,
@@ -94,7 +100,10 @@ def check_account_restriction(
         alert_type=SportsAlertType.ACCOUNT_RESTRICTED,
         severity=severity,
         venue_key=venue_key,
-        message=(f"Max stake reduced {reduction_pct}% at {venue_key}: {previous_max_stake} -> {current_max_stake}"),
+        message=(
+            f"Max stake reduced {reduction_pct}% at {venue_key}:"
+            f" {previous_max_stake} -> {current_max_stake}"
+        ),
         details={
             "reduction_pct": float(reduction_pct),
             "old_max": float(previous_max_stake),
@@ -117,6 +126,8 @@ def check_clv_trend(
     return SportsAlert(
         alert_type=SportsAlertType.CLV_TREND_NEGATIVE,
         severity=severity,
-        message=(f"CLV trend negative: {mean_clv_pct}% over {sample_size} bets — model may be degrading"),
+        message=(
+            f"CLV trend negative: {mean_clv_pct}% over {sample_size} bets — model may be degrading"
+        ),
         details={"mean_clv_pct": float(mean_clv_pct), "sample_size": sample_size},
     )

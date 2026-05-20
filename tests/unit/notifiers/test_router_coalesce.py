@@ -255,7 +255,9 @@ class TestCheckCoalesceWindow:
 class TestRouteEventCoalesce:
     """End-to-end test that route_event() respects the coalesce window."""
 
-    def test_two_tick_staleness_same_key_within_30s_only_first_fires(self, mock_route_dependencies) -> None:
+    def test_two_tick_staleness_same_key_within_30s_only_first_fires(
+        self, mock_route_dependencies
+    ) -> None:
         # Two TICK_STALENESS alerts for same (venue, instrument) within 30s —
         # only first fires (PagerDuty + Telegram); second merges silently.
         details_1: dict[str, object] = {
@@ -294,7 +296,9 @@ class TestRouteEventCoalesce:
         assert mock_route_dependencies["pd"].call_count == 2
         assert mock_route_dependencies["telegram"].call_count == 2
 
-    def test_non_staleness_alerts_pass_through_without_coalescing(self, mock_route_dependencies) -> None:
+    def test_non_staleness_alerts_pass_through_without_coalescing(
+        self, mock_route_dependencies
+    ) -> None:
         # CIRCUIT_BREAKER_OPEN is not coalesced — each fire dispatches.
         # (Two distinct details to bypass the AlertDeduplicator hash check.)
         route_event(

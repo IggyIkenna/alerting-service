@@ -22,7 +22,9 @@ def mock_config() -> MagicMock:
     """Patch UnifiedCloudConfig to provide a fixed project_id."""
     mock_cfg = MagicMock()
     mock_cfg.gcp_project_id = "test-project"
-    with patch("alerting_service.persistence.storage_store.UnifiedCloudConfig", return_value=mock_cfg):
+    with patch(
+        "alerting_service.persistence.storage_store.UnifiedCloudConfig", return_value=mock_cfg
+    ):
         yield mock_cfg
 
 
@@ -148,7 +150,9 @@ class TestCooldownState:
         result = storage_store.read_cooldown_state()
         assert result == {}
 
-    def test_read_returns_parsed_json(self, storage_store: AlertStorageStore, mock_storage_client: MagicMock) -> None:
+    def test_read_returns_parsed_json(
+        self, storage_store: AlertStorageStore, mock_storage_client: MagicMock
+    ) -> None:
         state = {"rule-1": "2026-03-08T12:00:00+00:00"}
         mock_storage_client.blob_exists.return_value = True
         mock_storage_client.download_bytes.return_value = json.dumps(state).encode("utf-8")
@@ -191,7 +195,9 @@ class TestCooldownState:
 class TestReadDeliveryRecords:
     """Tests for read_delivery_records method."""
 
-    def test_returns_matching_records(self, storage_store: AlertStorageStore, mock_storage_client: MagicMock) -> None:
+    def test_returns_matching_records(
+        self, storage_store: AlertStorageStore, mock_storage_client: MagicMock
+    ) -> None:
         record1 = {"alert_id": "abc123", "channel": "telegram", "status": "sent"}
         record2 = {"alert_id": "abc123", "channel": "pagerduty", "status": "sent"}
         record_other = {"alert_id": "other456", "channel": "telegram", "status": "sent"}

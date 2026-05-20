@@ -43,7 +43,9 @@ import logging
 from decimal import Decimal, InvalidOperation
 from typing import Final
 
-from unified_api_contracts.internal import DefiAlert  # noqa: qg-deep-import  # pyright: ignore[reportPrivateUsage]
+from unified_api_contracts.internal import (
+    DefiAlert,  # noqa: qg-deep-import  # pyright: ignore[reportPrivateUsage]
+)
 from unified_trading_library import log_event
 
 from .rules.defi_rules import (

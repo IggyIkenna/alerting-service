@@ -65,12 +65,18 @@ class _PagingCredentialsReloader:
             self._credentials = initial
         self._started = True
         if not initial or not project_id:
-            logger.info("PagingCredentialsReloader: no SM credentials loaded (mock mode or no project_id)")
+            logger.info(
+                "PagingCredentialsReloader: no SM credentials loaded (mock mode or no project_id)"
+            )
             return
         self._stop_event.clear()
-        self._thread = threading.Thread(target=self._poll_loop, daemon=True, name="paging-creds-reloader")
+        self._thread = threading.Thread(
+            target=self._poll_loop, daemon=True, name="paging-creds-reloader"
+        )
         self._thread.start()
-        logger.info("PagingCredentialsReloader started: refresh every %ds", int(self._refresh_interval))
+        logger.info(
+            "PagingCredentialsReloader started: refresh every %ds", int(self._refresh_interval)
+        )
 
     def stop(self) -> None:
         self._started = False
@@ -107,7 +113,9 @@ class _PagingCredentialsReloader:
         with self._lock:
             old_creds = self._credentials
             self._credentials = new_creds
-        changed = {k for k in set(new_creds) | set(old_creds) if new_creds.get(k) != old_creds.get(k)}
+        changed = {
+            k for k in set(new_creds) | set(old_creds) if new_creds.get(k) != old_creds.get(k)
+        }
         if changed:
             logger.info("Paging credentials refreshed from SM: %s", sorted(changed))
             log_event(

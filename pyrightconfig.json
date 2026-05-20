@@ -1,8 +1,5 @@
 {
-  "include": [
-    "alerting_service",
-    "tests"
-  ],
+  "include": ["alerting_service", "tests"],
   "exclude": [
     "tests",
     "build",

@@ -65,7 +65,8 @@ def test_catch_all_only_codes_are_the_known_set() -> None:
     actual_catch_all_only: set[AlertCode] = set()
     for code in AlertCode:
         has_explicit = any(
-            r.event_pattern != "*" and fnmatch.fnmatchcase(code.value, r.event_pattern) for r in LIVE_ALERT_RULES
+            r.event_pattern != "*" and fnmatch.fnmatchcase(code.value, r.event_pattern)
+            for r in LIVE_ALERT_RULES
         )
         if not has_explicit:
             actual_catch_all_only.add(code)
@@ -86,7 +87,10 @@ def test_explicit_coverage_count_at_least_75() -> None:
     explicitly_covered = sum(
         1
         for code in AlertCode
-        if any(r.event_pattern != "*" and fnmatch.fnmatchcase(code.value, r.event_pattern) for r in LIVE_ALERT_RULES)
+        if any(
+            r.event_pattern != "*" and fnmatch.fnmatchcase(code.value, r.event_pattern)
+            for r in LIVE_ALERT_RULES
+        )
     )
     assert explicitly_covered >= 75, (
         f"Only {explicitly_covered} AlertCodes have explicit routing rules "
@@ -117,7 +121,9 @@ def test_defi_family_12_codes_have_explicit_routing_rule(code: AlertCode) -> Non
     """DeFi Family 1/2 (recursive-borrow + delta-hedge) codes added 2026-05-12
     must each have an explicit (non-catch-all) routing rule in LIVE_ALERT_RULES."""
     explicit_matches = [
-        r for r in LIVE_ALERT_RULES if r.event_pattern != "*" and fnmatch.fnmatchcase(code.value, r.event_pattern)
+        r
+        for r in LIVE_ALERT_RULES
+        if r.event_pattern != "*" and fnmatch.fnmatchcase(code.value, r.event_pattern)
     ]
     assert explicit_matches, (
         f"AlertCode.{code.name} has no explicit routing rule "
@@ -143,7 +149,9 @@ def test_risk_rule_codes_have_explicit_routing_rule(code: AlertCode) -> None:
     must each have an explicit routing rule in LIVE_ALERT_RULES with the
     correct per-consequence severity (BLOCK=HIGH; others=WARN/INFO)."""
     explicit_matches = [
-        r for r in LIVE_ALERT_RULES if r.event_pattern != "*" and fnmatch.fnmatchcase(code.value, r.event_pattern)
+        r
+        for r in LIVE_ALERT_RULES
+        if r.event_pattern != "*" and fnmatch.fnmatchcase(code.value, r.event_pattern)
     ]
     assert explicit_matches, (
         f"AlertCode.{code.name} has no explicit routing rule "
@@ -156,7 +164,9 @@ def test_stablecoin_codes_have_explicit_routing_rules() -> None:
     must both have explicit routing rules — depeg signals need dedicated treatment."""
     for code in (AlertCode.STABLECOIN_ISSUER_PAUSED, AlertCode.GOVERNANCE_INCIDENT_DETECTED):
         explicit_matches = [
-            r for r in LIVE_ALERT_RULES if r.event_pattern != "*" and fnmatch.fnmatchcase(code.value, r.event_pattern)
+            r
+            for r in LIVE_ALERT_RULES
+            if r.event_pattern != "*" and fnmatch.fnmatchcase(code.value, r.event_pattern)
         ]
         assert explicit_matches, (
             f"AlertCode.{code.name} has no explicit routing rule "
@@ -211,7 +221,9 @@ def test_service_routing_config_covers_all_alert_codes_via_fnmatch() -> None:
     service_rules = _default_routing_rules()
     uncovered: list[str] = []
     for code in AlertCode:
-        matched = [r for r in service_rules if fnmatch.fnmatchcase(code.value, str(r["event_pattern"]))]
+        matched = [
+            r for r in service_rules if fnmatch.fnmatchcase(code.value, str(r["event_pattern"]))
+        ]
         if not matched:
             uncovered.append(code.value)
     assert not uncovered, (

@@ -37,9 +37,7 @@ logger = logging.getLogger(__name__)
 # OR in a shared bucket. We try both conventions.
 _EVENT_SOURCE_SERVICES: tuple[str, ...] = (
     "execution-service",
-    "risk-and-exposure-service",
     "strategy-service",
-    "position-balance-monitor-service",
     "instruments-service",
     "market-tick-data-service",
     "market-data-processing-service",
@@ -47,9 +45,6 @@ _EVENT_SOURCE_SERVICES: tuple[str, ...] = (
     "features-volatility-service",
     "features-onchain-service",
     "features-sports-service",
-    "ml-training-service",
-    "ml-inference-service",
-    "pnl-attribution-service",
     "batch-live-reconciliation-service",
     "alerting-service",
 )

@@ -125,11 +125,16 @@ class TestPagerDutyFailureGracefulDegradation:
             return _make_response(200)
 
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch("alerting_service.notifiers.pagerduty.get_secret_client", return_value=pd_secret),
             patch("alerting_service.notifiers.slack.UnifiedCloudConfig", return_value=slack_config),
             patch("alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret),
-            patch("alerting_service.notifiers.router.AlertingSystemConfig", return_value=router_config_no_telegram),
+            patch(
+                "alerting_service.notifiers.router.AlertingSystemConfig",
+                return_value=router_config_no_telegram,
+            ),
             patch("httpx.post", side_effect=_dispatch),
             patch("alerting_service.notifiers.router.log_event") as mock_log,
             patch("alerting_service.notifiers.router._persist_delivery_record"),
@@ -137,10 +142,14 @@ class TestPagerDutyFailureGracefulDegradation:
             patch("alerting_service.notifiers.pagerduty.log_event"),
             patch("alerting_service.notifiers.slack.log_event"),
         ):
-            route_event("KILL_SWITCH_ACTIVATED", {"strategy": "strat-1", "source": "execution-service"})
+            route_event(
+                "KILL_SWITCH_ACTIVATED", {"strategy": "strat-1", "source": "execution-service"}
+            )
 
         logged_events = [c.args[0] for c in mock_log.call_args_list]
-        assert "ALERT_FAILED" in logged_events, f"Expected ALERT_FAILED on PD 429; got {logged_events}"
+        assert "ALERT_FAILED" in logged_events, (
+            f"Expected ALERT_FAILED on PD 429; got {logged_events}"
+        )
 
     def test_pd_500_route_event_completes(
         self,
@@ -158,11 +167,16 @@ class TestPagerDutyFailureGracefulDegradation:
             return _make_response(200)
 
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch("alerting_service.notifiers.pagerduty.get_secret_client", return_value=pd_secret),
             patch("alerting_service.notifiers.slack.UnifiedCloudConfig", return_value=slack_config),
             patch("alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret),
-            patch("alerting_service.notifiers.router.AlertingSystemConfig", return_value=router_config_no_telegram),
+            patch(
+                "alerting_service.notifiers.router.AlertingSystemConfig",
+                return_value=router_config_no_telegram,
+            ),
             patch("httpx.post", side_effect=_dispatch),
             patch("alerting_service.notifiers.router.log_event") as mock_log,
             patch("alerting_service.notifiers.router._persist_delivery_record"),
@@ -170,10 +184,14 @@ class TestPagerDutyFailureGracefulDegradation:
             patch("alerting_service.notifiers.pagerduty.log_event"),
             patch("alerting_service.notifiers.slack.log_event"),
         ):
-            route_event("KILL_SWITCH_ACTIVATED", {"strategy": "strat-2", "source": "execution-service"})
+            route_event(
+                "KILL_SWITCH_ACTIVATED", {"strategy": "strat-2", "source": "execution-service"}
+            )
 
         logged_events = [c.args[0] for c in mock_log.call_args_list]
-        assert "ALERT_FAILED" in logged_events, f"Expected ALERT_FAILED on PD 500; got {logged_events}"
+        assert "ALERT_FAILED" in logged_events, (
+            f"Expected ALERT_FAILED on PD 500; got {logged_events}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -201,14 +219,22 @@ class TestDedupAtRouterLevel:
                 return _make_response(202)
             return _make_response(200)
 
-        common_details: dict[str, object] = {"strategy": "dedup-strat", "source": "execution-service"}
+        common_details: dict[str, object] = {
+            "strategy": "dedup-strat",
+            "source": "execution-service",
+        }
 
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch("alerting_service.notifiers.pagerduty.get_secret_client", return_value=pd_secret),
             patch("alerting_service.notifiers.slack.UnifiedCloudConfig", return_value=pd_config),
             patch("alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret),
-            patch("alerting_service.notifiers.router.AlertingSystemConfig", return_value=router_config_no_telegram),
+            patch(
+                "alerting_service.notifiers.router.AlertingSystemConfig",
+                return_value=router_config_no_telegram,
+            ),
             patch("httpx.post", side_effect=_dispatch),
             patch("alerting_service.notifiers.router.log_event"),
             patch("alerting_service.notifiers.router._persist_delivery_record"),
@@ -238,11 +264,16 @@ class TestDedupAtRouterLevel:
             return _make_response(200)
 
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch("alerting_service.notifiers.pagerduty.get_secret_client", return_value=pd_secret),
             patch("alerting_service.notifiers.slack.UnifiedCloudConfig", return_value=pd_config),
             patch("alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret),
-            patch("alerting_service.notifiers.router.AlertingSystemConfig", return_value=router_config_no_telegram),
+            patch(
+                "alerting_service.notifiers.router.AlertingSystemConfig",
+                return_value=router_config_no_telegram,
+            ),
             patch("httpx.post", side_effect=_dispatch),
             patch("alerting_service.notifiers.router.log_event"),
             patch("alerting_service.notifiers.router._persist_delivery_record"),
@@ -250,10 +281,16 @@ class TestDedupAtRouterLevel:
             patch("alerting_service.notifiers.pagerduty.log_event"),
             patch("alerting_service.notifiers.slack.log_event"),
         ):
-            route_event("KILL_SWITCH_ACTIVATED", {"strategy": "strat-A", "source": "execution-service"})
-            route_event("KILL_SWITCH_ACTIVATED", {"strategy": "strat-B", "source": "execution-service"})
+            route_event(
+                "KILL_SWITCH_ACTIVATED", {"strategy": "strat-A", "source": "execution-service"}
+            )
+            route_event(
+                "KILL_SWITCH_ACTIVATED", {"strategy": "strat-B", "source": "execution-service"}
+            )
 
-        assert call_count[0] == 2, f"Different details must NOT be deduped; PD called {call_count[0]} times"
+        assert call_count[0] == 2, (
+            f"Different details must NOT be deduped; PD called {call_count[0]} times"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -278,14 +315,21 @@ class TestSlackRateLimitAtRouterLevel:
         service_degraded_cfg.telegram_chat_id = ""
         service_degraded_cfg.gcp_project_id = "escalation-test-project"
         service_degraded_cfg.routing_rules = [
-            {"event_pattern": "SERVICE_DEGRADED", "channels": ["telegram"], "severity_filter": None},
+            {
+                "event_pattern": "SERVICE_DEGRADED",
+                "channels": ["telegram"],
+                "severity_filter": None,
+            },
             {"event_pattern": "*", "channels": ["telegram"], "severity_filter": None},
         ]
 
         with (
             patch("alerting_service.notifiers.slack.UnifiedCloudConfig", return_value=slack_config),
             patch("alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret),
-            patch("alerting_service.notifiers.router.AlertingSystemConfig", return_value=service_degraded_cfg),
+            patch(
+                "alerting_service.notifiers.router.AlertingSystemConfig",
+                return_value=service_degraded_cfg,
+            ),
             patch(
                 "alerting_service.notifiers.slack.httpx.post",
                 return_value=_make_response(429, "too many requests"),
@@ -328,7 +372,10 @@ class TestWildcardRoutingCatchesNovelEvents:
         with (
             patch("alerting_service.notifiers.slack.UnifiedCloudConfig", return_value=pd_config),
             patch("alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret),
-            patch("alerting_service.notifiers.router.AlertingSystemConfig", return_value=router_config_no_telegram),
+            patch(
+                "alerting_service.notifiers.router.AlertingSystemConfig",
+                return_value=router_config_no_telegram,
+            ),
             patch("httpx.post", side_effect=_dispatch),
             patch("alerting_service.notifiers.router.log_event"),
             patch("alerting_service.notifiers.router._persist_delivery_record"),
@@ -340,4 +387,6 @@ class TestWildcardRoutingCatchesNovelEvents:
         pd_calls = [url for url in http_calls if "pagerduty.com" in url]
         slack_calls = [url for url in http_calls if "slack.com" in url]
         assert not pd_calls, f"Novel event must NOT go to PagerDuty; got {pd_calls}"
-        assert slack_calls, f"Novel event must route to Slack fallback (no Telegram configured); got {http_calls}"
+        assert slack_calls, (
+            f"Novel event must route to Slack fallback (no Telegram configured); got {http_calls}"
+        )

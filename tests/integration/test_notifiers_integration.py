@@ -79,12 +79,16 @@ class TestPagerDutyNotifierIntegration:
         pd_config: MagicMock,
     ) -> None:
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch(
                 "alerting_service.notifiers.pagerduty.get_secret_client",
                 return_value=pd_secret_client,
             ),
-            patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)) as mock_post,
+            patch(
+                "alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)
+            ) as mock_post,
             patch("alerting_service.notifiers.pagerduty.log_event"),
         ):
             result = send_event(
@@ -103,12 +107,16 @@ class TestPagerDutyNotifierIntegration:
         pd_config: MagicMock,
     ) -> None:
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch(
                 "alerting_service.notifiers.pagerduty.get_secret_client",
                 return_value=pd_secret_client,
             ),
-            patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)) as mock_post,
+            patch(
+                "alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)
+            ) as mock_post,
             patch("alerting_service.notifiers.pagerduty.log_event"),
         ):
             send_event(summary="test", severity="info", source="alerting-service", details={})
@@ -121,12 +129,16 @@ class TestPagerDutyNotifierIntegration:
         pd_config: MagicMock,
     ) -> None:
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch(
                 "alerting_service.notifiers.pagerduty.get_secret_client",
                 return_value=pd_secret_client,
             ),
-            patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)) as mock_post,
+            patch(
+                "alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)
+            ) as mock_post,
             patch("alerting_service.notifiers.pagerduty.log_event"),
         ):
             send_event(summary="test", severity="warning", source="alerting-service", details={})
@@ -141,12 +153,16 @@ class TestPagerDutyNotifierIntegration:
     ) -> None:
         details: dict[str, object] = {"venue": "binance", "failure_count": 5}
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch(
                 "alerting_service.notifiers.pagerduty.get_secret_client",
                 return_value=pd_secret_client,
             ),
-            patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)) as mock_post,
+            patch(
+                "alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)
+            ) as mock_post,
             patch("alerting_service.notifiers.pagerduty.log_event"),
         ):
             send_event(
@@ -171,7 +187,9 @@ class TestPagerDutyNotifierIntegration:
         pd_config: MagicMock,
     ) -> None:
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch(
                 "alerting_service.notifiers.pagerduty.get_secret_client",
                 return_value=pd_secret_client,
@@ -197,7 +215,9 @@ class TestPagerDutyNotifierIntegration:
         pd_config: MagicMock,
     ) -> None:
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch(
                 "alerting_service.notifiers.pagerduty.get_secret_client",
                 return_value=pd_secret_client,
@@ -223,7 +243,9 @@ class TestPagerDutyNotifierIntegration:
         pd_config: MagicMock,
     ) -> None:
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch(
                 "alerting_service.notifiers.pagerduty.get_secret_client",
                 return_value=pd_secret_client,
@@ -249,7 +271,9 @@ class TestPagerDutyNotifierIntegration:
         pd_config: MagicMock,
     ) -> None:
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch(
                 "alerting_service.notifiers.pagerduty.get_secret_client",
                 return_value=pd_secret_client,
@@ -275,7 +299,9 @@ class TestPagerDutyNotifierIntegration:
         pd_config: MagicMock,
     ) -> None:
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch(
                 "alerting_service.notifiers.pagerduty.get_secret_client",
                 return_value=pd_secret_client,
@@ -301,12 +327,16 @@ class TestPagerDutyNotifierIntegration:
         pd_config: MagicMock,
     ) -> None:
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch(
                 "alerting_service.notifiers.pagerduty.get_secret_client",
                 return_value=pd_secret_client,
             ) as mock_sm,
-            patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)),
+            patch(
+                "alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)
+            ),
             patch("alerting_service.notifiers.pagerduty.log_event"),
         ):
             send_event(summary="test", severity="info", source="alerting-service", details={})
@@ -322,7 +352,9 @@ class TestPagerDutyNotifierIntegration:
         missing_secret.get_secret.return_value = None
 
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch(
                 "alerting_service.notifiers.pagerduty.get_secret_client",
                 return_value=missing_secret,
@@ -341,15 +373,21 @@ class TestPagerDutyNotifierIntegration:
         pd_config: MagicMock,
     ) -> None:
         with (
-            patch("alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config),
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig", return_value=pd_config
+            ),
             patch(
                 "alerting_service.notifiers.pagerduty.get_secret_client",
                 return_value=pd_secret_client,
             ),
-            patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)) as mock_post,
+            patch(
+                "alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)
+            ) as mock_post,
             patch("alerting_service.notifiers.pagerduty.log_event"),
         ):
-            result = send_event(summary="test", severity=severity, source="alerting-service", details={})
+            result = send_event(
+                summary="test", severity=severity, source="alerting-service", details={}
+            )
 
         assert result is True
         pd_json: dict[str, object] = mock_post.call_args.kwargs["json"]
@@ -378,7 +416,9 @@ class TestSlackNotifierIntegration:
                 "alerting_service.notifiers.slack.get_secret_client",
                 return_value=slack_secret_client,
             ),
-            patch("alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)) as mock_post,
+            patch(
+                "alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)
+            ) as mock_post,
             patch("alerting_service.notifiers.slack.log_event"),
         ):
             result = send_message(text="Preflight failed for session 2026-01-15")
@@ -397,7 +437,9 @@ class TestSlackNotifierIntegration:
                 "alerting_service.notifiers.slack.get_secret_client",
                 return_value=slack_secret_client,
             ),
-            patch("alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)) as mock_post,
+            patch(
+                "alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)
+            ) as mock_post,
             patch("alerting_service.notifiers.slack.log_event"),
         ):
             send_message(text="test")
@@ -416,7 +458,9 @@ class TestSlackNotifierIntegration:
                 "alerting_service.notifiers.slack.get_secret_client",
                 return_value=slack_secret_client,
             ),
-            patch("alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)) as mock_post,
+            patch(
+                "alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)
+            ) as mock_post,
             patch("alerting_service.notifiers.slack.log_event"),
         ):
             send_message(text="Service degraded: market-data-service latency > 1s")
@@ -435,7 +479,9 @@ class TestSlackNotifierIntegration:
                 "alerting_service.notifiers.slack.get_secret_client",
                 return_value=slack_secret_client,
             ),
-            patch("alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)) as mock_post,
+            patch(
+                "alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)
+            ) as mock_post,
             patch("alerting_service.notifiers.slack.log_event"),
         ):
             send_message(text="test", channel="#pipeline-alerts")
@@ -454,7 +500,9 @@ class TestSlackNotifierIntegration:
                 "alerting_service.notifiers.slack.get_secret_client",
                 return_value=slack_secret_client,
             ),
-            patch("alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)) as mock_post,
+            patch(
+                "alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)
+            ) as mock_post,
             patch("alerting_service.notifiers.slack.log_event"),
         ):
             send_message(text="test")
@@ -477,7 +525,9 @@ class TestSlackNotifierIntegration:
                 "alerting_service.notifiers.slack.get_secret_client",
                 return_value=slack_secret_client,
             ),
-            patch("alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)) as mock_post,
+            patch(
+                "alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)
+            ) as mock_post,
             patch("alerting_service.notifiers.slack.log_event"),
         ):
             send_message(text="Preflight failed", blocks=blocks)
@@ -496,7 +546,9 @@ class TestSlackNotifierIntegration:
                 "alerting_service.notifiers.slack.get_secret_client",
                 return_value=slack_secret_client,
             ),
-            patch("alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)) as mock_post,
+            patch(
+                "alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)
+            ) as mock_post,
             patch("alerting_service.notifiers.slack.log_event"),
         ):
             send_message(text="test", blocks=None)
@@ -616,7 +668,9 @@ class TestSlackNotifierIntegration:
 
         with (
             patch("alerting_service.notifiers.slack.UnifiedCloudConfig", return_value=slack_config),
-            patch("alerting_service.notifiers.slack.get_secret_client", return_value=missing_secret),
+            patch(
+                "alerting_service.notifiers.slack.get_secret_client", return_value=missing_secret
+            ),
             patch("alerting_service.notifiers.slack.httpx.post"),
             patch("alerting_service.notifiers.slack.log_event"),
             pytest.raises(RuntimeError, match="alerting-slack-webhook-url"),

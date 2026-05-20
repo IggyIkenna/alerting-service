@@ -149,7 +149,9 @@ async def main() -> None:
         _log_level = LogLevel(config.log_level)
     except ValueError as err:
         valid = ", ".join(v.value for v in LogLevel)
-        raise SystemExit(f"Invalid LOG_LEVEL={config.log_level!r}. Must be one of: {valid}") from err
+        raise SystemExit(
+            f"Invalid LOG_LEVEL={config.log_level!r}. Must be one of: {valid}"
+        ) from err
     _level_map: dict[str, int] = {
         "DEBUG": logging.DEBUG,
         "INFO": logging.INFO,

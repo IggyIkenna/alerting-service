@@ -170,7 +170,9 @@ class TestEvaluateBalanceDiscrepancy:
         assert result[0]["delivery_channel"] == "pagerduty+telegram"
 
     def test_unknown_status_treated_as_warning(self) -> None:
-        result = evaluate_balance_discrepancy({"status": "SOME_OTHER_STATUS", "venue": "v", "currency": "c"})
+        result = evaluate_balance_discrepancy(
+            {"status": "SOME_OTHER_STATUS", "venue": "v", "currency": "c"}
+        )
         assert len(result) == 1
         assert result[0]["severity"] == "WARNING"
 
@@ -183,13 +185,23 @@ class TestEvaluateBalanceDiscrepancy:
 class TestEvaluatePnlDiscrepancy:
     def test_below_threshold_returns_empty(self) -> None:
         result = evaluate_pnl_discrepancy(
-            {"venue": "deribit", "instrument": "BTC-PERP", "unexplained_pnl": "1.0", "unexplained_pct": "0.005"}
+            {
+                "venue": "deribit",
+                "instrument": "BTC-PERP",
+                "unexplained_pnl": "1.0",
+                "unexplained_pct": "0.005",
+            }
         )
         assert result == []
 
     def test_warning_alert_shape(self) -> None:
         result = evaluate_pnl_discrepancy(
-            {"venue": "ftx", "instrument": "ETH-PERP", "unexplained_pnl": "10.0", "unexplained_pct": "0.02"}
+            {
+                "venue": "ftx",
+                "instrument": "ETH-PERP",
+                "unexplained_pnl": "10.0",
+                "unexplained_pct": "0.02",
+            }
         )
         assert len(result) == 1
         alert = result[0]
@@ -202,7 +214,12 @@ class TestEvaluatePnlDiscrepancy:
 
     def test_critical_alert_shape(self) -> None:
         result = evaluate_pnl_discrepancy(
-            {"venue": "binance", "instrument": "SOL-PERP", "unexplained_pnl": "100.0", "unexplained_pct": "0.10"}
+            {
+                "venue": "binance",
+                "instrument": "SOL-PERP",
+                "unexplained_pnl": "100.0",
+                "unexplained_pct": "0.10",
+            }
         )
         assert len(result) == 1
         assert result[0]["severity"] == "CRITICAL"

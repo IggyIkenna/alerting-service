@@ -144,7 +144,9 @@ async def test_multi_tag_match_all_captured() -> None:
 @respx.mock
 async def test_snapshot_rate_limit_returns_empty() -> None:
     """SnapshotForumPoller returns empty list on 429 rate limit."""
-    respx.post("https://hub.snapshot.org/graphql").mock(return_value=httpx.Response(429, text="rate limit exceeded"))
+    respx.post("https://hub.snapshot.org/graphql").mock(
+        return_value=httpx.Response(429, text="rate limit exceeded")
+    )
     poller = SnapshotForumPoller()
     async with httpx.AsyncClient() as client:
         proposals = await poller.check(client)
