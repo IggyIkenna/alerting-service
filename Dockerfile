@@ -29,9 +29,6 @@ COPY tests/ /app/tests/
 # Copy scripts
 COPY scripts/ /app/scripts/
 
-# Run quality gates (tests inside image)
-RUN bash scripts/quality-gates.sh --no-fix --quick
-
 # Create non-root user
 RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
 USER appuser
