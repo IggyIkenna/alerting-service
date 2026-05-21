@@ -16,8 +16,9 @@ COPY alerting_service/ /app/alerting_service/
 COPY pyproject.toml uv.lock /app/
 COPY README.md /app/
 
-# Install dependencies from lockfile
-RUN uv sync --frozen --no-dev --system
+# uv >= 0.11 removed --system from uv sync; UV_SYSTEM_PYTHON=1 is the cross-version equivalent.
+ENV UV_SYSTEM_PYTHON=1
+RUN uv sync --frozen --no-dev
 
 # Copy tests
 COPY tests/ /app/tests/
