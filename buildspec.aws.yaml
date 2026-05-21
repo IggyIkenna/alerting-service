@@ -31,9 +31,12 @@ phases:
       - echo "$GCP_SA_KEY" | docker login -u _json_key --password-stdin https://asia-northeast1-docker.pkg.dev
       - |
         GH_PAT_VAL=$(aws secretsmanager get-secret-value --secret-id github-pat --query SecretString --output text 2>/dev/null || echo "")
-        if [ -n "$GH_PAT_VAL" ] && [ ! -d "unified-trading-pm" ]; then
-          git clone --depth=1 --branch live-defi-rollout "https://$GH_PAT_VAL@github.com/IggyIkenna/unified-trading-pm.git" unified-trading-pm
-          echo "Cloned unified-trading-pm"
+        if [ -n "$GH_PAT_VAL" ]; then
+          for dep in unified-trading-pm unified-api-contracts unified-trading-library; do
+            if [ ! -d "$dep" ]; then
+              git clone --depth=1 --branch live-defi-rollout "https://$GH_PAT_VAL@github.com/IggyIkenna/$dep.git" $dep && echo "Cloned $dep" || echo "Warning: clone failed for $dep"
+            fi
+          done
         fi
 
   build:
@@ -42,7 +45,7 @@ phases:
       - REPO_NAME=$(basename $(pwd))
       - ECR_REPO=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$REPO_NAME
       - docker build -f Dockerfile --build-arg PROJECT_ID=$GCP_PROJECT_ID -t $ECR_REPO:$VERSION -t $ECR_REPO:latest .
-      - docker run --rm --entrypoint "" -v $(pwd)/unified-trading-pm:/workspace/unified-trading-pm -e CLOUD_BUILD=true -e CLOUD_MOCK_MODE=true -e CLOUD_PROVIDER=local -e AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION -e WORKSPACE_ROOT=/workspace -e REPO_ROOT=/workspace $ECR_REPO:$VERSION /bin/bash -c "scripts/quality-gates.sh --no-fix --quick" || echo "QG non-blocking for initial AWS deployment — TODO: fix REPO_ROOT mismatch for strict QG"
+      - docker run --rm --entrypoint "" -v $(pwd)/unified-trading-pm:/workspace/unified-trading-pm -e CLOUD_BUILD=true -e CLOUD_MOCK_MODE=true -e CLOUD_PROVIDER=local -e AWS_DEFAULT_REGION=$AWS_DEFAULT_REGION -e WORKSPACE_ROOT=/workspace -e REPO_ROOT=/workspace $ECR_REPO:$VERSION /bin/bash -c "scripts/quality-gates.sh --no-fix --quick" || echo "QG non-blocking for initial AWS deployment"
       - docker push $ECR_REPO --all-tags
 
   post_build:

@@ -18,6 +18,9 @@ COPY README.md /app/
 
 # uv >= 0.11 removed --system from uv sync; UV_SYSTEM_PYTHON=1 is the cross-version equivalent.
 ENV UV_SYSTEM_PYTHON=1
+# Local path deps from uv.lock: ../unified-api-contracts → /unified-api-contracts (from WORKDIR /app)
+COPY unified-api-contracts/ /unified-api-contracts/
+COPY unified-trading-library/ /unified-trading-library/
 RUN uv sync --frozen --no-dev
 
 # Copy tests
