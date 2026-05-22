@@ -33,5 +33,6 @@ COPY scripts/ /app/scripts/
 RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
 USER appuser
 
-# Default command
+# Reset base image ENTRYPOINT (base has ENTRYPOINT ["python"] which causes double-python invocation)
+ENTRYPOINT []
 CMD ["python", "-m", "alerting_service.cli.main", "--operation", "alerts", "--mode", "live"]
