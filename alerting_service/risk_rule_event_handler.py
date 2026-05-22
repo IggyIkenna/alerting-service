@@ -1,6 +1,6 @@
 """Consumer for ``RiskRuleFiredEvent`` (risk_simulations_limits_alerting Phase 5.B).
 
-risk-and-exposure-service emits a typed ``unified_api_contracts.risk.RiskRuleFiredEvent``
+strategy-service emits a typed ``unified_api_contracts.risk.RiskRuleFiredEvent``
 on every rule fire (Phase 5.A — emit side, owned by that service). This module is
 the alerting-service consumer: it maps ``event.alert_code`` → the matching
 ``LIVE_ALERT_RULES`` entry (already seeded in UAC with the 4 ``RISK_RULE_*``

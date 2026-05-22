@@ -44,7 +44,7 @@ class TestServiceHealthMonitoring:
         body = load_cassette("deribit", "risk_service_health.yaml")
         assert isinstance(body, dict)
         assert body["status"] == "healthy"
-        assert body["service"] == "risk-and-exposure-service"
+        assert body["service"] == "strategy-service"
 
     @responses.activate
     def test_health_endpoint_replay(self) -> None:

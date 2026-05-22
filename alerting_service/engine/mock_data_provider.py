@@ -1,12 +1,12 @@
 """Mock data provider for alerting-service.
 
 In mock mode (CLOUD_MOCK_MODE=true), loads mock risk metrics from
-risk-and-exposure-service seed, runs REAL threshold evaluation logic
+strategy-service seed, runs REAL threshold evaluation logic
 to determine alert severity, and writes alert records to the seed
 directory. Notification delivery (Slack/PagerDuty) is skipped.
 
 Reads upstream from:
-    .local-dev-cache/mock-seed/risk-and-exposure-service/
+    .local-dev-cache/mock-seed/strategy-service/
 
 Writes output to:
     .local-dev-cache/mock-seed/alerting-service/
@@ -25,7 +25,7 @@ from alerting_service.rules.risk_threshold_rules import evaluate_risk_thresholds
 logger = logging.getLogger(__name__)
 
 SERVICE_NAME: Final[str] = "alerting-service"
-UPSTREAM_SERVICE: Final[str] = "risk-and-exposure-service"
+UPSTREAM_SERVICE: Final[str] = "strategy-service"
 LAYER: Final[int] = 7
 
 
@@ -50,7 +50,7 @@ def _upstream_available() -> bool:
 
 
 def _load_upstream_risk_metrics() -> dict[str, object]:
-    """Load risk metrics from upstream risk-and-exposure-service seed."""
+    """Load risk metrics from upstream strategy-service seed."""
     metrics_path = _get_seed_base(UPSTREAM_SERVICE) / "metrics" / "risk_metrics.json"
     if metrics_path.exists():
         raw: dict[str, object] = cast(dict[str, object], json.loads(metrics_path.read_text()))
@@ -61,7 +61,7 @@ def _load_upstream_risk_metrics() -> dict[str, object]:
 def run_mock_pipeline() -> int:
     """Run the mock pipeline for alerting-service.
 
-    1. Load risk metrics from risk-and-exposure-service
+    1. Load risk metrics from strategy-service
     2. Run REAL threshold evaluation
     3. Write alerts to seed directory (skip notification delivery)
 

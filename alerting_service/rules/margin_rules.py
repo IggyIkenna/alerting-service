@@ -1,6 +1,6 @@
 """MarginEvent consumer rules (Wave C4 — workspace audit 2026-05-01).
 
-Consumes ``MarginEvent`` published by ``position-balance-monitor-service`` on
+Consumes ``MarginEvent`` published by ``strategy-service`` on
 the ``margin-events`` topic. PBM is the single canonical producer; this is the
 single canonical alerting consumer. Replaces the prior pattern of each service
 re-deriving HF and emitting its own threshold alert.
