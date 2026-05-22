@@ -6,30 +6,32 @@
 ARG PROJECT_ID
 FROM --platform=linux/amd64 asia-northeast1-docker.pkg.dev/${PROJECT_ID}/unified-trading-library/unified-trading-library:latest AS base
 
-WORKDIR /app
+WORKDIR /app/alerting-service
 
 # Stage 2: Application
 FROM --platform=linux/amd64 base AS app
 
 # Copy application code
-COPY alerting_service/ /app/alerting_service/
-COPY pyproject.toml uv.lock /app/
-COPY README.md /app/
+COPY alerting_service/ ./alerting_service/
+COPY pyproject.toml uv.lock README.md ./
 
 # uv >= 0.11 removed --system from uv sync; UV_SYSTEM_PYTHON=1 is the cross-version equivalent.
 ENV UV_SYSTEM_PYTHON=1
-# Local path deps from uv.lock: ../unified-api-contracts → /unified-api-contracts (from WORKDIR /app)
-COPY unified-api-contracts/ /unified-api-contracts/
-COPY unified-trading-library/ /unified-trading-library/
+# Local path deps from uv.lock: ../unified-api-contracts → /app/unified-api-contracts (from WORKDIR /app/alerting-service)
+COPY unified-api-contracts/ /app/unified-api-contracts/
+COPY unified-trading-library/ /app/unified-trading-library/
 RUN uv sync --frozen --no-dev
 # uv sync creates .venv/ — add to PATH so uvicorn CMD resolves correctly
-ENV PATH="/app/.venv/bin:${PATH}"
+ENV PATH="/app/alerting-service/.venv/bin:${PATH}"
 
 # Copy tests
-COPY tests/ /app/tests/
+COPY tests/ ./tests/
 
 # Copy scripts
-COPY scripts/ /app/scripts/
+COPY scripts/ ./scripts/
+
+# Copy cloudbuild for quality-gates manifest alignment check
+COPY cloudbuild.yaml ./
 
 # Create non-root user
 RUN addgroup --system appuser && adduser --system --ingroup appuser appuser

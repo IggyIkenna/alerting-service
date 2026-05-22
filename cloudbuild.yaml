@@ -91,8 +91,8 @@ steps:
         if [ -z "$$GH_PAT" ]; then
           echo "FAIL: GH_PAT not configured — cannot clone sibling repos"; exit 1
         fi
-        git clone --depth=1 https://$$GH_PAT@github.com/IggyIkenna/unified-api-contracts.git unified-api-contracts
-        git clone --depth=1 https://$$GH_PAT@github.com/IggyIkenna/unified-trading-library.git unified-trading-library
+        git clone --depth=1 --branch live-defi-rollout https://$$GH_PAT@github.com/IggyIkenna/unified-api-contracts.git unified-api-contracts
+        git clone --depth=1 --branch live-defi-rollout https://$$GH_PAT@github.com/IggyIkenna/unified-trading-library.git unified-trading-library
         git clone --depth=1 --branch live-defi-rollout https://$$GH_PAT@github.com/IggyIkenna/unified-trading-pm.git unified-trading-pm
         echo "Sibling repos cloned OK"
     waitFor: ["-"]
