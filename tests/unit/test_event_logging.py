@@ -48,7 +48,7 @@ _EXCLUDE_DIRS = {"tests", ".venv", "venv", "__pycache__", ".git", "examples"}
 
 
 def _find_python_files(service_dir: Path) -> list[Path]:
-    exclude = {"tests", ".venv", "venv", "__pycache__", ".git", "examples", ".deps"}
+    exclude = {"tests", ".venv", "venv", "__pycache__", ".git", "examples", ".deps", ".cursor"}
     result = []
     for root, dirs, files in os.walk(service_dir, followlinks=False):
         dirs[:] = [d for d in dirs if d not in exclude]
