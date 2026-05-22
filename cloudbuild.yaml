@@ -226,7 +226,7 @@ steps:
         python -m build --wheel --outdir dist/
         python -m twine upload \
           --repository-url https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/ \
-          --non-interactive dist/*.whl || true
+          --non-interactive dist/${_PKG_NAME}-*.whl || true
     waitFor: ["quality-gates"]
 
 images:
