@@ -33,9 +33,9 @@ COPY scripts/ ./scripts/
 # Copy cloudbuild for quality-gates manifest alignment check
 COPY cloudbuild.yaml ./
 
-# Create non-root user
+# Create non-root user; pre-create mock-mode cache dir needed by delivery_status tests
 RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
-RUN chown -R appuser:appuser /app/alerting-service
+RUN mkdir -p /app/.local-dev-cache/alerting-service && chown -R appuser:appuser /app
 USER appuser
 
 # Reset base image ENTRYPOINT (base has ENTRYPOINT ["python"] which causes double-python invocation)
