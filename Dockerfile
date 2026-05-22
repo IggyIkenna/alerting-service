@@ -35,6 +35,7 @@ COPY cloudbuild.yaml ./
 
 # Create non-root user
 RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
+RUN chown -R appuser:appuser /app/alerting-service
 USER appuser
 
 # Reset base image ENTRYPOINT (base has ENTRYPOINT ["python"] which causes double-python invocation)

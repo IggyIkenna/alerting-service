@@ -126,7 +126,10 @@ class TestRouteEventSyntheticSuppression:
         """
         del mock_pd_send_event, mock_send_telegram, mock_persist_delivery, mock_persist_config
 
-        with patch("alerting_service.notifiers.router._get_cloud_config") as cfg:
+        with (
+            patch("alerting_service.notifiers.router._get_cloud_config") as cfg,
+            patch("alerting_service.notifiers.router._publish_kill_switch_event"),
+        ):
             cfg.return_value.routing_rules = ()
             cfg.return_value.telegram_bot_token = ""
             cfg.return_value.telegram_chat_id = ""
