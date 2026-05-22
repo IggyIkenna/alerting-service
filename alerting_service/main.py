@@ -7,8 +7,6 @@ Usage:
 """
 
 import argparse
-import asyncio
-import contextlib
 import logging
 import uuid
 from datetime import datetime as dt
@@ -28,6 +26,7 @@ from unified_trading_library import (
 
 from .config import AlertingSystemConfig
 from .engine.mock_data_provider import run_mock_pipeline
+from .engine.orchestrator import run_subscriber_loop
 from .notifiers.router import get_batch_stats, set_batch_mode
 from .subscribers.alert_subscriber import AlertSubscriber
 from .subscribers.batch_event_reader import BatchEventReader
@@ -71,29 +70,6 @@ def _build_date_range(start: str, end: str) -> list[str]:
         dates.append(current.strftime("%Y-%m-%d"))
         current += timedelta(days=1)
     return dates
-
-
-async def _run_subscriber_until_shutdown(
-    subscriber: AlertSubscriber,
-    shutdown_handler: GracefulShutdownHandler,
-    poll_interval: float = 0.5,
-) -> None:
-    """Drive the subscriber stream and stop it when shutdown is requested.
-
-    Polls shutdown_handler.is_shutdown_requested() every *poll_interval* seconds
-    so that SIGTERM/SIGINT are honoured promptly without blocking the event loop.
-    """
-    subscriber_task = asyncio.create_task(subscriber.run_until_stopped())
-    try:
-        while not shutdown_handler.is_shutdown_requested():
-            if subscriber_task.done():
-                break
-            await asyncio.sleep(poll_interval)
-    finally:
-        subscriber.stop()
-        subscriber_task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await subscriber_task
 
 
 async def _run_batch_replay(
@@ -196,8 +172,7 @@ async def main() -> None:
     try:
         mode: str = cast(str, args.mode)
         if mode == "live":
-            subscriber = AlertSubscriber(project_id=config.gcp_project_id)
-            await _run_subscriber_until_shutdown(subscriber, _shutdown_handler)
+            await run_subscriber_loop(config.gcp_project_id, _shutdown_handler)
         else:
             await _run_batch_replay(args, config, _shutdown_handler)
 
