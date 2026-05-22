@@ -76,6 +76,7 @@ ignore = []
 
 [tool.ruff.lint.isort]
 known-first-party = ["alerting_service"]
+known-third-party = ["unified_trading_library", "unified_api_contracts"]
 
 [tool.ruff.lint.mccabe]
 max-complexity = 7
