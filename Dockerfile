@@ -35,4 +35,5 @@ USER appuser
 
 # Reset base image ENTRYPOINT (base has ENTRYPOINT ["python"] which causes double-python invocation)
 ENTRYPOINT []
-CMD ["python", "-m", "alerting_service.cli.main", "--operation", "alerts", "--mode", "live"]
+EXPOSE 8080
+CMD ["uvicorn", "alerting_service.api.main:app", "--host", "0.0.0.0", "--port", "8080"]
