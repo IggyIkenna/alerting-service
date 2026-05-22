@@ -163,6 +163,7 @@ steps:
           -e GCP_PROJECT_ID=$PROJECT_ID \
           -e WORKSPACE_ROOT=/workspace \
           -e RUFF_CACHE_DIR=/tmp/ruff_cache \
+          -e COVERAGE_FILE=/tmp/.coverage \
           -v /workspace:/workspace:ro \
           asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
           /bin/bash -c "scripts/quality-gates.sh --no-fix --quick"
