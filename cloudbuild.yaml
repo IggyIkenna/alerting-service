@@ -158,6 +158,7 @@ steps:
         echo "Running quality gates inside ${_SERVICE_NAME} image..."
         docker run --rm \
           --entrypoint "" \
+          --tmpfs /app/${_SERVICE_NAME}/htmlcov \
           -e CLOUD_BUILD=true \
           -e CLOUD_MOCK_MODE=true \
           -e GCP_PROJECT_ID=$PROJECT_ID \
