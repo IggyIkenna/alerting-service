@@ -74,6 +74,9 @@ select = [
 ]
 ignore = []
 
+[tool.ruff.lint.isort]
+known-first-party = ["alerting_service"]
+
 [tool.ruff.lint.mccabe]
 max-complexity = 7
 
