@@ -22,6 +22,8 @@ ENV UV_SYSTEM_PYTHON=1
 COPY unified-api-contracts/ /unified-api-contracts/
 COPY unified-trading-library/ /unified-trading-library/
 RUN uv sync --frozen --no-dev
+# uv sync creates .venv/ — add to PATH so uvicorn CMD resolves correctly
+ENV PATH="/app/.venv/bin:${PATH}"
 
 # Copy tests
 COPY tests/ /app/tests/
