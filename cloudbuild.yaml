@@ -93,6 +93,7 @@ steps:
         fi
         git clone --depth=1 https://$$GH_PAT@github.com/IggyIkenna/unified-api-contracts.git unified-api-contracts
         git clone --depth=1 https://$$GH_PAT@github.com/IggyIkenna/unified-trading-library.git unified-trading-library
+        git clone --depth=1 https://$$GH_PAT@github.com/IggyIkenna/unified-trading-pm.git unified-trading-pm
         echo "Sibling repos cloned OK"
     waitFor: ["-"]
 
@@ -159,6 +160,8 @@ steps:
           -e CLOUD_BUILD=true \
           -e CLOUD_MOCK_MODE=true \
           -e GCP_PROJECT_ID=$PROJECT_ID \
+          -e WORKSPACE_ROOT=/workspace \
+          -v /workspace:/workspace:ro \
           asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
           /bin/bash -c "scripts/quality-gates.sh --no-fix --quick"
     waitFor: ["build"]
