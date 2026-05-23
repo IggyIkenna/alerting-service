@@ -10,9 +10,9 @@ Codex SSOT: ``codex/04-architecture/incident-gateway-state-machine.md``.
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Callable
 
 from unified_api_contracts.incident import (
     ALLOWED_TRANSITIONS,
@@ -26,7 +26,7 @@ _logger = logging.getLogger(__name__)
 
 
 @dataclass
-class TransitionResult:
+class TransitionResult:  # CORRECT-LOCAL: internal state-machine result type
     """Outcome of an attempted transition."""
 
     envelope: IncidentEnvelope
@@ -70,37 +70,23 @@ class IncidentStateMachine:
         new_event_id: str | None = None,
         **field_overrides: object,
     ) -> TransitionResult:
-        """Attempt to transition ``envelope.state → target``.
+        """Attempt ``envelope.state → target`` and return a TransitionResult.
 
-        Args:
-            envelope: Current immutable IncidentEnvelope snapshot.
-            target: Desired next state.
-            new_event_id: Optional override for the new snapshot's event_id.
-                If None, the caller MUST set this via ``field_overrides``.
-            field_overrides: Additional fields to update on the new envelope
-                snapshot (e.g. ``auto_action_taken``, ``recovery_confirmed``,
-                ``audit_ack_due_at``).
-
-        Returns:
-            TransitionResult. ``succeeded=True`` iff the transition was allowed.
-
-        The central invariant: ``AUTO_ACTION_SUCCEEDED → RESOLVED`` is
-        FORBIDDEN — recovery verification must intervene. This is enforced by
-        the underlying ``assert_allowed_transition``.
+        ``field_overrides`` update the new immutable snapshot (e.g.
+        ``auto_action_taken``, ``audit_ack_due_at``). ``succeeded=True`` iff the
+        transition was allowed. Central invariant (enforced by
+        ``assert_allowed_transition``): ``AUTO_ACTION_SUCCEEDED → RESOLVED`` is
+        FORBIDDEN — recovery verification must intervene.
         """
         previous = envelope.state
         try:
             assert_allowed_transition(previous, target)
         except IllegalIncidentTransitionError as exc:
             return TransitionResult(
-                envelope=envelope,
-                previous_state=previous,
-                succeeded=False,
-                failure_reason=str(exc),
+                envelope=envelope, previous_state=previous, succeeded=False, failure_reason=str(exc)
             )
 
-        # Build new immutable snapshot. IncidentEnvelope is frozen — use
-        # model_copy with updated fields.
+        # Build new immutable snapshot (IncidentEnvelope is frozen → model_copy).
         update_kwargs: dict[str, object] = {
             "state": target,
             "timestamp": datetime.now(UTC),
@@ -110,26 +96,27 @@ class IncidentStateMachine:
             update_kwargs["event_id"] = new_event_id
 
         new_envelope = envelope.model_copy(update=update_kwargs)
-
-        if self._persist is not None:
-            try:
-                self._persist(new_envelope, previous)
-            except Exception:  # noqa: BLE001 — defensive: persist never blocks
-                _logger.warning(
-                    "IncidentStateMachine persist callback failed for "
-                    "incident_key=%s state=%s → %s",
-                    new_envelope.incident_key,
-                    previous.value,
-                    target.value,
-                    exc_info=True,
-                )
-
+        self._run_persist(new_envelope, previous, target)
         return TransitionResult(
-            envelope=new_envelope,
-            previous_state=previous,
-            succeeded=True,
-            failure_reason=None,
+            envelope=new_envelope, previous_state=previous, succeeded=True, failure_reason=None
         )
+
+    def _run_persist(
+        self, new_envelope: IncidentEnvelope, previous: IncidentState, target: IncidentState
+    ) -> None:
+        """Fire the persist callback if set; never propagate its failures."""
+        if self._persist is None:
+            return
+        try:
+            self._persist(new_envelope, previous)
+        except Exception:
+            _logger.warning(
+                "IncidentStateMachine persist callback failed for incident_key=%s state=%s → %s",
+                new_envelope.incident_key,
+                previous.value,
+                target.value,
+                exc_info=True,
+            )
 
     @staticmethod
     def is_terminal(state: IncidentState) -> bool:

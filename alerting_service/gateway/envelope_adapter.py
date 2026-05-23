@@ -18,20 +18,21 @@ Codex SSOT: ``codex/04-architecture/incident-gateway-state-machine.md``
 from __future__ import annotations
 
 import logging
-import os
 from datetime import UTC, datetime
-from typing import Any
 
+from pydantic import BaseModel
 from unified_api_contracts.alerting import AlertSeverity
 from unified_api_contracts.incident import IncidentEnvelope, IncidentState
+from unified_trading_library import UnifiedCloudConfig
 
 from alerting_service.gateway.dedup import compute_incident_key
 
 _logger = logging.getLogger(__name__)
+_cfg = UnifiedCloudConfig()
 
 
 def wrap_legacy_alert(
-    payload: dict[str, Any] | Any,
+    payload: dict[str, object] | BaseModel,
     *,
     fallback_service: str = "unknown",
     fallback_environment: str | None = None,
@@ -53,16 +54,13 @@ def wrap_legacy_alert(
         config_hash: Stamped on envelope. Best-effort from caller.
     """
     # Normalise to dict
-    if hasattr(payload, "model_dump"):
-        body: dict[str, Any] = payload.model_dump()
-    elif isinstance(payload, dict):
-        body = dict(payload)
+    if isinstance(payload, BaseModel):
+        body: dict[str, object] = dict(payload.model_dump())
     else:
-        # Defensive: stringify unknown types to a payload field
-        body = {"problem_summary": str(payload)}
+        body = dict(payload)
 
     # Closed-set environment fallback
-    env = body.get("environment") or fallback_environment or os.environ.get("ENVIRONMENT") or "prod"
+    env = body.get("environment") or fallback_environment or _cfg.environment or "prod"
     if env not in ("prod", "staging", "dev"):
         env = "prod"
 
@@ -73,7 +71,9 @@ def wrap_legacy_alert(
     # Required fields with defaults
     service = body.get("service") or fallback_service
     component = body.get("component") or "legacy"
-    problem_type = body.get("event") or body.get("event_name") or body.get("problem_type") or "LEGACY_ALERT"
+    problem_type = (
+        body.get("event") or body.get("event_name") or body.get("problem_type") or "LEGACY_ALERT"
+    )
     problem_summary = body.get("message") or body.get("problem_summary") or str(problem_type)
 
     # Optional scope fields
@@ -114,7 +114,7 @@ def wrap_legacy_alert(
     )
 
 
-def _normalize_severity(value: Any) -> AlertSeverity:
+def _normalize_severity(value: object) -> AlertSeverity:
     """Map legacy severity strings (critical / warning / info / etc) to
     AlertSeverity. Unknown → WARN (safe default)."""
     if value is None:

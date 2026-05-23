@@ -16,9 +16,9 @@ from __future__ import annotations
 import heapq
 import logging
 import threading
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Iterator
 
 from unified_api_contracts.incident import IncidentEnvelope
 
@@ -36,9 +36,13 @@ class AuditAckQueueEntry:
     """AlertSeverity.value at incident time."""
 
 
-@dataclass
+@dataclass(order=True)
 class _PrioritizedEntry:
-    """Internal heap entry — orders by due_at ascending (earliest first)."""
+    """Internal heap entry — orders by due_at ascending (earliest first).
+
+    ``order=True`` makes ``<`` compare on ``sort_key`` alone (``entry`` is
+    ``compare=False``), which heapq requires once the heap holds 2+ items.
+    """
 
     sort_key: float  # POSIX seconds since epoch
     entry: AuditAckQueueEntry = field(compare=False)
@@ -138,6 +142,11 @@ class AuditAckQueue:
                 # Stale; skip.
                 heapq.heappop(self._heap)
             return None
+
+    def pending_keys(self) -> list[str]:
+        """Snapshot of incident_keys currently awaiting audit-ack (unordered)."""
+        with self._lock:
+            return list(self._by_key.keys())
 
     def size(self) -> int:
         with self._lock:

@@ -17,11 +17,10 @@ from __future__ import annotations
 import asyncio
 import logging
 import subprocess
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Callable
 
 import httpx
-
 from unified_api_contracts.incident import IncidentEnvelope, IncidentEvidence
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -41,7 +40,7 @@ key for ``additional_evidence``.
 
 
 @dataclass
-class EvidenceCollectorConfig:
+class EvidenceCollectorConfig:  # CORRECT-LOCAL: internal collector config type
     """Per-service HTTP endpoints to call for evidence collection.
 
     Each entry: ``service_name -> base_url``. Collector POSTs to
@@ -103,9 +102,7 @@ class EvidenceCollector:
             **fields,
         )
 
-    async def _fanout_evidence_capture(
-        self, incident_key: str
-    ) -> list[tuple[str, str]]:
+    async def _fanout_evidence_capture(self, incident_key: str) -> list[tuple[str, str]]:
         async def _capture_one(service: str, base_url: str) -> tuple[str, str] | None:
             url = f"{base_url.rstrip('/')}/evidence/{incident_key}"
             try:
@@ -121,13 +118,13 @@ class EvidenceCollector:
                         return (str(et), str(url_v))
                 _logger.warning(
                     "Evidence capture from %s returned %d: %s",
-                    service, resp.status_code, resp.text[:200],
+                    service,
+                    resp.status_code,
+                    resp.text[:200],
                 )
                 return None
             except (httpx.HTTPError, httpx.TimeoutException) as exc:
-                _logger.warning(
-                    "Evidence capture from %s failed: %s", service, repr(exc)[:200]
-                )
+                _logger.warning("Evidence capture from %s failed: %s", service, repr(exc)[:200])
                 return None
 
         tasks = [
@@ -142,7 +139,10 @@ class EvidenceCollector:
         try:
             r = subprocess.run(
                 ["git", "-C", repo_path, "rev-parse", "--short", "HEAD"],
-                capture_output=True, text=True, timeout=5, check=True,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=True,
             )
             return r.stdout.strip()
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):

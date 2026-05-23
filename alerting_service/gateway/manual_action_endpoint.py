@@ -16,17 +16,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
-import subprocess
 import time
 import uuid
 from collections import defaultdict, deque
-from datetime import UTC, datetime
-from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
-
 from unified_api_contracts.incident import (
     ActionProvenance,
     ActionType,
@@ -60,10 +55,12 @@ _CONFIRM_STRING_TEMPLATES: dict[ActionType, str] = {
 
 
 # ── Operator authz allowlist (closed set; SSOT here for Phase 1) ──────────
-_OPERATOR_ALLOWLIST: frozenset[str] = frozenset({
-    "ikenna@odum-research.com",
-    "harsh@odum-research.com",
-})
+_OPERATOR_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        "ikenna@odum-research.com",
+        "harsh@odum-research.com",
+    }
+)
 
 
 # ── Rate-limit: 1 action per 10s per operator ────────────────────────────
@@ -93,13 +90,13 @@ def _expected_confirm_string(action_type: ActionType, scope: dict[str, str]) -> 
         raise HTTPException(
             status_code=400,
             detail=f"Scope missing required key for {action_type.value}: {exc.args[0]}",
-        )
+        ) from exc
 
 
 # ── Request / Response schemas ────────────────────────────────────────────
 
 
-class ManualActionRequest(BaseModel):
+class ManualActionRequest(BaseModel):  # CORRECT-LOCAL: HTTP request DTO for /manual-action
     """Operator-initiated Layer-0 action request from DART Safety Ops tab."""
 
     action_type: ActionType
@@ -119,7 +116,7 @@ class ManualActionRequest(BaseModel):
     dry_run: bool = False
 
 
-class ManualActionResponse(BaseModel):
+class ManualActionResponse(BaseModel):  # CORRECT-LOCAL: HTTP response DTO for /manual-action
     ok: bool
     incident_key: str
     action_event_id: str
@@ -150,7 +147,9 @@ async def post_manual_action(request: ManualActionRequest) -> ManualActionRespon
     """
     # 1. Authz
     if request.operator_id not in _OPERATOR_ALLOWLIST:
-        raise HTTPException(status_code=403, detail=f"Operator {request.operator_id} not on Safety Ops allowlist")
+        raise HTTPException(
+            status_code=403, detail=f"Operator {request.operator_id} not on Safety Ops allowlist"
+        )
 
     # 2. Rate-limit
     if not _check_rate_limit(request.operator_id):
@@ -199,8 +198,11 @@ async def post_manual_action(request: ManualActionRequest) -> ManualActionRespon
 
     _logger.info(
         "Manual action: operator=%s action=%s scope=%s incident_key=%s dry_run=%s",
-        request.operator_id, request.action_type.value, request.scope,
-        incident_key, request.dry_run,
+        request.operator_id,
+        request.action_type.value,
+        request.scope,
+        incident_key,
+        request.dry_run,
     )
 
     # 5. Invoke in subprocess (DOES NOT use shell — argv list).
@@ -212,9 +214,9 @@ async def post_manual_action(request: ManualActionRequest) -> ManualActionRespon
     )
     try:
         _, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=120)
-    except asyncio.TimeoutError:
+    except TimeoutError as exc:
         proc.kill()
-        raise HTTPException(status_code=504, detail="Layer-0 script exceeded 120s timeout")
+        raise HTTPException(status_code=504, detail="Layer-0 script exceeded 120s timeout") from exc
 
     stderr = stderr_b.decode("utf-8", errors="replace") if stderr_b else ""
     return ManualActionResponse(

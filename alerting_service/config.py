@@ -58,23 +58,38 @@ class AlertingSystemConfig(UnifiedCloudConfig):
     twilio_account_sid: str = Field(default="", description="Twilio account SID (from SM)")
     twilio_auth_token: str = Field(
         default="",
-        description="Twilio auth token (from SM). NEVER LOG — httpx silenced in notifiers/twilio_voice.py + twilio_sms.py.",
+        description=(
+            "Twilio auth token (from SM). NEVER LOG — httpx silenced in "
+            "notifiers/twilio_voice.py + twilio_sms.py."
+        ),
     )
-    twilio_from_number: str = Field(default="", description="Twilio-owned voice-capable phone number (E.164)")
+    twilio_from_number: str = Field(
+        default="", description="Twilio-owned voice-capable phone number (E.164)"
+    )
     twilio_to_number_primary: str = Field(default="", description="Primary on-call mobile (E.164)")
-    twilio_to_number_secondary: str = Field(default="", description="Secondary on-call mobile (E.164)")
-    twilio_to_number_founder: str = Field(default="", description="Founder mobile (E.164) for SLA-breach escalation")
+    twilio_to_number_secondary: str = Field(
+        default="", description="Secondary on-call mobile (E.164)"
+    )
+    twilio_to_number_founder: str = Field(
+        default="", description="Founder mobile (E.164) for SLA-breach escalation"
+    )
     # ── Layer-4 physical pager (added 2026-05-23) ─────────────────────────
     # Per `plans/active/physical_pager_research_and_webhook_prototype_2026_05_23.md`.
     # Operator buys device + populates SM (see ping doc item #2). Until then,
     # vendor_name is empty + the notifier no-ops with a warning log.
     physical_pager_vendor_name: str = Field(
         default="",
-        description="Closed set: WEBHOOK | GSM_SIREN (see notifiers/physical_pager.py). Empty = no-op.",
+        description=(
+            "Closed set: WEBHOOK | GSM_SIREN (see notifiers/physical_pager.py). Empty = no-op."
+        ),
     )
-    physical_pager_endpoint_url: str = Field(default="", description="Vendor-specific webhook URL or SMS-trigger endpoint")
+    physical_pager_endpoint_url: str = Field(
+        default="", description="Vendor-specific webhook URL or SMS-trigger endpoint"
+    )
     physical_pager_auth_header: str = Field(default="", description="Optional auth header value")
-    physical_pager_to_number: str = Field(default="", description="For SMS-trigger devices (e.g. GSM_SIREN)")
+    physical_pager_to_number: str = Field(
+        default="", description="For SMS-trigger devices (e.g. GSM_SIREN)"
+    )
     routing_rules: list[dict[str, object]] = Field(default_factory=_default_routing_rules)
     quietness_baseline_mode: bool = Field(
         default=False,

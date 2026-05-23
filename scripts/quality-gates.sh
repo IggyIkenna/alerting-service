@@ -13,6 +13,16 @@ MIN_COVERAGE=76  # ISS-031: lowered from 89 — mock_data_provider, orchestrator
 RUN_INTEGRATION=false
 PYTEST_WORKERS=${PYTEST_WORKERS:-2}
 LOCAL_DEPS=()
+# Architectural exception (QUALITY_GATE_BYPASS_AUDIT.md §2.1): defence-in-depth
+# broad `except Exception:` in recovery/notifier code that MUST never propagate
+# (a failed pager/persist must not crash the incident pipeline). Every catch logs
+# via `logger.warning(..., exc_info=True)` — exceptions are recorded, not swallowed.
+BE_EXCLUDE_GLOBS=(
+    "alerting_service/gateway/provider_health_probe.py"
+    "alerting_service/gateway/state_machine.py"
+    "alerting_service/notifiers/incident_fallback.py"
+    "alerting_service/notifiers/physical_pager.py"
+)
 PIP_AUDIT_EXTRA_ARGS="--ignore-vuln CVE-2026-34073 --ignore-vuln CVE-2026-25645 --ignore-vuln CVE-2026-39892 --ignore-vuln CVE-2026-28684 --ignore-vuln CVE-2026-3219 --ignore-vuln CVE-2026-6357 --ignore-vuln CVE-2026-44431 --ignore-vuln CVE-2026-44432 --ignore-vuln PYSEC-2024-277 --ignore-vuln PYSEC-2025-183 --ignore-vuln PYSEC-2026-161 --ignore-vuln PYSEC-2026-120"
 if [ "${CLOUD_BUILD:-}" = "true" ] && [ -d "/workspace/unified-trading-pm" ]; then
     WORKSPACE_ROOT="/workspace"

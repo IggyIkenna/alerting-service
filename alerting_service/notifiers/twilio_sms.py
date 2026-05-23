@@ -13,6 +13,7 @@ import logging
 from dataclasses import dataclass
 
 import httpx
+from pydantic import BaseModel
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("httpcore").setLevel(logging.WARNING)
@@ -20,6 +21,12 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 _logger = logging.getLogger(__name__)
 
 _TWILIO_API_BASE = "https://api.twilio.com/2010-04-01"
+
+
+class _TwilioApiResponse(BaseModel):  # CORRECT-LOCAL: external Twilio API shape
+    """Subset of the Twilio REST response we read (the message SID)."""
+
+    sid: str | None = None
 
 
 @dataclass(frozen=True)
@@ -70,8 +77,7 @@ def send_twilio_sms(
                 },
             )
         if response.status_code in (200, 201):
-            payload = response.json()
-            message_sid = str(payload.get("sid", "")) or None
+            message_sid = _TwilioApiResponse.model_validate(response.json()).sid
             return TwilioSmsResult(
                 ok=True,
                 message_sid=message_sid,

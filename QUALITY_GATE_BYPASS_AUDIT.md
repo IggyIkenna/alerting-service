@@ -20,12 +20,16 @@ This file documents any quality gate bypasses (e.g. reportAny, E501, file size) 
 
 ## Bypass Register
 
-| ID   | File                                            | Rule                    | Type                    | Reviewed | Justification                                                    |
-| ---- | ----------------------------------------------- | ----------------------- | ----------------------- | -------- | ---------------------------------------------------------------- |
-| §1.1 | `alerting_service/main.py`                      | `asyncio.run() in loop` | False positive          | 2026-03  | Entry point guard pattern; while loop is in a different function |
-| §2.1 | `alerting_service/persistence/storage_store.py` | `except Exception:`     | Architectural exception | 2026-03  | Best-effort persistence; all exceptions logged, not swallowed    |
-| §2.1 | `alerting_service/notifiers/router.py`          | `except Exception:`     | Architectural exception | 2026-03  | Best-effort persistence; all exceptions logged, not swallowed    |
-| §2.1 | `alerting_service/core/alert_store.py`          | `except Exception:`     | Architectural exception | 2026-03  | Best-effort GCS dual-write; exception logged, not swallowed      |
+| ID   | File                                                | Rule                    | Type                    | Reviewed | Justification                                                        |
+| ---- | --------------------------------------------------- | ----------------------- | ----------------------- | -------- | -------------------------------------------------------------------- |
+| §1.1 | `alerting_service/main.py`                          | `asyncio.run() in loop` | False positive          | 2026-03  | Entry point guard pattern; while loop is in a different function     |
+| §2.1 | `alerting_service/persistence/storage_store.py`     | `except Exception:`     | Architectural exception | 2026-03  | Best-effort persistence; all exceptions logged, not swallowed        |
+| §2.1 | `alerting_service/notifiers/router.py`              | `except Exception:`     | Architectural exception | 2026-03  | Best-effort persistence; all exceptions logged, not swallowed        |
+| §2.1 | `alerting_service/core/alert_store.py`              | `except Exception:`     | Architectural exception | 2026-03  | Best-effort GCS dual-write; exception logged, not swallowed          |
+| §2.1 | `alerting_service/gateway/state_machine.py`         | `except Exception:`     | Architectural exception | 2026-05  | Persist callback never blocks a state transition; logged w/ exc_info |
+| §2.1 | `alerting_service/gateway/provider_health_probe.py` | `except Exception:`     | Architectural exception | 2026-05  | Health-probe failures must not crash the cron; logged w/ exc_info    |
+| §2.1 | `alerting_service/notifiers/incident_fallback.py`   | `except Exception:`     | Architectural exception | 2026-05  | Layer-3/4 fallback cascade never propagates; logged w/ exc_info      |
+| §2.1 | `alerting_service/notifiers/physical_pager.py`      | `except Exception:`     | Architectural exception | 2026-05  | Pager dispatch failures never crash the cascade; logged w/ exc_info  |
 
 ## What Counts as a Bypass
 

@@ -14,9 +14,9 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Awaitable, Callable
 
 import httpx
 
@@ -27,7 +27,7 @@ _logger = logging.getLogger(__name__)
 
 
 @dataclass
-class ProbeResult:
+class ProbeResult:  # CORRECT-LOCAL: internal probe result type
     """One probe tick's outcome."""
 
     timestamp: datetime
@@ -45,7 +45,7 @@ class ProbeResult:
 
 
 @dataclass
-class ProbeConfig:
+class ProbeConfig:  # CORRECT-LOCAL: internal probe config type
     pagerduty_service_id: str | None  # None = skip PagerDuty probe
     pagerduty_api_token: str | None
     telegram_bot_token: str | None  # None = skip Telegram probe
@@ -120,7 +120,7 @@ class ProviderHealthProbe:
                 await self.probe_once()
             except asyncio.CancelledError:
                 raise
-            except Exception:  # noqa: BLE001 — defensive: probe never crashes service
+            except Exception:
                 _logger.warning("Provider health probe iteration failed", exc_info=True)
             await asyncio.sleep(interval_seconds)
 
@@ -139,14 +139,18 @@ class ProviderHealthProbe:
         if was != self._fallback_mode and self._on_change is not None:
             try:
                 self._on_change(self._fallback_mode, result)
-            except Exception:  # noqa: BLE001 — defensive
+            except Exception:
                 _logger.warning("on_fallback_change callback failed", exc_info=True)
             _logger.warning(
                 "Alerting provider fallback_mode: %s → %s (probe=%s)",
-                was, self._fallback_mode, result,
+                was,
+                self._fallback_mode,
+                result,
             )
 
-    async def _probe_pagerduty(self, client: httpx.AsyncClient) -> tuple[bool, float | None, str | None]:
+    async def _probe_pagerduty(
+        self, client: httpx.AsyncClient
+    ) -> tuple[bool, float | None, str | None]:
         if not self._cfg.pagerduty_service_id or not self._cfg.pagerduty_api_token:
             return True, None, None  # no PagerDuty configured → not a failure
         url = f"https://api.pagerduty.com/services/{self._cfg.pagerduty_service_id}"
@@ -164,7 +168,9 @@ class ProviderHealthProbe:
         except (httpx.HTTPError, httpx.TimeoutException) as exc:
             return False, (time.monotonic() - t0) * 1000, repr(exc)[:200]
 
-    async def _probe_telegram(self, client: httpx.AsyncClient) -> tuple[bool, float | None, str | None]:
+    async def _probe_telegram(
+        self, client: httpx.AsyncClient
+    ) -> tuple[bool, float | None, str | None]:
         if not self._cfg.telegram_bot_token:
             return True, None, None  # no Telegram configured → not a failure
         url = f"https://api.telegram.org/bot{self._cfg.telegram_bot_token}/getMe"
@@ -174,7 +180,7 @@ class ProviderHealthProbe:
             latency = (time.monotonic() - t0) * 1000
             if resp.status_code == 200:
                 data = resp.json()
-                if data.get("ok") and data.get("result", {}).get("is_bot"):
+                if data.get("ok") and data.get("result", {}).get("is_bot"):  # noqa: qg-empty-fallback
                     return True, latency, None
                 return False, latency, "bot payload invalid"
             return False, latency, f"http {resp.status_code}"
