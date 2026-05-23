@@ -165,6 +165,7 @@ steps:
           -e WORKSPACE_ROOT=/workspace \
           -e RUFF_CACHE_DIR=/tmp/ruff_cache \
           -e COVERAGE_FILE=/tmp/.coverage \
+          -e HOME=/tmp \
           -v /workspace:/workspace:ro \
           asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
           /bin/bash -c "scripts/quality-gates.sh --no-fix --quick"
@@ -244,7 +245,7 @@ steps:
       - "-c"
       - |
         set -e
-        uv pip install --system build twine keyrings.google-artifactregistry-auth
+        pip install --quiet build twine keyrings.google-artifactregistry-auth
         mkdir -p /root/.config/pip
         echo "[global]
         extra-index-url = https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/simple/" \
