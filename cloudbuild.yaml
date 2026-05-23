@@ -139,6 +139,7 @@ steps:
         docker build -f Dockerfile \
           --build-arg PROJECT_ID=$PROJECT_ID \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
+          -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
           .
     waitFor: ["pull-base-image", "ensure-repo", "extract-version", "clone-deps"]
