@@ -147,3 +147,17 @@ def test_live_unknown_incident_404(client: TestClient, monkeypatch: pytest.Monke
     monkeypatch.setattr(safety_ops, "_cfg", _LiveCfg())
     resp = client.post("/safety-ops/incidents/nope/audit-ack")
     assert resp.status_code == 404
+
+
+def test_live_signoff_ingest_dispute_forces_safe_mode(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(safety_ops, "_cfg", _LiveCfg())
+    state = get_gateway_state()
+    state.register_incident(_envelope("inc-sig", state=IncidentState.AUTO_ACTION_SUCCEEDED))
+    body = _signoff("inc-sig", SignoffVerdict.DISPUTE_AUTOMATED_ACTION).model_dump(mode="json")
+    resp = client.post("/safety-ops/signoffs", json=body)
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert payload["verdict"] == "DISPUTE_AUTOMATED_ACTION"
+    assert payload["resulting_state"] == "SAFE_MODE_ACTIVE"

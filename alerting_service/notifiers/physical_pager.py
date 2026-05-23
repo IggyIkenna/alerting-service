@@ -25,7 +25,6 @@ from dataclasses import dataclass
 from typing import ClassVar
 
 import httpx
-
 from unified_api_contracts.alerting import AlertSeverity
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -115,7 +114,7 @@ class PhysicalPagerNotifierWebhook(PhysicalPagerNotifier):
                 try:
                     payload = resp.json()
                     message_id = str(payload.get("id") or payload.get("message_id") or "") or None
-                except Exception:  # noqa: BLE001
+                except Exception:
                     message_id = None
                 return PagerNotifierResult(
                     ok=True,
@@ -213,7 +212,6 @@ def get_physical_pager_class(vendor_name: str) -> type[PhysicalPagerNotifier]:
     """Closed-set lookup. Raises KeyError on unknown vendor."""
     if vendor_name not in _REGISTRY:
         raise KeyError(
-            f"Unknown physical-pager vendor {vendor_name!r}; "
-            f"registered: {sorted(_REGISTRY)}"
+            f"Unknown physical-pager vendor {vendor_name!r}; registered: {sorted(_REGISTRY)}"
         )
     return _REGISTRY[vendor_name]

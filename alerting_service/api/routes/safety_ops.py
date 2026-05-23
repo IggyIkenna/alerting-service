@@ -26,6 +26,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from unified_api_contracts.incident import RecoveryAuditSignoff
 
 from alerting_service.config import AlertingSystemConfig
 from alerting_service.gateway.gateway_state import get_gateway_state
@@ -61,6 +62,13 @@ class AckResponse(BaseModel):  # CORRECT-LOCAL: HTTP response DTO for /safety-op
     incident_key: str
     ack_type: str
     acked_at: str
+
+
+class SignoffIngestResponse(BaseModel):  # CORRECT-LOCAL: HTTP response DTO for /safety-ops route
+    ok: bool
+    incident_key: str
+    verdict: str
+    resulting_state: str | None
 
 
 # ── Mock fixtures (deterministic; mirror UI lib/api/mock-handler.ts) ───────
@@ -194,4 +202,27 @@ async def post_audit_ack(incident_key: str, operator_id: str = "operator") -> Ac
         incident_key=incident_key,
         ack_type="audit",
         acked_at=(updated.audit_acked_at or datetime.now(UTC)).isoformat(),
+    )
+
+
+@router.post("/signoffs", response_model=SignoffIngestResponse)
+async def post_signoff(signoff: RecoveryAuditSignoff) -> SignoffIngestResponse:
+    """Ingest a RecoveryAuditSignoff from the LLM recovery-audit agent + drive the
+    verdict-mandated gateway reaction (DISPUTE → SAFE_MODE+SEV0; ESCALATE → 1h ack).
+
+    Mock mode records the verdict but takes no state action (no live incident registry).
+    """
+    if _cfg.is_mock_mode():
+        return SignoffIngestResponse(
+            ok=True,
+            incident_key=signoff.parent_incident_key,
+            verdict=signoff.verdict.value,
+            resulting_state=None,
+        )
+    updated = get_gateway_state().process_signoff(signoff)
+    return SignoffIngestResponse(
+        ok=updated is not None,
+        incident_key=signoff.parent_incident_key,
+        verdict=signoff.verdict.value,
+        resulting_state=updated.state.value if updated is not None else None,
     )

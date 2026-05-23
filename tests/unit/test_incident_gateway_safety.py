@@ -175,6 +175,49 @@ def test_gateway_state_audit_ack_clears_queue() -> None:
     assert state.pending_audit_ack() == []
 
 
+# ── Verdict-driven gateway reactions ─────────────────────────────────────────
+
+
+def test_dispute_forces_safe_mode_and_sev0() -> None:
+    state = GatewayState()
+    # Incident sitting in AUTO_ACTION_SUCCEEDED (LLM disputes a "successful" auto-action).
+    state.register_incident(_envelope("inc-d", state=IncidentState.AUTO_ACTION_SUCCEEDED))
+    result = state.process_signoff(_signoff("inc-d", SignoffVerdict.DISPUTE_AUTOMATED_ACTION))
+    assert result is not None
+    # Forced through RECOVERY_VERIFICATION_STARTED → RECOVERY_UNCERTAIN → SAFE_MODE_ACTIVE.
+    assert result.state is IncidentState.SAFE_MODE_ACTIVE
+    assert result.severity_hint is AlertSeverity.CRITICAL
+    assert any(
+        h.get("event") == "DISPUTE_FORCED_SAFE_MODE" for h in result.audit_ack_escalation_history
+    )
+
+
+def test_escalate_to_human_shortens_ack_window() -> None:
+    state = GatewayState()
+    far_due = datetime.now(UTC) + timedelta(hours=6)
+    state.register_incident(_envelope("inc-e", audit_ack_due_at=far_due))
+    result = state.process_signoff(_signoff("inc-e", SignoffVerdict.ESCALATE_TO_HUMAN))
+    assert result is not None
+    assert result.human_operational_ack_required is True
+    # New deadline is ~1h out, well before the original 6h.
+    assert result.audit_ack_due_at is not None and result.audit_ack_due_at < far_due
+
+
+def test_approved_does_not_transition_or_clear_queue() -> None:
+    state = GatewayState()
+    state.register_incident(_envelope("inc-a", state=IncidentState.AUTO_ACTION_SUCCEEDED))
+    result = state.process_signoff(_signoff("inc-a", SignoffVerdict.APPROVED))
+    assert result is not None
+    # APPROVED is informational — no forced transition, incident stays awaiting human ack.
+    assert result.state is IncidentState.AUTO_ACTION_SUCCEEDED
+    assert state.audit_ack_queue.size() == 1
+
+
+def test_process_signoff_unknown_incident_returns_none() -> None:
+    state = GatewayState()
+    assert state.process_signoff(_signoff("nope", SignoffVerdict.APPROVED)) is None
+
+
 # ── Fallback cascade (route_incident_envelope_to_fallbacks) ──────────────────
 
 
