@@ -165,13 +165,19 @@ def _verify_kill_switch_propagation(*, verbose: bool = False) -> int:
     reset_kill_switch_bus()
 
     if failures == 0:
-        log.info("=== RESULT: PASS (%d/%d kill-switch codes verified) ===", len(_kill_switch_cases), len(_kill_switch_cases))
+        log.info(
+            "=== RESULT: PASS (%d/%d kill-switch codes verified) ===",
+            len(_kill_switch_cases),
+            len(_kill_switch_cases),
+        )
         log.info(
             "In-process KillSwitchBus propagation verified. "
             "For full end-to-end (execution-service halt), run on live alerting-service VM."
         )
     else:
-        log.error("=== RESULT: FAIL (%d/%d assertions failed) ===", failures, len(_kill_switch_cases))
+        log.error(
+            "=== RESULT: FAIL (%d/%d assertions failed) ===", failures, len(_kill_switch_cases)
+        )
 
     return 1 if failures else 0
 
@@ -185,11 +191,16 @@ def _list_codes() -> None:
 def main() -> None:
     setup_events(service_name="alerting-service", mode="local")
 
-    parser = argparse.ArgumentParser(description="Inject synthetic DefiAlerts for Phase 8 rehearsal.")
+    parser = argparse.ArgumentParser(
+        description="Inject synthetic DefiAlerts for Phase 8 rehearsal."
+    )
     parser.add_argument(
         "--code",
         metavar="CODE",
-        help="Inject a single AlertCode value (e.g. KILL_SWITCH_DEFI_LIQUIDATION_RISK). Omit to inject all codes.",
+        help=(
+            "Inject a single AlertCode value (e.g. KILL_SWITCH_DEFI_LIQUIDATION_RISK). "
+            "Omit to inject all codes."
+        ),
     )
     parser.add_argument("--list", action="store_true", help="List all AlertCode values and exit.")
     parser.add_argument(
