@@ -30,6 +30,7 @@ from functools import lru_cache
 from typing import cast, get_args
 
 from unified_api_contracts import LIVE_ALERT_RULES, AlertRule, KillSwitchScope
+from unified_api_contracts.incident import IncidentEnvelope
 from unified_trading_library import (
     classify_and_emit_error,
     get_kill_switch_bus,
@@ -777,15 +778,61 @@ def _deliver_to_channels(
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# IncidentEnvelope-aware routing (Tier-2 follow-up 2026-05-23)
+# IncidentEnvelope-aware routing (typed entry point — Phase 1 P0.1)
 # ──────────────────────────────────────────────────────────────────────────
 #
-# Additive surface — does NOT touch existing _deliver_message() path.
-# New gateway state machine emits IncidentEnvelope; this helper handles the
-# Tier-3 + Tier-4 fallback channels (Twilio voice/SMS + physical pager)
-# that the existing dict-shape path doesn't know about.
+# Typed entry point for the Incident Gateway state machine. Existing dict-
+# shape callers (error_event_handler, dr_event_handler, etc.) continue to use
+# route_event() unchanged — this function is the NEW canonical path for
+# gateway-originated alerts.
 #
-# Existing Telegram + PagerDuty routing for legacy dict-shape events stays
-# unchanged. The full router refactor (consuming IncidentEnvelope directly +
-# dropping the dict path) is DEFERRED to a separate commit pending Harsh
-# pair-review on the rollout-sequencing.
+# Design: route_incident() normalises IncidentEnvelope to the standard
+# (event_name, details) shape and delegates to the existing routing machinery
+# (dedup, coalesce, config rules, kill-switch hook). This guarantees that
+# typed incidents share the same audit trail + dedup window + channel
+# selection as legacy dict-shape events.
+
+
+def route_incident(envelope: IncidentEnvelope) -> None:
+    """Route an IncidentEnvelope through the notifier chain.
+
+    Typed entry point for the Incident Gateway state machine. Uses
+    ``envelope.problem_type`` as the routing key (matched against
+    ``AlertingSystemConfig.routing_rules`` fnmatch patterns); builds a
+    structured details dict so the delivery record captures the full
+    incident context.
+
+    Falls back to Telegram via the standard routing path. KILL_SWITCH_*
+    problem_types continue to trigger the kill-switch publisher hook.
+
+    Args:
+        envelope: Frozen IncidentEnvelope snapshot from the gateway state machine.
+    """
+    details: dict[str, object] = {
+        "message": envelope.problem_summary,
+        "incident_key": envelope.incident_key,
+        "event_id": envelope.event_id,
+        "service": envelope.service,
+        "component": envelope.component,
+        "severity": envelope.severity_hint.value,
+        "domain": envelope.domain,
+        "environment": envelope.environment,
+        "state": envelope.state.value,
+        "risk_state": envelope.risk_state,
+        "capital_at_risk": envelope.capital_at_risk,
+        "auto_action_allowed": envelope.auto_action_allowed,
+        "source": envelope.service,
+    }
+    # Include optional scope fields when present
+    if envelope.strategy_id is not None:
+        details["strategy_id"] = envelope.strategy_id
+    if envelope.venue is not None:
+        details["venue"] = envelope.venue
+    if envelope.account_id is not None:
+        details["account_id"] = envelope.account_id
+    if envelope.instrument_id is not None:
+        details["instrument"] = envelope.instrument_id
+    if envelope.runbook_id is not None:
+        details["runbook_id"] = envelope.runbook_id
+
+    route_event(envelope.problem_type, details)
