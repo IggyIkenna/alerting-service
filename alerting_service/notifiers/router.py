@@ -29,8 +29,12 @@ from fnmatch import fnmatch
 from functools import lru_cache
 from typing import cast, get_args
 
-from unified_api_contracts import LIVE_ALERT_RULES, AlertRule, KillSwitchScope
-from unified_api_contracts.incident import IncidentEnvelope
+from unified_api_contracts import LIVE_ALERT_RULES, AlertRule, AlertSeverity, KillSwitchScope
+from unified_api_contracts.incident import (
+    ImmediateSev0Override,
+    IncidentEnvelope,
+    IncidentState,
+)
 from unified_trading_library import (
     classify_and_emit_error,
     get_kill_switch_bus,
@@ -40,7 +44,11 @@ from unified_trading_library import (
 from ..config import AlertingSystemConfig
 from ..config_reloaders import get_paging_credentials
 from ..core.dedup import AlertDeduplicator
+from ..gateway.envelope_adapter import wrap_legacy_alert
+from ..gateway.recovery_verifier import RecoveryVerifier
+from ..gateway.state_machine import IncidentStateMachine
 from ..persistence.storage_store import AlertStorageStore
+from .incident_fallback import route_incident_envelope_to_fallbacks
 from .pagerduty import PagerDutySeverity
 from .pagerduty import send_event as pd_send_event
 from .slack import send_message as slack_send_message  # DEPRECATED: use Telegram
@@ -796,18 +804,31 @@ def _deliver_to_channels(
 def route_incident(envelope: IncidentEnvelope) -> None:
     """Route an IncidentEnvelope through the notifier chain.
 
-    Typed entry point for the Incident Gateway state machine. Uses
-    ``envelope.problem_type`` as the routing key (matched against
-    ``AlertingSystemConfig.routing_rules`` fnmatch patterns); builds a
-    structured details dict so the delivery record captures the full
-    incident context.
+    Pre-evaluates ImmediateSev0Override predicates (P0.14) and the
+    AUTO_ACTION_SUCCEEDED recovery-verification gate (P0.13) before
+    dispatching to standard channel routing machinery.
 
-    Falls back to Telegram via the standard routing path. KILL_SWITCH_*
-    problem_types continue to trigger the kill-switch publisher hook.
-
-    Args:
-        envelope: Frozen IncidentEnvelope snapshot from the gateway state machine.
+    Uses ``envelope.problem_type`` as the routing key (fnmatch against
+    ``AlertingSystemConfig.routing_rules``). KILL_SWITCH_* problem_types
+    continue to trigger the kill-switch publisher hook.
     """
+    # P0.14 — ImmediateSev0Override pre-evaluation: any override forces SEV0
+    # routing (Twilio voice + physical pager) regardless of severity_hint.
+    sev0_overrides = _extract_sev0_overrides(envelope)
+    if sev0_overrides:
+        _dispatch_sev0_fallbacks(envelope, sev0_overrides)
+
+    # P0.13 — AUTO_ACTION_SUCCEEDED gate: must go through recovery_verifier
+    # before routing. Function handles state transitions + recursive routing.
+    if envelope.state is IncidentState.AUTO_ACTION_SUCCEEDED:
+        _handle_auto_action_recovery(envelope)
+        return
+
+    _route_envelope_to_channels(envelope)
+
+
+def _route_envelope_to_channels(envelope: IncidentEnvelope) -> None:
+    """Build details dict from envelope and dispatch to route_event()."""
     details: dict[str, object] = {
         "message": envelope.problem_summary,
         "incident_key": envelope.incident_key,
@@ -823,7 +844,6 @@ def route_incident(envelope: IncidentEnvelope) -> None:
         "auto_action_allowed": envelope.auto_action_allowed,
         "source": envelope.service,
     }
-    # Include optional scope fields when present
     if envelope.strategy_id is not None:
         details["strategy_id"] = envelope.strategy_id
     if envelope.venue is not None:
@@ -834,5 +854,142 @@ def route_incident(envelope: IncidentEnvelope) -> None:
         details["instrument"] = envelope.instrument_id
     if envelope.runbook_id is not None:
         details["runbook_id"] = envelope.runbook_id
-
     route_event(envelope.problem_type, details)
+
+
+# ── P0.14 — ImmediateSev0Override helpers ─────────────────────────────────
+
+
+def _extract_sev0_overrides(envelope: IncidentEnvelope) -> tuple[str, ...]:
+    """Return (problem_type,) if it is a closed-set ImmediateSev0Override; else ()."""
+    try:
+        ImmediateSev0Override(envelope.problem_type)
+        return (envelope.problem_type,)
+    except ValueError:
+        return ()
+
+
+def _dispatch_sev0_fallbacks(envelope: IncidentEnvelope, overrides: tuple[str, ...]) -> None:
+    """Fire Twilio voice + physical pager for a SEV0 override. Never raises."""
+    result = route_incident_envelope_to_fallbacks(envelope, immediate_sev0_overrides=overrides)
+    log_event(
+        "SEV0_OVERRIDE_DISPATCHED",
+        details={
+            "incident_key": envelope.incident_key,
+            "override": overrides[0] if overrides else "",
+            "twilio_voice": result.get("twilio_voice"),
+            "physical_pager": result.get("physical_pager"),
+        },
+    )
+
+
+# ── P0.13 — AUTO_ACTION_SUCCEEDED recovery-verification gate ──────────────
+
+_recovery_verifier_singleton: object | None = None
+_state_machine_singleton: object | None = None
+
+
+def _get_recovery_verifier() -> object:
+    """Return lazy-initialised module-level RecoveryVerifier."""
+    global _recovery_verifier_singleton
+    if _recovery_verifier_singleton is None:
+        _recovery_verifier_singleton = RecoveryVerifier()
+    return _recovery_verifier_singleton
+
+
+def _get_incident_state_machine() -> object:
+    """Return lazy-initialised module-level IncidentStateMachine."""
+    global _state_machine_singleton
+    if _state_machine_singleton is None:
+        _state_machine_singleton = IncidentStateMachine()
+    return _state_machine_singleton
+
+
+_SEV_LADDER: tuple[AlertSeverity, ...] = (
+    AlertSeverity.INFO,
+    AlertSeverity.WARN,
+    AlertSeverity.HIGH,
+    AlertSeverity.CRITICAL,
+)
+
+
+def _escalate_severity(severity: AlertSeverity) -> AlertSeverity:
+    """Bump severity one tier up; CRITICAL stays CRITICAL."""
+    idx = _SEV_LADDER.index(severity) if severity in _SEV_LADDER else 0
+    return _SEV_LADDER[min(idx + 1, len(_SEV_LADDER) - 1)]
+
+
+def _handle_auto_action_recovery(
+    envelope: IncidentEnvelope,
+    *,
+    _sm: object | None = None,
+    _verifier: object | None = None,
+) -> None:
+    """Drive state machine through recovery-verification gate.
+
+    AUTO_ACTION_SUCCEEDED → RECOVERY_VERIFICATION_STARTED
+        → RECOVERY_CONFIRMED (all 5 checks pass) → route; OR
+        → RECOVERY_UNCERTAIN (any check fails) → escalate severity + route
+
+    ``_sm`` / ``_verifier`` are test-injection points; production code always
+    passes None (uses module-level singletons).
+    """
+    sm = cast(
+        "IncidentStateMachine",
+        _sm if _sm is not None else _get_incident_state_machine(),
+    )
+    verifier = cast(
+        "RecoveryVerifier",
+        _verifier if _verifier is not None else _get_recovery_verifier(),
+    )
+
+    verif_result = sm.transition(envelope, IncidentState.RECOVERY_VERIFICATION_STARTED)
+    if not verif_result.succeeded:
+        logger.warning(
+            "AUTO_ACTION_SUCCEEDED→RECOVERY_VERIFICATION_STARTED failed: %s incident=%s",
+            verif_result.failure_reason,
+            envelope.incident_key,
+        )
+        return
+
+    verif_env = verif_result.envelope
+    scope: dict[str, str] = {}
+    if verif_env.strategy_id:
+        scope["strategy_id"] = verif_env.strategy_id
+    if verif_env.venue:
+        scope["venue"] = verif_env.venue
+
+    rv = verifier.verify(verif_env.incident_key, scope)
+    if rv.all_passed():
+        confirmed = sm.transition(verif_env, IncidentState.RECOVERY_CONFIRMED)
+        if confirmed.succeeded:
+            _route_envelope_to_channels(confirmed.envelope)
+    else:
+        reasons = ", ".join(rv.failure_reasons) or "recovery checks failed"
+        uncertain = sm.transition(
+            verif_env,
+            IncidentState.RECOVERY_UNCERTAIN,
+            severity_hint=_escalate_severity(verif_env.severity_hint),
+        )
+        if uncertain.succeeded:
+            logger.warning("Recovery UNCERTAIN for incident=%s: %s", envelope.incident_key, reasons)
+            _route_envelope_to_channels(uncertain.envelope)
+
+
+# ── P0.12 — Backward-compat shim ──────────────────────────────────────────
+
+
+def route_legacy_alert(
+    payload: "dict[str, object] | object",
+    *,
+    fallback_service: str = "unknown",
+) -> None:
+    """Wrap a legacy raw-alert dict (or Pydantic model) into an IncidentEnvelope
+    and route it via ``route_incident()``.
+
+    Emitters that pre-date the Tier-1 UAC schemas continue to call
+    ``route_event()`` directly; this shim lets callers migrate to the typed
+    path without a big-bang refactor on the emitter side.
+    """
+    envelope = wrap_legacy_alert(payload, fallback_service=fallback_service)
+    route_incident(envelope)

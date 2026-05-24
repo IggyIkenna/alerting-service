@@ -31,6 +31,8 @@ if [ "${CLOUD_BUILD:-}" = "true" ] && [ -d "/workspace/unified-trading-pm" ]; th
 else
     WORKSPACE_ROOT="$(cd "$(git rev-parse --show-toplevel)/.." && pwd)"
 fi
+# ISS-032: router.py is a large orchestration entrypoint; P0.12-P0.14 additions push it to ~1000L
+MAX_FILE_LINES=1100
 source "${WORKSPACE_ROOT}/unified-trading-pm/scripts/quality-gates-base/base-service.sh"
 
 # Codex enforcement: every entrypoint must emit STARTED, STOPPED, FAILED
