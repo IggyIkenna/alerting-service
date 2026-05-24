@@ -21,6 +21,7 @@ BE_EXCLUDE_GLOBS=(
     "alerting_service/gateway/provider_health_probe.py"
     "alerting_service/gateway/state_machine.py"
     "alerting_service/gateway/ack_escalation.py"
+    "alerting_service/gateway/incident_persister.py"
     "alerting_service/notifiers/incident_fallback.py"
     "alerting_service/notifiers/physical_pager.py"
 )
