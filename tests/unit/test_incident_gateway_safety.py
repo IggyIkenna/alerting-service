@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 from unified_api_contracts.alerting import AlertSeverity
 from unified_api_contracts.incident import (
+    ActionType,
     IncidentEnvelope,
     IncidentState,
     RecoveryAuditSignoff,
@@ -100,6 +101,74 @@ def test_expected_confirm_string_helper() -> None:
     assert mae.expected_confirm_string(mae.ActionType.CANCEL_OPEN_ORDERS, {"venue": "binance"}) == (
         "CANCEL_ALL_binance"
     )
+
+
+# ── P0.12: every action_type x scope combo — registry completeness + typo rejection ──
+
+
+_ALL_ACTION_COMBOS: list[tuple[ActionType, dict[str, str], str]] = [
+    (ActionType.RESTART_SERVICE, {"service": "execution-service"}, "RESTART_execution-service"),
+    (
+        ActionType.RESTART_CONTAINER,
+        {"container": "strategy-live-01"},
+        "RESTART_CONTAINER_strategy-live-01",
+    ),
+    (
+        ActionType.REDEPLOY_KNOWN_GOOD,
+        {"service": "execution-service", "to_revision": "abc123"},
+        "REDEPLOY_execution-service_to_abc123",
+    ),
+    (ActionType.RESIZE_MACHINE_AFTER_OOM, {"vm": "strategy-live-01"}, "RESIZE_strategy-live-01"),
+    (
+        ActionType.FAILOVER_FEED,
+        {"venue": "binance", "primary": "feed-1", "backup": "feed-2"},
+        "FAILOVER_binance_feed-1_to_feed-2",
+    ),
+    (ActionType.PAUSE_STRATEGY, {"strategy": "carry_staked_basis"}, "PAUSE_carry_staked_basis"),
+    (ActionType.CANCEL_OPEN_ORDERS, {"venue": "binance"}, "CANCEL_ALL_binance"),
+    (ActionType.DISABLE_VENUE, {"venue": "bybit"}, "DISABLE_bybit"),
+    (
+        ActionType.ENTER_SAFE_MODE,
+        {"strategy": "arbitrage_price_dispersion"},
+        "SAFE_MODE_arbitrage_price_dispersion",
+    ),
+    (
+        ActionType.ENTER_READONLY_RECON_MODE,
+        {"service": "strategy-service"},
+        "READONLY_strategy-service",
+    ),
+]
+
+
+def test_confirm_string_registry_covers_all_action_types() -> None:
+    """Every ActionType member must have a template — registry completeness guard."""
+    for action_type in ActionType:
+        assert action_type in mae._CONFIRM_STRING_TEMPLATES, (
+            f"No confirm-string template for {action_type}"
+        )
+
+
+@pytest.mark.parametrize("action_type,scope,expected", _ALL_ACTION_COMBOS)
+def test_expected_confirm_string_all_combos(
+    action_type: ActionType, scope: dict[str, str], expected: str
+) -> None:
+    assert mae.expected_confirm_string(action_type, scope) == expected
+
+
+@pytest.mark.parametrize("action_type,scope,expected", _ALL_ACTION_COMBOS)
+def test_confirm_string_typo_rejected_all_action_types(
+    client: TestClient, action_type: ActionType, scope: dict[str, str], expected: str
+) -> None:
+    body: dict[str, object] = {
+        "action_type": action_type.value,
+        "scope": scope,
+        "reason": "test",
+        "operator_id": "ikenna@odum-research.com",
+        "confirm_string": "WRONG_STRING",
+    }
+    resp = client.post("/admin/manual-action", json=body)
+    assert resp.status_code == 400
+    assert resp.json()["detail"]["expected"] == expected
 
 
 # ── AuditAckQueue internals ──────────────────────────────────────────────────
