@@ -22,17 +22,36 @@ logger = logging.getLogger(__name__)
 _SM_BOT_TOKEN = "alerting-telegram-bot-token"
 _SM_CHAT_ID = "alerting-telegram-chat-id"
 _SM_CHAT_ID_OPS = "alerting-telegram-chat-id-ops"
+# Twilio voice/SMS fallback (Layer-3) — pushed by operator per ping doc item #1
+_SM_TWILIO_ACCOUNT_SID = "alerting-twilio-account-sid"
+_SM_TWILIO_AUTH_TOKEN = "alerting-twilio-auth-token"
+_SM_TWILIO_FROM_NUMBER = "alerting-twilio-from-number"
+_SM_TWILIO_TO_PRIMARY = "alerting-twilio-to-number-primary"
+_SM_TWILIO_TO_SECONDARY = "alerting-twilio-to-number-secondary"
+_SM_TWILIO_TO_FOUNDER = "alerting-twilio-to-number-founder"
+
+_ALL_PAGING_SM_KEYS = (
+    _SM_BOT_TOKEN,
+    _SM_CHAT_ID,
+    _SM_CHAT_ID_OPS,
+    _SM_TWILIO_ACCOUNT_SID,
+    _SM_TWILIO_AUTH_TOKEN,
+    _SM_TWILIO_FROM_NUMBER,
+    _SM_TWILIO_TO_PRIMARY,
+    _SM_TWILIO_TO_SECONDARY,
+    _SM_TWILIO_TO_FOUNDER,
+)
 
 _PAGING_REFRESH_INTERVAL = 300.0  # 5 minutes
 
 
 class _PagingCredentialsReloader:
-    """Periodic SM hot-reload for Telegram paging credentials.
+    """Periodic SM hot-reload for Telegram + Twilio paging credentials.
 
-    Reads ``alerting-telegram-bot-token`` and ``alerting-telegram-chat-id``
-    from GCP Secret Manager every 300 s.  Thread-safe atomic swap.
-    Falls back to empty strings (caller should use env-var values from config)
-    when SM is unavailable or project_id is unset (mock mode).
+    Reads all paging-layer secrets from GCP Secret Manager every 300 s.
+    Thread-safe atomic swap. Falls back to empty strings (caller should use
+    env-var values from config) when SM is unavailable or project_id is
+    unset (mock mode).
     """
 
     def __init__(self, refresh_interval: float = _PAGING_REFRESH_INTERVAL) -> None:
@@ -55,6 +74,30 @@ class _PagingCredentialsReloader:
     def get_chat_id_ops(self) -> str:
         with self._lock:
             return self._credentials.get("chat_id_ops") or ""  # noqa: qg-empty-fallback
+
+    def get_twilio_account_sid(self) -> str:
+        with self._lock:
+            return self._credentials.get("twilio_account_sid") or ""  # noqa: qg-empty-fallback
+
+    def get_twilio_auth_token(self) -> str:
+        with self._lock:
+            return self._credentials.get("twilio_auth_token") or ""  # noqa: qg-empty-fallback
+
+    def get_twilio_from_number(self) -> str:
+        with self._lock:
+            return self._credentials.get("twilio_from_number") or ""  # noqa: qg-empty-fallback
+
+    def get_twilio_to_primary(self) -> str:
+        with self._lock:
+            return self._credentials.get("twilio_to_number_primary") or ""  # noqa: qg-empty-fallback
+
+    def get_twilio_to_secondary(self) -> str:
+        with self._lock:
+            return self._credentials.get("twilio_to_number_secondary") or ""  # noqa: qg-empty-fallback
+
+    def get_twilio_to_founder(self) -> str:
+        with self._lock:
+            return self._credentials.get("twilio_to_number_founder") or ""  # noqa: qg-empty-fallback
 
     def start(self, project_id: str | None) -> None:
         if self._started:
@@ -90,17 +133,23 @@ class _PagingCredentialsReloader:
             return {}
         try:
             client = SecretManagerClient(project_id=self._project_id)
-            raw = client.get_secrets([_SM_BOT_TOKEN, _SM_CHAT_ID, _SM_CHAT_ID_OPS])
+            raw = client.get_secrets(list(_ALL_PAGING_SM_KEYS))
             result: dict[str, str] = {}
-            bot = raw.get(_SM_BOT_TOKEN)
-            chat = raw.get(_SM_CHAT_ID)
-            chat_ops = raw.get(_SM_CHAT_ID_OPS)
-            if bot:
-                result["bot_token"] = bot
-            if chat:
-                result["chat_id"] = chat
-            if chat_ops:
-                result["chat_id_ops"] = chat_ops
+            _mapping = {
+                _SM_BOT_TOKEN: "bot_token",
+                _SM_CHAT_ID: "chat_id",
+                _SM_CHAT_ID_OPS: "chat_id_ops",
+                _SM_TWILIO_ACCOUNT_SID: "twilio_account_sid",
+                _SM_TWILIO_AUTH_TOKEN: "twilio_auth_token",
+                _SM_TWILIO_FROM_NUMBER: "twilio_from_number",
+                _SM_TWILIO_TO_PRIMARY: "twilio_to_number_primary",
+                _SM_TWILIO_TO_SECONDARY: "twilio_to_number_secondary",
+                _SM_TWILIO_TO_FOUNDER: "twilio_to_number_founder",
+            }
+            for sm_key, cred_key in _mapping.items():
+                val = raw.get(sm_key)
+                if val:
+                    result[cred_key] = val
             return result
         except Exception as exc:
             logger.warning("PagingCredentialsReloader: SM fetch failed (keeping old): %s", exc)
@@ -145,13 +194,22 @@ _paging_creds_reloader = _PagingCredentialsReloader()
 def get_paging_credentials() -> dict[str, str]:
     """Return current SM-loaded paging credentials.
 
-    Keys: ``bot_token``, ``chat_id``, ``chat_id_ops`` (last two may be absent).
-    Empty dict when SM is unavailable — caller should fall back to env-var config values.
+    Telegram keys: ``bot_token``, ``chat_id``, ``chat_id_ops``.
+    Twilio keys: ``twilio_account_sid``, ``twilio_auth_token``,
+    ``twilio_from_number``, ``twilio_to_number_primary``,
+    ``twilio_to_number_secondary``, ``twilio_to_number_founder``.
+    Empty string for keys not yet provisioned in SM.
     """
     return {
         "bot_token": _paging_creds_reloader.get_bot_token(),
         "chat_id": _paging_creds_reloader.get_chat_id(),
         "chat_id_ops": _paging_creds_reloader.get_chat_id_ops(),
+        "twilio_account_sid": _paging_creds_reloader.get_twilio_account_sid(),
+        "twilio_auth_token": _paging_creds_reloader.get_twilio_auth_token(),
+        "twilio_from_number": _paging_creds_reloader.get_twilio_from_number(),
+        "twilio_to_number_primary": _paging_creds_reloader.get_twilio_to_primary(),
+        "twilio_to_number_secondary": _paging_creds_reloader.get_twilio_to_secondary(),
+        "twilio_to_number_founder": _paging_creds_reloader.get_twilio_to_founder(),
     }
 
 
