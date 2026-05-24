@@ -2,6 +2,7 @@
 
 Exposes the Incident Gateway's human-facing surface:
 
+- ``POST /safety-ops/incidents``               — inject an IncidentEnvelope (game-day / synthetic).
 - ``GET  /safety-ops/recovery-audit-signoffs`` — last N LLM RecoveryAuditSignoff rows.
 - ``GET  /safety-ops/audit-ack-queue``         — incidents pending human audit-ack.
 - ``POST /safety-ops/incidents/{key}/operational-ack`` — operator clears the operational ack.
@@ -26,7 +27,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from unified_api_contracts.incident import IncidentEnvelope, RecoveryAuditSignoff
+from unified_api_contracts.incident import IncidentEnvelope, RecoveryAuditSignoff, lookup_sla
 
 from alerting_service.config import AlertingSystemConfig
 from alerting_service.gateway.gateway_state import get_gateway_state
@@ -69,6 +70,12 @@ class SignoffIngestResponse(BaseModel):  # CORRECT-LOCAL: HTTP response DTO for 
     incident_key: str
     verdict: str
     resulting_state: str | None
+
+
+class IncidentIngestResponse(BaseModel):  # CORRECT-LOCAL: HTTP response DTO for /safety-ops route
+    ok: bool
+    incident_key: str
+    queued_for_audit_ack: bool
 
 
 # ── Mock fixtures (deterministic; mirror UI lib/api/mock-handler.ts) ───────
@@ -120,6 +127,33 @@ def _mock_audit_ack_queue() -> list[AuditAckRow]:
 
 
 # ── Endpoints ──────────────────────────────────────────────────────────────
+
+
+@router.post("/incidents", response_model=IncidentIngestResponse)
+async def post_incident(envelope: IncidentEnvelope) -> IncidentIngestResponse:
+    """Inject an IncidentEnvelope into the gateway (game-day / synthetic scenarios).
+
+    Stamps ``audit_ack_due_at`` from the SLA policy when ``human_audit_ack_required``
+    and the field is absent. Registers into GatewayState + enqueues for audit-ack.
+    Mock mode accepts the envelope but takes no state action.
+    """
+    if _cfg.is_mock_mode():
+        return IncidentIngestResponse(
+            ok=True,
+            incident_key=envelope.incident_key,
+            queued_for_audit_ack=envelope.human_audit_ack_required,
+        )
+    if envelope.human_audit_ack_required and envelope.audit_ack_due_at is None:
+        sla = lookup_sla(envelope.severity_hint)
+        envelope = envelope.model_copy(
+            update={"audit_ack_due_at": datetime.now(UTC) + timedelta(seconds=sla.default_seconds)}
+        )
+    get_gateway_state().register_incident(envelope)
+    return IncidentIngestResponse(
+        ok=True,
+        incident_key=envelope.incident_key,
+        queued_for_audit_ack=envelope.human_audit_ack_required,
+    )
 
 
 @router.get("/recovery-audit-signoffs", response_model=list[SignoffRow])
@@ -202,29 +236,6 @@ async def post_audit_ack(incident_key: str, operator_id: str = "operator") -> Ac
         incident_key=incident_key,
         ack_type="audit",
         acked_at=(updated.audit_acked_at or datetime.now(UTC)).isoformat(),
-    )
-
-
-@router.post("/incidents", response_model=AckResponse)
-async def post_incident(envelope: IncidentEnvelope) -> AckResponse:
-    """Ingest an IncidentEnvelope into the gateway (services + game-day injectors emit here).
-
-    Registers the latest snapshot + enqueues for audit-ack if it carries a deadline.
-    Mock mode acknowledges without touching the in-memory registry.
-    """
-    if _cfg.is_mock_mode():
-        return AckResponse(
-            ok=True,
-            incident_key=envelope.incident_key,
-            ack_type="registered",
-            acked_at=datetime.now(UTC).isoformat(),
-        )
-    get_gateway_state().register_incident(envelope)
-    return AckResponse(
-        ok=True,
-        incident_key=envelope.incident_key,
-        ack_type="registered",
-        acked_at=datetime.now(UTC).isoformat(),
     )
 
 
