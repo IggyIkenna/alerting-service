@@ -26,7 +26,7 @@ from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from unified_api_contracts.incident import RecoveryAuditSignoff
+from unified_api_contracts.incident import IncidentEnvelope, RecoveryAuditSignoff
 
 from alerting_service.config import AlertingSystemConfig
 from alerting_service.gateway.gateway_state import get_gateway_state
@@ -202,6 +202,29 @@ async def post_audit_ack(incident_key: str, operator_id: str = "operator") -> Ac
         incident_key=incident_key,
         ack_type="audit",
         acked_at=(updated.audit_acked_at or datetime.now(UTC)).isoformat(),
+    )
+
+
+@router.post("/incidents", response_model=AckResponse)
+async def post_incident(envelope: IncidentEnvelope) -> AckResponse:
+    """Ingest an IncidentEnvelope into the gateway (services + game-day injectors emit here).
+
+    Registers the latest snapshot + enqueues for audit-ack if it carries a deadline.
+    Mock mode acknowledges without touching the in-memory registry.
+    """
+    if _cfg.is_mock_mode():
+        return AckResponse(
+            ok=True,
+            incident_key=envelope.incident_key,
+            ack_type="registered",
+            acked_at=datetime.now(UTC).isoformat(),
+        )
+    get_gateway_state().register_incident(envelope)
+    return AckResponse(
+        ok=True,
+        incident_key=envelope.incident_key,
+        ack_type="registered",
+        acked_at=datetime.now(UTC).isoformat(),
     )
 
 
