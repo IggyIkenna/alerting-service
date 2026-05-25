@@ -78,7 +78,6 @@ def wrap_legacy_alert(
 
     # Optional scope fields
     strategy_id = body.get("strategy_id")
-    strategy_family = body.get("strategy_family")
     venue = body.get("venue")
     account_id = body.get("account_id")
     instrument_id = body.get("instrument_id") or body.get("symbol")
@@ -103,7 +102,6 @@ def wrap_legacy_alert(
         service=str(service),
         component=str(component),
         strategy_id=str(strategy_id) if strategy_id else None,
-        strategy_family=str(strategy_family) if strategy_family else None,
         venue=str(venue) if venue else None,
         account_id=str(account_id) if account_id else None,
         instrument_id=str(instrument_id) if instrument_id else None,

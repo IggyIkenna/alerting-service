@@ -32,7 +32,7 @@ class TestRecoveryVerifierNoCallbacks:
     def test_empty_registry_returns_all_true(self):
         verifier = RecoveryVerifier()
         result = verifier.verify("inc-001", {})
-        assert result.all_passed()
+        assert result.all_passed
 
     def test_empty_registry_no_failure_reasons(self):
         verifier = RecoveryVerifier()
@@ -48,7 +48,7 @@ class TestRecoveryVerifierSingleCallback:
         verifier = RecoveryVerifier()
         verifier.register("execution-service", lambda scope: _all_pass())
         result = verifier.verify("inc-001", {"strategy_id": "S1"})
-        assert result.all_passed()
+        assert result.all_passed
         assert result.failure_reasons == ()
 
     def test_failing_callback_propagates_false(self):
@@ -79,7 +79,7 @@ class TestRecoveryVerifierMultipleCallbacks:
         verifier.register("strategy-service", lambda s: _all_pass())
         verifier.register("mtds", lambda s: _all_pass())
         result = verifier.verify("inc-002", {})
-        assert result.all_passed()
+        assert result.all_passed
 
     def test_one_service_fails_positions(self):
         verifier = RecoveryVerifier()
@@ -149,7 +149,7 @@ class TestRecoveryVerifierExceptions:
 
         verifier.register("broken-service", exploding)
         result = verifier.verify("inc-006", {})
-        assert not result.all_passed()
+        assert not result.all_passed
         assert not result.health_checks_passed
         assert "broken-service" in result.failure_reasons[0]
         assert "RuntimeError" in result.failure_reasons[0]
@@ -162,7 +162,7 @@ class TestRecoveryVerifierExceptions:
 
         result = verifier.verify("inc-007", {})
         # broken makes all False; healthy passes its own fields → AND is False for all
-        assert not result.all_passed()
+        assert not result.all_passed
         assert len(result.failure_reasons) >= 1
 
     def test_re_registration_overwrites_old_callback(self):
@@ -171,7 +171,7 @@ class TestRecoveryVerifierExceptions:
         # overwrite with passing callback
         verifier.register("svc", lambda s: _all_pass())
         result = verifier.verify("inc-008", {})
-        assert result.all_passed()
+        assert result.all_passed
 
     def test_registered_services_property(self):
         verifier = RecoveryVerifier()

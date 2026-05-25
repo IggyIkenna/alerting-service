@@ -960,7 +960,7 @@ def _handle_auto_action_recovery(
         scope["venue"] = verif_env.venue
 
     rv = verifier.verify(verif_env.incident_key, scope)
-    if rv.all_passed():
+    if rv.all_passed:
         confirmed = sm.transition(verif_env, IncidentState.RECOVERY_CONFIRMED)
         if confirmed.succeeded:
             _route_envelope_to_channels(confirmed.envelope)
