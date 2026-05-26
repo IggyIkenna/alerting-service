@@ -69,8 +69,7 @@ class TestQGSnapshotStaleTaxonomy:
         """LIVE_ALERT_RULES must contain an entry for QG_SNAPSHOT_STALE."""
         matching = [r for r in LIVE_ALERT_RULES if r.code is AlertCode.QG_SNAPSHOT_STALE]
         assert len(matching) == 1, (
-            f"Expected exactly one AlertRule for QG_SNAPSHOT_STALE"
-            f" in LIVE_ALERT_RULES; found {len(matching)}"
+            f"Expected exactly one AlertRule for QG_SNAPSHOT_STALE in LIVE_ALERT_RULES; found {len(matching)}"
         )
 
     def test_rule_severity_is_high(self) -> None:

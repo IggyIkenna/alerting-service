@@ -96,8 +96,7 @@ def route_incident_envelope_to_fallbacks(
             result["twilio_voice"] = tw_result.ok
             if not tw_result.ok:
                 logger.warning(
-                    "route_incident_envelope_to_fallbacks: Twilio voice FAILED for "
-                    "incident=%s status=%d err=%s",
+                    "route_incident_envelope_to_fallbacks: Twilio voice FAILED for incident=%s status=%d err=%s",
                     getattr(envelope, "incident_key", "?"),
                     tw_result.http_status,
                     (tw_result.error_message or "")[:200],
@@ -136,13 +135,9 @@ def _dispatch_physical_pager(
                 endpoint_url=config.physical_pager_endpoint_url,
                 auth_header_value=config.physical_pager_auth_header or None,
                 to_number=config.physical_pager_to_number,
-                twilio_account_sid=(
-                    sm_creds.get("twilio_account_sid") or config.twilio_account_sid
-                ),
+                twilio_account_sid=(sm_creds.get("twilio_account_sid") or config.twilio_account_sid),
                 twilio_auth_token=(sm_creds.get("twilio_auth_token") or config.twilio_auth_token),
-                twilio_from_number=(
-                    sm_creds.get("twilio_from_number") or config.twilio_from_number
-                ),
+                twilio_from_number=(sm_creds.get("twilio_from_number") or config.twilio_from_number),
             )
         else:
             notifier = pager_cls(
@@ -161,8 +156,7 @@ def _dispatch_physical_pager(
         )
         if not pager_result.ok:
             logger.warning(
-                "route_incident_envelope_to_fallbacks: physical_pager FAILED for "
-                "incident=%s status=%d err=%s",
+                "route_incident_envelope_to_fallbacks: physical_pager FAILED for incident=%s status=%d err=%s",
                 getattr(envelope, "incident_key", "?"),
                 pager_result.http_status,
                 (pager_result.error_message or "")[:200],
