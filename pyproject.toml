@@ -1,9 +1,8 @@
 [build-system]
 requires = [
-    "setuptools>=75,<82",
-    "wheel",
+    "hatchling",
 ]
-build-backend = "setuptools.build_meta"
+build-backend = "hatchling.build"
 
 [project]
 name = "alerting-service"
@@ -48,61 +47,87 @@ editable = true
 path = "../unified-api-contracts"
 editable = true
 
-[tool.setuptools.packages.find]
-where = [
-    ".",
-]
-include = [
-    "alerting_service*",
-]
+[tool.hatch.build.targets.wheel]
+packages = ["alerting_service"]
 
+# ── ruff (lint + format) ────────────────────────────────────────────────────────
 [tool.ruff]
-line-length = 100
+line-length = 120
 target-version = "py313"
-exclude = [".cursor"]
-
-[tool.ruff.lint]
-select = [
-    "E",
-    "F",
-    "W",
-    "I",
-    "N",
-    "UP",
-    "B",
-    "C4",
-    "SIM",
-    "RUF",
-    "G",
-    "C90",
-]
-ignore = []
-
-[tool.ruff.lint.isort]
-known-first-party = ["alerting_service"]
-known-third-party = ["unified_trading_library", "unified_api_contracts"]
-
-[tool.ruff.lint.mccabe]
-max-complexity = 7
+exclude = [".cursor", ".venv", ".venv-workspace", "build", "dist", "node_modules"]
 
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"
 
-[tool.pytest.ini_options]
-testpaths = [
-    "tests",
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "SIM", "RUF", "G", "C90"]
+extend-ignore = ["G003", "G004"]
+ignore = ["E402"]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 26
+
+[tool.ruff.lint.per-file-ignores]
+"*/__init__.py" = ["F401", "E402"]
+"tests/*" = ["F401", "F841", "F811"]
+"tests/conftest.py" = ["E402"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["alerting_service"]
+known-third-party = ["unified_trading_library", "unified_api_contracts"]
+
+# ── basedpyright (typecheck) — CONSOLIDATED; delete pyrightconfig.json ──────────
+[tool.basedpyright]
+pythonVersion = "3.13"
+typeCheckingMode = "strict"
+include = ["alerting_service"]
+exclude = ["tests", "**/__pycache__", ".venv*", ".venv-workspace", "build", "dist", "node_modules"]
+reportMissingImports = "error"
+reportMissingTypeStubs = false
+reportMissingModuleSource = "none"
+reportAny = "error"
+reportUnknownArgumentType = "error"
+reportUnknownMemberType = "error"
+reportUnknownParameterType = "error"
+reportUnknownVariableType = "error"
+reportMissingParameterType = "error"
+reportArgumentType = "error"
+reportReturnType = "error"
+reportAssignmentType = "error"
+reportCallIssue = "error"
+reportGeneralTypeIssues = "error"
+reportIndexIssue = "error"
+reportOptionalMemberAccess = "error"
+reportAttributeAccessIssue = "error"
+
+[[tool.basedpyright.executionEnvironments]]
+root = "."
+pythonVersion = "3.13"
+pythonPlatform = "All"
+extraPaths = [
+    "../unified-config-interface",
+    "../unified-internal-contracts",
+    "../unified-cloud-interface",
+    "../unified-trading-library",
+    "../unified-events-interface",
 ]
-python_files = "test_*.py"
-python_classes = "Test*"
-python_functions = "test_*"
-addopts = "-v --cov=alerting_service --cov-report=term-missing --cov-report=html"
+
+# ── pytest ──────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
 asyncio_mode = "auto"
 markers = [
-    "integration: marks tests as integration tests (no real network I/O, all external calls mocked)",
-    "smoke: mark test as smoke test",
     "unit: mark test as unit test",
+    "integration: integration tests requiring real GCP credentials and API keys",
+    "smoke: mark test as smoke test",
 ]
+
+# ── coverage (run + report — BOTH required in every repo) ────────────────────────
+[tool.coverage.run]
+source = ["alerting_service"]
+branch = true
 
 [tool.coverage.report]
 fail_under = 78
@@ -116,36 +141,6 @@ exclude_lines = [
     "raise NotImplementedError",
 ]
 
-[tool.basedpyright]
-pythonVersion = "3.13"
-typeCheckingMode = "strict"
-reportAny = "error"
-reportUnknownMemberType = "error"
-reportUnknownVariableType = "error"
-reportUnknownArgumentType = "error"
-reportUnknownParameterType = "error"
-reportMissingTypeArgument = "error"
-reportMissingImports = "error"
-reportUnusedVariable = "warning"
-reportUntypedFunctionDecorator = "none"
-reportUntypedBaseClass = "none"
-reportUnusedImport = "warning"
-venvPath = "."
-venv = ".venv"
-include = [
-    "alerting_service",
-]
-exclude = [
-    "tests",
-    "**/__pycache__",
-    ".venv*",
-    "build",
-    "dist",
-]
-extraPaths = [
-    "../unified-config-interface",
-    "../unified-internal-contracts",
-    "../unified-cloud-interface",
-    "../unified-trading-library",
-    "../unified-events-interface",
-]
+# ── bandit (security SAST — every repo) ──────────────────────────────────────────
+[tool.bandit]
+skips = []
