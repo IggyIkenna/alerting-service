@@ -4,7 +4,7 @@
 Verifies that:
   (a) log_event is called with event names that match the required common set
   (b) Required fields (service, environment, timestamp) are present via setup_events
-  (c) The import comes from unified_events_interface (Pattern B — no fallbacks)
+  (c) The import comes from unified_trading_library.events (Pattern B — no fallbacks)
   (d) Service-specific events are present in source code
   (e) MockEventSink is importable and functional
   (f) setup_events signature meets the codex contract
@@ -48,7 +48,7 @@ _EXCLUDE_DIRS = {"tests", ".venv", "venv", "__pycache__", ".git", "examples"}
 
 
 def _find_python_files(service_dir: Path) -> list[Path]:
-    exclude = {"tests", ".venv", "venv", "__pycache__", ".git", "examples"}
+    exclude = {"tests", ".venv", "venv", "__pycache__", ".git", "examples", ".deps", ".cursor"}
     result = []
     for root, dirs, files in os.walk(service_dir, followlinks=False):
         dirs[:] = [d for d in dirs if d not in exclude]
@@ -96,8 +96,7 @@ def test_required_common_events_exist(all_event_markers: set[str]) -> None:
         pytest.skip("No event markers found in source — check service directory")
     missing = set(REQUIRED_COMMON_EVENTS) - all_event_markers
     assert not missing, (
-        f"Missing required common events: {sorted(missing)}\n"
-        "See: unified-trading-codex/06-coding-standards/testing.md"
+        f"Missing required common events: {sorted(missing)}\nSee: unified-trading-codex/06-coding-standards/testing.md"
     )
 
 
@@ -114,24 +113,24 @@ def test_service_specific_events_exist(all_event_markers: set[str]) -> None:
 
 
 def test_event_helper_imported(all_event_markers: set[str]) -> None:
-    """log_event must be imported directly from unified_events_interface.
+    """log_event must be imported directly from unified_trading_library.events.
 
     No try/except ImportError fallbacks are permitted (see no-empty-fallbacks rule).
     """
     if not all_event_markers:
         pytest.skip("No event markers found in source — check service directory")
     for py in _find_python_files(Path.cwd()):
-        if "from unified_events_interface import log_event" in py.read_text():
+        if "from unified_trading_library import log_event" in py.read_text():
             return
     pytest.fail(
-        "log_event not imported from unified_events_interface.\n"
-        "Add: from unified_events_interface import log_event"
+        "log_event not imported from unified_trading_library.events.\n"
+        "Add: from unified_trading_library import log_event"
     )
 
 
 def test_mock_event_sink_importable() -> None:
     """MockEventSink must be importable and expose the required interface."""
-    from unified_events_interface import MockEventSink
+    from unified_trading_library import MockEventSink
 
     sink = MockEventSink()
     assert hasattr(sink, "events"), "MockEventSink missing 'events' attribute"
@@ -147,16 +146,14 @@ def test_setup_events_signature_meets_contract() -> None:
     """
     import inspect
 
-    from unified_events_interface import setup_events
+    from unified_trading_library import setup_events
 
     sig = inspect.signature(setup_events)
     param_names = list(sig.parameters.keys())
     assert "service_name" in param_names, (
         "setup_events missing 'service_name' parameter — required for event field population"
     )
-    assert "mode" in param_names, (
-        "setup_events missing 'mode' parameter — required for event field population"
-    )
+    assert "mode" in param_names, "setup_events missing 'mode' parameter — required for event field population"
 
 
 def test_error_events_exist(all_event_markers: set[str]) -> None:

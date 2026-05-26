@@ -6,7 +6,7 @@ The alerting-service is the system-wide multi-channel alert dispatcher for the u
 
 ## Role in Trading System
 
-- **Depends on**: unified-events-interface (lifecycle/service events), unified-config-interface (UnifiedCloudConfig), unified-internal-contracts (AlertEvent), unified-trading-library (GracefulShutdownHandler, PubSubEventSink, setup_tracing, start_memory_watchdog), unified-cloud-interface (get_queue_client)
+- **Depends on**: unified-trading-library (lifecycle/service events), unified-config-interface (UnifiedCloudConfig), unified-internal-contracts (AlertEvent), unified-trading-library (GracefulShutdownHandler, PubSubEventSink, setup_tracing, start_memory_watchdog), unified-cloud-interface (get_queue_client)
 - **Intended consumers**: Operators, on-call engineers (via PagerDuty and Slack), trading desks (via UI SSE stream)
 - **Upstream**: PubSub subscriptions: `risk_alerts_circuit_breaker_triggers`, `balance_discrepancy_alerts`, `order_rejection_spikes`; coordination events from execution-service (KILL_SWITCH_ACTIVATED, CIRCUIT_BREAKER_OPEN)
 
@@ -85,6 +85,6 @@ When `anthropic_api_key` is configured, `post_ai_triage()` calls Claude claude-3
 
 ## Dependencies
 
-- **Libraries**: unified-events-interface, unified-config-interface, unified-internal-contracts, unified-trading-library, unified-cloud-interface
+- **Libraries**: unified-trading-library, unified-config-interface, unified-internal-contracts, unified-trading-library, unified-cloud-interface
 - **Runtime**: httpx (notifiers), aiohttp (slack_dispatcher), fastapi+uvicorn (API), sse-starlette (SSE), anthropic (AI triage), pyyaml (rules), pydantic (config)
 - **Secrets in Secret Manager**: `alerting-pagerduty-routing-key`, `alerting-slack-webhook-url`

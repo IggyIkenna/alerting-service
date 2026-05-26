@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import cast
 
 import httpx
+from unified_trading_library import get_fault_transport
 
 from alerting_service.config import AlertingSystemConfig
 
@@ -22,13 +23,12 @@ _DEFAULT_SERVICE_URLS: dict[str, str] = {
     "client-reporting-api": "http://localhost:8003",
     "deployment-api": "http://localhost:8004",
     "execution-service": "http://localhost:8005",
-    "risk-and-exposure-service": "http://localhost:8006",
-    "position-balance-monitor": "http://localhost:8007",
+    "strategy-service": "http://localhost:8006",
 }
 
 
 def _build_service_urls(cfg: AlertingSystemConfig) -> dict[str, str]:
-    """Return mapping of service_name → base_url from config.
+    """Return mapping of service_name -> base_url from config.
 
     Uses config.metrics_endpoints when populated; falls back to defaults.
     """
@@ -70,9 +70,15 @@ def get_system_health(
     services: dict[str, object] = {}
     overall = "ok"
 
+    fault_transport = get_fault_transport()
+
     for name, base_url in service_urls.items():
         try:
-            resp = httpx.get(f"{base_url}/health", timeout=3.0)
+            if fault_transport is not None:
+                with httpx.Client(transport=fault_transport, timeout=3.0) as client:
+                    resp = client.get(f"{base_url}/health")
+            else:
+                resp = httpx.get(f"{base_url}/health", timeout=3.0)
             status, checks = _parse_health_response(resp)
         except (httpx.HTTPError, httpx.TimeoutException, ValueError, OSError):
             status = "unreachable"

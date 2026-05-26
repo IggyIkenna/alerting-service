@@ -45,7 +45,7 @@ def test_health_endpoint_returns_200(api_client: TestClient) -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["status"] == "ok"
-    assert data["service"] == "alerting-system"
+    assert data["service"] == "alerting-service"
 
 
 @pytest.mark.unit
@@ -63,7 +63,7 @@ def test_api_main_importable() -> None:
     from alerting_service.api.main import app
 
     assert app is not None
-    assert app.title == "Alerting System"
+    assert app.title == "alerting-service"
 
 
 @pytest.mark.unit
@@ -103,7 +103,7 @@ def test_no_direct_google_pubsub_import() -> None:
     )
     assert not has_direct_import, (
         "alert_subscriber.py must not import google-cloud-pubsub directly; "
-        "use get_queue_client from unified_cloud_interface"
+        "use get_queue_client from unified_trading_library.cloud_interface"
     )
 
 

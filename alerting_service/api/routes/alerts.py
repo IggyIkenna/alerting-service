@@ -30,7 +30,7 @@ def get_store() -> AlertStore:
 
 @router.get("/stream/alerts")
 async def stream_alerts(store: Annotated[AlertStore, Depends(get_store)]) -> EventSourceResponse:
-    if _cfg.cloud_mock_mode:
+    if _cfg.is_mock_mode():
         return EventSourceResponse(_mock_sse_generator())
     return EventSourceResponse(_live_sse_generator(store))
 
@@ -59,7 +59,7 @@ async def _live_sse_generator(store: AlertStore) -> AsyncIterator[dict[str, str]
 
 @router.get("/rules/recent")
 async def get_recent_alerts(store: Annotated[AlertStore, Depends(get_store)]) -> object:
-    if _cfg.cloud_mock_mode:
+    if _cfg.is_mock_mode():
         return get_mock_store().list("alerts")
     return store.get_recent_events(limit=100)
 
@@ -67,7 +67,7 @@ async def get_recent_alerts(store: Annotated[AlertStore, Depends(get_store)]) ->
 @router.post("/rules/recent")
 async def create_alert(alert: dict[str, object]) -> dict[str, object]:
     """Record a new alert. Persists in mock state when CLOUD_MOCK_MODE=true."""
-    if _cfg.cloud_mock_mode:
+    if _cfg.is_mock_mode():
         if "alert_id" not in alert:
             alert["alert_id"] = f"alert-{uuid.uuid4().hex[:6]}"
         alert["id"] = alert["alert_id"]

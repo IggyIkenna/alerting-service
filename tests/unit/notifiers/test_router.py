@@ -58,7 +58,10 @@ def mock_config_with_telegram():
     mock_cfg = MagicMock()
     mock_cfg.telegram_bot_token = "bot-token-123"
     mock_cfg.telegram_chat_id = "chat-456"
+    mock_cfg.telegram_chat_id_ops = ""
     mock_cfg.gcp_project_id = "test-project"
+    mock_cfg.pagerduty_disabled = False
+    mock_cfg.quietness_baseline_mode = False
     # Default routing rules matching legacy behavior
     mock_cfg.routing_rules = [
         {
@@ -85,7 +88,10 @@ def mock_config_without_telegram():
     mock_cfg = MagicMock()
     mock_cfg.telegram_bot_token = ""
     mock_cfg.telegram_chat_id = ""
+    mock_cfg.telegram_chat_id_ops = ""
     mock_cfg.gcp_project_id = "test-project"
+    mock_cfg.pagerduty_disabled = False
+    mock_cfg.quietness_baseline_mode = False
     mock_cfg.routing_rules = [
         {
             "event_pattern": "KILL_SWITCH_*",
@@ -164,6 +170,42 @@ class TestMatchRoutingRules:
         channels, severity = _match_routing_rules("INFO_UPDATE", rules)
         assert channels == {"telegram"}
         assert severity is None
+
+    def test_invalid_severity_defaults_to_warning(self) -> None:
+        rules: list[dict[str, object]] = [
+            {
+                "event_pattern": "BAD_SEVERITY_*",
+                "channels": ["pagerduty"],
+                "severity_filter": "catastrophic",
+            },
+        ]
+        channels, severity = _match_routing_rules("BAD_SEVERITY_EVENT", rules)
+        assert channels == {"pagerduty"}
+        assert severity == "warning"
+
+    def test_valid_severity_preserved(self) -> None:
+        rules: list[dict[str, object]] = [
+            {
+                "event_pattern": "TEST_*",
+                "channels": ["pagerduty"],
+                "severity_filter": "error",
+            },
+        ]
+        channels, severity = _match_routing_rules("TEST_EVENT", rules)
+        assert channels == {"pagerduty"}
+        assert severity == "error"
+
+    def test_severity_case_insensitive(self) -> None:
+        rules: list[dict[str, object]] = [
+            {
+                "event_pattern": "UPPER_*",
+                "channels": ["pagerduty"],
+                "severity_filter": "CRITICAL",
+            },
+        ]
+        channels, severity = _match_routing_rules("UPPER_EVENT", rules)
+        assert channels == {"pagerduty"}
+        assert severity == "critical"
 
 
 class TestRouteEventWithTelegram:
@@ -474,6 +516,72 @@ class TestConfigSnapshotPersistence:
         mock_persist_config.assert_called_once()
 
 
+class TestDefiRoutingRules:
+    """Tests for DeFi event routing through _match_routing_rules."""
+
+    @staticmethod
+    def _defi_rules() -> list[dict[str, object]]:
+        """Return routing rules including DeFi entries (matches config.py defaults)."""
+        return [
+            {
+                "event_pattern": "KILL_SWITCH_*",
+                "channels": ["pagerduty", "telegram"],
+                "severity_filter": "critical",
+            },
+            {
+                "event_pattern": "DEFI_HEALTH_FACTOR_CRITICAL",
+                "channels": ["pagerduty", "telegram"],
+                "severity_filter": "critical",
+            },
+            {
+                "event_pattern": "DEFI_WEETH_DEPEG",
+                "channels": ["pagerduty", "telegram"],
+                "severity_filter": "critical",
+            },
+            {
+                "event_pattern": "DEFI_AAVE_UTILIZATION_SPIKE",
+                "channels": ["telegram"],
+                "severity_filter": None,
+            },
+            {
+                "event_pattern": "DEFI_FUNDING_RATE_FLIP",
+                "channels": ["telegram"],
+                "severity_filter": None,
+            },
+            {
+                "event_pattern": "DEFI_FEATURE_STALE",
+                "channels": ["telegram"],
+                "severity_filter": None,
+            },
+            {"event_pattern": "*", "channels": ["telegram"], "severity_filter": None},
+        ]
+
+    def test_health_factor_critical_routes_to_pagerduty_and_telegram(self) -> None:
+        channels, severity = _match_routing_rules("DEFI_HEALTH_FACTOR_CRITICAL", self._defi_rules())
+        assert channels == {"pagerduty", "telegram"}
+        assert severity == "critical"
+
+    def test_weeth_depeg_routes_to_pagerduty_and_telegram(self) -> None:
+        channels, severity = _match_routing_rules("DEFI_WEETH_DEPEG", self._defi_rules())
+        assert channels == {"pagerduty", "telegram"}
+        assert severity == "critical"
+
+    def test_aave_utilization_routes_to_telegram_only(self) -> None:
+        channels, severity = _match_routing_rules("DEFI_AAVE_UTILIZATION_SPIKE", self._defi_rules())
+        assert channels == {"telegram"}
+        assert severity is None
+
+    def test_funding_rate_flip_routes_to_telegram_only(self) -> None:
+        channels, severity = _match_routing_rules("DEFI_FUNDING_RATE_FLIP", self._defi_rules())
+        assert channels == {"telegram"}
+        assert severity is None
+
+    def test_feature_stale_routes_to_telegram_only(self) -> None:
+        channels, severity = _match_routing_rules("DEFI_FEATURE_STALE", self._defi_rules())
+        assert channels == {"telegram"}
+        assert severity is None
+
+
 class TestCustomRoutingRules:
     """Tests with custom routing rules."""
 
@@ -490,6 +598,8 @@ class TestCustomRoutingRules:
         mock_cfg.telegram_bot_token = "bot-token-123"
         mock_cfg.telegram_chat_id = "chat-456"
         mock_cfg.gcp_project_id = "test-project"
+        mock_cfg.pagerduty_disabled = False
+        mock_cfg.quietness_baseline_mode = False
         mock_cfg.routing_rules = [
             {"event_pattern": "CUSTOM_*", "channels": ["pagerduty"], "severity_filter": "warning"},
         ]
@@ -501,3 +611,84 @@ class TestCustomRoutingRules:
         assert pd_kwargs["severity"] == "warning"
         # telegram not in channels, so send_telegram not called
         mock_send_telegram.assert_not_called()
+
+
+class TestTelegramOpsChannelRouting:
+    """Tests for dual-channel Telegram routing (ops vs standard channel)."""
+
+    @pytest.fixture
+    def mock_config_with_ops_channel(self):
+        """AlertingSystemConfig with both standard and ops Telegram channels."""
+        from alerting_service.notifiers.router import _get_cloud_config
+
+        _get_cloud_config.cache_clear()
+        mock_cfg = MagicMock()
+        mock_cfg.telegram_bot_token = "bot-token-123"
+        mock_cfg.telegram_chat_id = "chat-456"
+        mock_cfg.telegram_chat_id_ops = "ops-chat-789"
+        mock_cfg.gcp_project_id = "test-project"
+        mock_cfg.pagerduty_disabled = False
+        mock_cfg.quietness_baseline_mode = False
+        mock_cfg.routing_rules = [
+            {
+                "event_pattern": "KILL_SWITCH_*",
+                "channels": ["pagerduty", "telegram"],
+                "severity_filter": "critical",
+            },
+            {"event_pattern": "*", "channels": ["telegram"], "severity_filter": None},
+        ]
+        with patch("alerting_service.notifiers.router.AlertingSystemConfig", return_value=mock_cfg):
+            yield mock_cfg
+        _get_cloud_config.cache_clear()
+
+    def test_ops_channel_used_for_runtime_alert_when_configured(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_telegram: MagicMock,
+        mock_slack_send_message: MagicMock,
+        mock_log_event: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        mock_config_with_ops_channel: MagicMock,
+    ) -> None:
+        # Use a real AlertCode that is explicitly in LIVE_ALERT_RULES (not just the catch-all *).
+        # KILL_SWITCH_ACTIVATED is not a UAC AlertCode — use KILL_SWITCH_VENUE_DISCONNECT instead.
+        route_event("KILL_SWITCH_VENUE_DISCONNECT", {"strategy": "s1"})
+
+        mock_send_telegram.assert_called_once()
+        tg_kwargs = mock_send_telegram.call_args.kwargs
+        assert tg_kwargs["chat_id"] == "ops-chat-789"
+        assert tg_kwargs["bot_token"] == "bot-token-123"
+
+    def test_standard_channel_used_when_ops_not_configured(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_telegram: MagicMock,
+        mock_slack_send_message: MagicMock,
+        mock_log_event: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        mock_config_with_telegram: MagicMock,
+    ) -> None:
+        route_event("KILL_SWITCH_VENUE_DISCONNECT", {"strategy": "s1"})
+
+        mock_send_telegram.assert_called_once()
+        tg_kwargs = mock_send_telegram.call_args.kwargs
+        assert tg_kwargs["chat_id"] == "chat-456"
+
+    def test_standard_channel_used_for_non_live_alert(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_telegram: MagicMock,
+        mock_slack_send_message: MagicMock,
+        mock_log_event: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        mock_config_with_ops_channel: MagicMock,
+    ) -> None:
+        # "INTERNAL_QG_HEALTH" is NOT in LIVE_ALERT_RULES — standard channel applies
+        route_event("INTERNAL_QG_HEALTH", {"check": "ping"})
+
+        mock_send_telegram.assert_called_once()
+        tg_kwargs = mock_send_telegram.call_args.kwargs
+        assert tg_kwargs["chat_id"] == "chat-456"

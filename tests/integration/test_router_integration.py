@@ -334,7 +334,7 @@ class TestKillSwitchRouting:
         slack_secret = _patch_slack_secret()
         event_details: dict[str, object] = {
             "strategy": "momentum-v2",
-            "venue": "kraken",
+            "venue": "bybit",
             "source": "execution-service",
         }
 
@@ -434,7 +434,7 @@ class TestCircuitBreakerRouting:
             patch("alerting_service.notifiers.pagerduty.log_event"),
             patch("alerting_service.notifiers.telegram.log_event"),
         ):
-            route_event("CIRCUIT_BREAKER_OPEN", {"venue": "kraken"})
+            route_event("CIRCUIT_BREAKER_OPEN", {"venue": "bybit"})
 
         pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
         assert pd_calls, "PagerDuty httpx.post was not called"
@@ -798,3 +798,200 @@ class TestSecretManagerMissingSecret:
             pytest.raises(RuntimeError, match="alerting-slack-webhook-url"),
         ):
             route_event("PREFLIGHT_FAILED", {"session": "2026-01-15"})
+
+
+# ---------------------------------------------------------------------------
+# Integration tests: SERVICE_DEGRADED -> Telegram only (P1, no PagerDuty)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestServiceDegradedRouting:
+    """SERVICE_DEGRADED must go to Telegram only — no PagerDuty dispatch."""
+
+    def test_service_degraded_triggers_telegram_no_pagerduty(
+        self,
+        mock_router_config_with_telegram: MagicMock,
+    ) -> None:
+        with (
+            patch(
+                "alerting_service.notifiers.router.AlertingSystemConfig",
+                return_value=mock_router_config_with_telegram,
+            ),
+            patch("httpx.post", side_effect=_httpx_post_dispatch) as mock_http_post,
+            patch("alerting_service.notifiers.router.log_event"),
+            patch("alerting_service.notifiers.router._persist_delivery_record"),
+            patch("alerting_service.notifiers.router._persist_config_snapshot"),
+            patch("alerting_service.notifiers.telegram.log_event"),
+        ):
+            route_event("SERVICE_DEGRADED", {"service": "market-tick-data-service"})
+
+        tg_calls = [c for c in mock_http_post.call_args_list if "api.telegram.org" in c.args[0]]
+        pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
+        assert tg_calls, "Telegram must be called for SERVICE_DEGRADED"
+        assert not pd_calls, "PagerDuty must NOT be called for SERVICE_DEGRADED"
+
+    def test_service_degraded_uses_slack_fallback_no_pagerduty(
+        self,
+        mock_slack_config: MagicMock,
+        mock_router_config_no_telegram: MagicMock,
+    ) -> None:
+        slack_secret = _patch_slack_secret()
+
+        with (
+            patch(
+                "alerting_service.notifiers.slack.UnifiedCloudConfig",
+                return_value=mock_slack_config,
+            ),
+            patch("alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret),
+            patch(
+                "alerting_service.notifiers.router.AlertingSystemConfig",
+                return_value=mock_router_config_no_telegram,
+            ),
+            patch("alerting_service.notifiers.pagerduty.httpx.post") as mock_pd_post,
+            patch(
+                "alerting_service.notifiers.slack.httpx.post", return_value=_make_http_response(200)
+            ) as mock_slack_post,
+            patch("alerting_service.notifiers.router.log_event"),
+            patch("alerting_service.notifiers.router._persist_delivery_record"),
+            patch("alerting_service.notifiers.router._persist_config_snapshot"),
+            patch("alerting_service.notifiers.slack.log_event"),
+        ):
+            route_event("SERVICE_DEGRADED", {"service": "strategy-service"})
+
+        mock_slack_post.assert_called_once()
+        mock_pd_post.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Integration tests: catch-all wildcard "*" -> Telegram/Slack only (P2)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestCatchAllRouting:
+    """Generic/unknown events must match the "*" wildcard rule — no PagerDuty."""
+
+    def test_unknown_event_routes_via_wildcard_to_telegram(
+        self,
+        mock_router_config_with_telegram: MagicMock,
+    ) -> None:
+        with (
+            patch(
+                "alerting_service.notifiers.router.AlertingSystemConfig",
+                return_value=mock_router_config_with_telegram,
+            ),
+            patch("httpx.post", side_effect=_httpx_post_dispatch) as mock_http_post,
+            patch("alerting_service.notifiers.router.log_event"),
+            patch("alerting_service.notifiers.router._persist_delivery_record"),
+            patch("alerting_service.notifiers.router._persist_config_snapshot"),
+            patch("alerting_service.notifiers.telegram.log_event"),
+        ):
+            route_event("SOME_OPERATIONAL_EVENT_XYZ", {"info": "test"})
+
+        tg_calls = [c for c in mock_http_post.call_args_list if "api.telegram.org" in c.args[0]]
+        pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
+        assert tg_calls, "Wildcard catch-all must route to Telegram"
+        assert not pd_calls, "Wildcard catch-all must NOT route to PagerDuty"
+
+    def test_unknown_event_uses_slack_fallback_no_pagerduty(
+        self,
+        mock_slack_config: MagicMock,
+        mock_router_config_no_telegram: MagicMock,
+    ) -> None:
+        slack_secret = _patch_slack_secret()
+
+        with (
+            patch(
+                "alerting_service.notifiers.slack.UnifiedCloudConfig",
+                return_value=mock_slack_config,
+            ),
+            patch("alerting_service.notifiers.slack.get_secret_client", return_value=slack_secret),
+            patch(
+                "alerting_service.notifiers.router.AlertingSystemConfig",
+                return_value=mock_router_config_no_telegram,
+            ),
+            patch("alerting_service.notifiers.pagerduty.httpx.post") as mock_pd_post,
+            patch(
+                "alerting_service.notifiers.slack.httpx.post", return_value=_make_http_response(200)
+            ) as mock_slack_post,
+            patch("alerting_service.notifiers.router.log_event"),
+            patch("alerting_service.notifiers.router._persist_delivery_record"),
+            patch("alerting_service.notifiers.router._persist_config_snapshot"),
+            patch("alerting_service.notifiers.slack.log_event"),
+        ):
+            route_event("SOME_GENERIC_ALERT", {"source": "batch-pipeline"})
+
+        mock_slack_post.assert_called_once()
+        mock_pd_post.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Integration tests: severity_filter propagates to PD payload severity field
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.integration
+class TestSeverityFilterPropagation:
+    """Routing rule severity_filter must control the PagerDuty payload severity field."""
+
+    def test_critical_severity_filter_produces_critical_pd_payload(
+        self,
+        mock_pd_config: MagicMock,
+        mock_router_config_with_telegram: MagicMock,
+    ) -> None:
+        pd_secret = _patch_pd_secret()
+
+        with (
+            patch(
+                "alerting_service.notifiers.pagerduty.UnifiedCloudConfig",
+                return_value=mock_pd_config,
+            ),
+            patch("alerting_service.notifiers.pagerduty.get_secret_client", return_value=pd_secret),
+            patch(
+                "alerting_service.notifiers.router.AlertingSystemConfig",
+                return_value=mock_router_config_with_telegram,
+            ),
+            patch("httpx.post", side_effect=_httpx_post_dispatch) as mock_http_post,
+            patch("alerting_service.notifiers.router.log_event"),
+            patch("alerting_service.notifiers.router._persist_delivery_record"),
+            patch("alerting_service.notifiers.router._persist_config_snapshot"),
+            patch("alerting_service.notifiers.pagerduty.log_event"),
+            patch("alerting_service.notifiers.telegram.log_event"),
+        ):
+            route_event("KILL_SWITCH_DEACTIVATED", {"strategy": "strat-x"})
+
+        pd_calls = [c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]]
+        assert pd_calls, "PagerDuty must be called"
+        pd_json: dict[str, object] = pd_calls[0].kwargs["json"]
+        inner = pd_json["payload"]
+        assert isinstance(inner, dict)
+        assert inner["severity"] == "critical"
+
+    def test_no_pagerduty_for_non_critical_routing_rules(
+        self,
+        mock_router_config_with_telegram: MagicMock,
+    ) -> None:
+        """Events on non-pagerduty routing rules must never dispatch to PagerDuty."""
+        with (
+            patch(
+                "alerting_service.notifiers.router.AlertingSystemConfig",
+                return_value=mock_router_config_with_telegram,
+            ),
+            patch("httpx.post", side_effect=_httpx_post_dispatch) as mock_http_post,
+            patch("alerting_service.notifiers.router.log_event"),
+            patch("alerting_service.notifiers.router._persist_delivery_record"),
+            patch("alerting_service.notifiers.router._persist_config_snapshot"),
+            patch("alerting_service.notifiers.telegram.log_event"),
+        ):
+            for non_critical_event in (
+                "PREFLIGHT_FAILED",
+                "SERVICE_DEGRADED",
+                "OPERATIONAL_METRIC",
+            ):
+                mock_http_post.reset_mock()
+                route_event(non_critical_event, {"source": "test"})
+                pd_calls = [
+                    c for c in mock_http_post.call_args_list if "pagerduty.com" in c.args[0]
+                ]
+                assert not pd_calls, f"PagerDuty must NOT be called for {non_critical_event}"

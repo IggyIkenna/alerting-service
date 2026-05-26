@@ -72,9 +72,30 @@ steps:
     args:
       - "-c"
       - |
-        VERSION=$(grep '^version' pyproject.toml | head -1 | sed 's/version = "//;s/"//')
+        VERSION=$(grep '^version' pyproject.toml 2>/dev/null | head -1 | sed 's/version = "//;s/"//')
+        [ -z "$$VERSION" ] && VERSION="$SHORT_SHA"
         echo "$$VERSION" > /workspace/VERSION
         echo "Building version $$VERSION"
+    waitFor: ["-"]
+
+  # ── Clone sibling repos needed by Dockerfile (local path deps) ──────────────
+  # Dockerfile COPYs unified-api-contracts/ and unified-trading-library/ for
+  # uv sync --frozen. Cloud Build source tarball is service-only; clone here.
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:alpine"
+    id: "clone-deps"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -e
+        GH_PAT=$$(gcloud secrets versions access latest --secret=GH_PAT --project=$PROJECT_ID 2>/dev/null || echo "")
+        if [ -z "$$GH_PAT" ]; then
+          echo "FAIL: GH_PAT not configured — cannot clone sibling repos"; exit 1
+        fi
+        git clone --depth=1 --branch live-defi-rollout https://$$GH_PAT@github.com/IggyIkenna/unified-api-contracts.git unified-api-contracts
+        git clone --depth=1 --branch live-defi-rollout https://$$GH_PAT@github.com/IggyIkenna/unified-trading-library.git unified-trading-library
+        git clone --depth=1 --branch live-defi-rollout https://$$GH_PAT@github.com/IggyIkenna/unified-trading-pm.git unified-trading-pm
+        echo "Sibling repos cloned OK"
     waitFor: ["-"]
 
   # ── STEP 1: Configure Docker authentication ───────────────────────────────
@@ -118,9 +139,10 @@ steps:
         docker build -f Dockerfile \
           --build-arg PROJECT_ID=$PROJECT_ID \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
+          -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
           .
-    waitFor: ["pull-base-image", "ensure-repo", "extract-version"]
+    waitFor: ["pull-base-image", "ensure-repo", "extract-version", "clone-deps"]
 
   # ── STEP 5: REQUIRED — Run quality gates INSIDE the image ─────────────────
   # CRITICAL: Use --entrypoint "" to clear the image's default ENTRYPOINT.
@@ -137,9 +159,15 @@ steps:
         echo "Running quality gates inside ${_SERVICE_NAME} image..."
         docker run --rm \
           --entrypoint "" \
+          --tmpfs /app/${_SERVICE_NAME}/htmlcov \
           -e CLOUD_BUILD=true \
           -e CLOUD_MOCK_MODE=true \
           -e GCP_PROJECT_ID=$PROJECT_ID \
+          -e WORKSPACE_ROOT=/workspace \
+          -e RUFF_CACHE_DIR=/tmp/ruff_cache \
+          -e COVERAGE_FILE=/tmp/.coverage \
+          -e HOME=/tmp \
+          -v /workspace:/workspace:ro \
           asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
           /bin/bash -c "scripts/quality-gates.sh --no-fix --quick"
     waitFor: ["build"]
@@ -218,8 +246,7 @@ steps:
       - "-c"
       - |
         set -e
-        pip install uv
-        uv pip install --system build twine keyrings.google-artifactregistry-auth
+        pip install --quiet build twine keyrings.google-artifactregistry-auth
         mkdir -p /root/.config/pip
         echo "[global]
         extra-index-url = https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/simple/" \
@@ -227,7 +254,7 @@ steps:
         python -m build --wheel --outdir dist/
         python -m twine upload \
           --repository-url https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/ \
-          --non-interactive dist/*.whl || true
+          --non-interactive dist/${_PKG_NAME}-*.whl || true
     waitFor: ["quality-gates"]
 
 images:

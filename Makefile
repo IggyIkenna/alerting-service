@@ -34,7 +34,7 @@ coverage:
 	pytest --cov=alerting_system --cov-report=term-missing --cov-report=html
 
 install:
-	uv pip install -e ".[dev]"
+	uv pip install -e "."
 
 clean:
 	rm -rf build/

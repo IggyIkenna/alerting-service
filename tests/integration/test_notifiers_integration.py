@@ -387,7 +387,7 @@ class TestPagerDutyNotifierIntegration:
         ):
             result = send_event(
                 summary="test", severity=severity, source="alerting-service", details={}
-            )  # type: ignore[arg-type]
+            )
 
         assert result is True
         pd_json: dict[str, object] = mock_post.call_args.kwargs["json"]

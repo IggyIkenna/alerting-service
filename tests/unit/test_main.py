@@ -74,8 +74,15 @@ class TestRunSubscriberUntilShutdown:
 @pytest.mark.asyncio
 async def test_main_runs_successfully() -> None:
     """Test that main() runs without error (happy path, all I/O mocked)."""
+    mock_config = MagicMock()
+    mock_config.is_mock_mode.return_value = False
+    mock_config.gcp_project_id = "test-project"
+    mock_config.service_name = "alerting-service"
+    mock_config.log_level = "INFO"
+
     with (
-        patch.object(sys, "argv", ["alerting-service", "--mode", "batch"]),
+        patch.object(sys, "argv", ["alerting-service", "--mode", "live"]),
+        patch("alerting_service.main.AlertingSystemConfig", return_value=mock_config),
         patch("alerting_service.main.PubSubEventSink"),
         patch("alerting_service.main.setup_service_observability"),
         patch("alerting_service.main.GracefulShutdownHandler") as mock_handler_cls,

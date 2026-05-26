@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from unified_internal_contracts import AlertEvent
+from unified_api_contracts.internal import AlertEvent  # noqa: qg-deep-import
 
 _NOW = "2026-03-14T12:00:00"
 
@@ -54,10 +54,7 @@ def _make_alert_events() -> list[AlertEvent]:
             rule_id="PREFLIGHT_FAILED",
             triggered_at=datetime(2026, 3, 14, 8, 30, 0, tzinfo=UTC),
             severity="WARNING",
-            message=(
-                "Preflight check failed for strategy breakout-v1:"
-                " insufficient liquidity on bybit SOL-USDT"
-            ),
+            message=("Preflight check failed for strategy breakout-v1: insufficient liquidity on bybit SOL-USDT"),
             metric_value=0.0,
             threshold=1.0,
             strategy_id="breakout-v1",

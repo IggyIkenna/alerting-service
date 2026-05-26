@@ -12,6 +12,9 @@ from alerting_service.api.routes import delivery_status as ds_module
 from alerting_service.api.routes.delivery_status import get_delivery_store
 from alerting_service.auth import verify_api_key
 
+# Suppress cloud_mock_mode deprecation warnings from monkeypatch.setattr
+pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
 
 @pytest.fixture
 def mock_storage_store() -> MagicMock:
@@ -26,6 +29,7 @@ def client_non_mock(
     """Create a FastAPI test client with mock mode disabled (tests real code path)."""
     from alerting_service.api.main import app
 
+    monkeypatch.setattr(ds_module._cfg, "data_mode", "real")
     monkeypatch.setattr(ds_module._cfg, "cloud_mock_mode", False)
 
     async def _bypass_auth() -> str:
@@ -40,9 +44,11 @@ def client_non_mock(
 
 
 @pytest.fixture
-def client_mock_mode() -> Iterator[TestClient]:
+def client_mock_mode(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     """Create a FastAPI test client with mock mode enabled (tests mock code path)."""
     from alerting_service.api.main import app
+
+    monkeypatch.setattr(ds_module._cfg, "data_mode", "mock")
 
     async def _bypass_auth() -> str:
         return "test-key"

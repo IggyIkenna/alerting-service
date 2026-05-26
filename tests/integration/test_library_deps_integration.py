@@ -15,7 +15,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 # ---------------------------------------------------------------------------
-# unified_config_interface
+# unified_trading_library.config_interface
 # ---------------------------------------------------------------------------
 
 
@@ -63,7 +63,7 @@ class TestUnifiedConfigInterface:
 
 
 # ---------------------------------------------------------------------------
-# unified_events_interface
+# unified_trading_library.events
 # ---------------------------------------------------------------------------
 
 
@@ -73,22 +73,22 @@ class TestUnifiedEventsInterface:
 
     def test_log_event_with_details(self) -> None:
         """log_event() accepts event name and details dict without error."""
-        from unified_events_interface import log_event
+        from unified_trading_library import log_event
 
         # Should not raise — conftest sets up MockEventSink
         log_event("ALERT_SENT", details={"event_name": "TEST", "alert_id": "abc123"})
 
     def test_log_event_with_lifecycle_type(self) -> None:
         """log_event() works with LifecycleEventType enum values."""
-        from unified_events_interface import log_event
-        from unified_internal_contracts import LifecycleEventType
+        from unified_api_contracts.internal import LifecycleEventType
+        from unified_trading_library import log_event
 
         log_event(LifecycleEventType.STARTED, details={"correlation_id": "test-123"})
         log_event(LifecycleEventType.STOPPED, details={"correlation_id": "test-123"})
 
     def test_setup_events_with_mock_sink(self) -> None:
         """setup_events() accepts MockEventSink for credential-free testing."""
-        from unified_events_interface import MockEventSink, setup_events
+        from unified_trading_library import MockEventSink, setup_events
 
         sink = MockEventSink()
         # Should not raise
@@ -96,7 +96,7 @@ class TestUnifiedEventsInterface:
 
 
 # ---------------------------------------------------------------------------
-# unified_internal_contracts
+# unified_api_contracts.internal
 # ---------------------------------------------------------------------------
 
 
@@ -106,7 +106,7 @@ class TestUnifiedInternalContracts:
 
     def test_alert_event_construction(self) -> None:
         """AlertEvent can be constructed with required fields and serialized."""
-        from unified_internal_contracts import AlertEvent
+        from unified_api_contracts.internal import AlertEvent
 
         event = AlertEvent(
             alert_id="alert-001",
@@ -130,7 +130,7 @@ class TestUnifiedInternalContracts:
 
     def test_alert_event_optional_fields(self) -> None:
         """AlertEvent works with optional fields set to None."""
-        from unified_internal_contracts import AlertEvent
+        from unified_api_contracts.internal import AlertEvent
 
         event = AlertEvent(
             alert_id="alert-002",
@@ -146,7 +146,7 @@ class TestUnifiedInternalContracts:
 
     def test_lifecycle_event_type_enum_values(self) -> None:
         """LifecycleEventType has the standard lifecycle states the service uses."""
-        from unified_internal_contracts import LifecycleEventType
+        from unified_api_contracts.internal import LifecycleEventType
 
         # The service uses STARTED, STOPPED, FAILED
         assert hasattr(LifecycleEventType, "STARTED")
@@ -157,7 +157,7 @@ class TestUnifiedInternalContracts:
 
 
 # ---------------------------------------------------------------------------
-# unified_cloud_interface
+# unified_trading_library.cloud_interface
 # ---------------------------------------------------------------------------
 
 
@@ -167,7 +167,7 @@ class TestUnifiedCloudInterface:
 
     def test_get_storage_client_returns_client(self) -> None:
         """get_storage_client() returns an object with the StorageClient interface."""
-        from unified_cloud_interface import get_storage_client
+        from unified_trading_library import get_storage_client
 
         client = get_storage_client()
         # StorageClient protocol: upload_bytes, download_bytes, blob_exists, list_blobs
@@ -177,7 +177,7 @@ class TestUnifiedCloudInterface:
 
     def test_get_queue_client_returns_client(self) -> None:
         """get_queue_client() returns an object with the QueueClient interface."""
-        from unified_cloud_interface import get_queue_client
+        from unified_trading_library import get_queue_client
 
         client = get_queue_client()
         # QueueClient protocol: publish, subscribe_once
@@ -185,7 +185,7 @@ class TestUnifiedCloudInterface:
 
     def test_get_secret_client_returns_client(self) -> None:
         """get_secret_client() returns an object with the SecretClient interface."""
-        from unified_cloud_interface import get_secret_client
+        from unified_trading_library import get_secret_client
 
         client = get_secret_client()
         assert hasattr(client, "get_secret")
@@ -303,7 +303,7 @@ class TestUnifiedTradingLibrary:
 
     def test_alert_store_with_internal_contracts(self) -> None:
         """AlertStore.record_fired() works with AlertEvent from unified-internal-contracts."""
-        from unified_internal_contracts import AlertEvent
+        from unified_api_contracts.internal import AlertEvent
 
         from alerting_service.core.alert_store import AlertStore
 
@@ -326,7 +326,7 @@ class TestUnifiedTradingLibrary:
 
     def test_alert_store_cooldown_logic(self) -> None:
         """AlertStore.is_cooled_down() correctly enforces cooldown periods."""
-        from unified_internal_contracts import AlertEvent
+        from unified_api_contracts.internal import AlertEvent
 
         from alerting_service.core.alert_store import AlertStore
 
@@ -348,7 +348,7 @@ class TestUnifiedTradingLibrary:
 
     def test_alert_store_publish_subscribe(self) -> None:
         """AlertStore pub/sub delivers events to subscribed queues."""
-        from unified_internal_contracts import AlertEvent
+        from unified_api_contracts.internal import AlertEvent
 
         from alerting_service.core.alert_store import AlertStore
 

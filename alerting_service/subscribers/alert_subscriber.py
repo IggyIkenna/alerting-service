@@ -4,16 +4,21 @@ Subscribes to the following PubSub topics via get_queue_client():
   - risk_alerts_circuit_breaker_triggers
   - balance_discrepancy_alerts
   - order_rejection_spikes
+  - service_error_events
 
 Also processes coordination events emitted by execution-service:
   - KILL_SWITCH_ACTIVATED
   - CIRCUIT_BREAKER_OPEN
 
+SERVICE_ERROR events are dispatched to handle_service_error() which feeds
+them into the circuit breaker for error-rate tracking and emits CIRCUIT_OPEN
+events when the threshold is exceeded.
+
 On each message the event name is extracted and forwarded to route_event()
 which dispatches to PagerDuty and/or Slack according to routing rules.
 
 No direct google.cloud.pubsub_v1 imports — all PubSub access goes
-through get_queue_client() from unified_cloud_interface.
+through get_queue_client() from unified_trading_library.cloud_interface.
 
 Lifecycle event taxonomy (common events — alerting-service is a router, not a pipeline):
   SERVICE_EVENT: VALIDATION_STARTED
@@ -34,26 +39,55 @@ import json
 import logging
 import time
 import uuid
-from collections.abc import AsyncIterator
-from typing import cast
+from collections.abc import AsyncIterator, Callable
+from typing import ClassVar, cast
 
-from unified_cloud_interface import QueueClient, get_queue_client
-from unified_events_interface import log_event
+from unified_trading_library import QueueClient, get_queue_client, log_event
 
+from ..defi_feature_event_handler import (
+    DEFI_FEATURE_EVENT_NAMES,
+    handle_defi_feature_event,
+)
+from ..dr_event_handler import (
+    handle_circuit_breaker_fire_payload,
+    handle_kill_switch_armed_payload,
+    handle_kill_switch_disarm_payload,
+)
+from ..error_event_handler import handle_service_error
 from ..metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 from ..notifiers.router import route_event
+from ..recon_drift_event_handler import (
+    handle_batch_live_recon_drift_payload,
+    handle_batch_vs_live_recon_drifted_payload,
+)
+from ..risk_rule_event_handler import handle_risk_rule_fired_payload
+from ..rules.margin_rules import route_margin_event_payload
 
 logger = logging.getLogger(__name__)
 
 # PubSub subscriptions to pull from.
+# margin-events: canonical UAC topic, single producer = position-balance-monitor.
 _ALERT_SUBSCRIPTIONS: tuple[str, ...] = (
     "risk_alerts_circuit_breaker_triggers",
     "balance_discrepancy_alerts",
     "order_rejection_spikes",
+    "service_error_events",
+    "margin-events",
 )
 
 # Coordination events from execution-service that must also be routed.
 _COORDINATION_EVENTS: frozenset[str] = frozenset({"KILL_SWITCH_ACTIVATED", "CIRCUIT_BREAKER_OPEN"})
+
+# Events that have dedicated handlers (not just generic routing).
+_SERVICE_ERROR_EVENT: str = "SERVICE_ERROR"
+_MARGIN_EVENT: str = "MarginEvent"
+# Disaster-recovery + risk-rule typed events (Phase 5.B risk plan / Phase 4.C DR plan).
+_RISK_RULE_FIRED_EVENT: str = "RiskRuleFiredEvent"
+_KILL_SWITCH_ARMED_EVENT: str = "KillSwitchArmedEvent"
+_KILL_SWITCH_DISARM_EVENT: str = "KillSwitchDisarmEvent"
+_CIRCUIT_BREAKER_FIRED_EVENT: str = "CircuitBreakerFired"
+_BATCH_VS_LIVE_RECON_DRIFTED_EVENT: str = "BATCH_VS_LIVE_RECON_DRIFTED"
+_BATCH_LIVE_RECON_DRIFT_EVENT: str = "BATCH_LIVE_RECON_DRIFT"
 
 
 def _extract_event_name(payload: dict[str, object]) -> str:
@@ -88,7 +122,7 @@ def _deserialize_message(data: bytes) -> tuple[str, dict[str, object]]:
 class AlertSubscriber:
     """Pulls alert events from multiple PubSub subscriptions and routes them.
 
-    Uses get_queue_client() from unified_cloud_interface — no direct PubSub SDK.
+    Uses get_queue_client() from unified_trading_library.cloud_interface — no direct PubSub SDK.
 
     Each subscription is polled in a round-robin fashion inside a single async
     loop so that all topics share one event loop iteration.
@@ -160,6 +194,40 @@ class AlertSubscriber:
         )
         return event_name, enriched
 
+    # Closed-set typed-event handler dispatch (each handler signature:
+    # ``payload: dict[str, object]) -> None``). Kept at module-level via a
+    # tuple to satisfy ruff C901 (dispatch_event complexity ≤ 7).
+    _TYPED_HANDLERS: ClassVar[dict[str, Callable[[dict[str, object]], None]]] = {
+        _SERVICE_ERROR_EVENT: handle_service_error,
+        _MARGIN_EVENT: route_margin_event_payload,
+        _RISK_RULE_FIRED_EVENT: handle_risk_rule_fired_payload,
+        _KILL_SWITCH_ARMED_EVENT: handle_kill_switch_armed_payload,
+        _KILL_SWITCH_DISARM_EVENT: handle_kill_switch_disarm_payload,
+        _CIRCUIT_BREAKER_FIRED_EVENT: handle_circuit_breaker_fire_payload,
+        _BATCH_VS_LIVE_RECON_DRIFTED_EVENT: handle_batch_vs_live_recon_drifted_payload,
+        _BATCH_LIVE_RECON_DRIFT_EVENT: handle_batch_live_recon_drift_payload,
+    }
+
+    @classmethod
+    def dispatch_event(cls, event_name: str, enriched: dict[str, object]) -> None:
+        """Route an event to the appropriate handler.
+
+        SERVICE_ERROR events feed the circuit breaker. ``MarginEvent`` is
+        validated against the UAC schema and severity-mapped to the
+        ``MARGIN_*`` event-name family before going to the standard router.
+        DeFi feature events (FEATURE_*) bridge to the DeFi rule check_*
+        functions via ``handle_defi_feature_event``. Everything else falls
+        through to the generic router.
+        """
+        typed_handler = cls._TYPED_HANDLERS.get(event_name)
+        if typed_handler is not None:
+            typed_handler(enriched)
+            return
+        if event_name in DEFI_FEATURE_EVENT_NAMES:
+            handle_defi_feature_event(event_name, enriched)
+            return
+        route_event(event_name, enriched)
+
     async def stream(self) -> AsyncIterator[tuple[str, dict[str, object]]]:
         """Yield (event_name, details) pairs from all subscribed topics.
 
@@ -186,7 +254,7 @@ class AlertSubscriber:
                         _start = time.perf_counter()
                         try:
                             event_name, enriched = self._process_message(data, attrs, subscription)
-                            route_event(event_name, enriched)
+                            self.dispatch_event(event_name, enriched)
                             RECORDS_PROCESSED.labels(status="success").inc()
                         except BaseException:  # cleanup: record metric before re-raise
                             RECORDS_PROCESSED.labels(status="error").inc()

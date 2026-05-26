@@ -10,9 +10,7 @@ from functools import lru_cache
 from typing import Literal
 
 import httpx
-from unified_cloud_interface import SecretClient, get_secret_client
-from unified_config_interface import UnifiedCloudConfig
-from unified_events_interface import log_event
+from unified_trading_library import SecretClient, UnifiedCloudConfig, get_secret_client, log_event
 
 logger = logging.getLogger(__name__)
 

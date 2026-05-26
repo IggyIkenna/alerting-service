@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from fastapi import APIRouter
-from unified_events_interface import log_event
+from unified_trading_library import log_event
 
 from alerting_service.config import AlertingSystemConfig
 from alerting_service.core.system_health_aggregator import get_system_health
