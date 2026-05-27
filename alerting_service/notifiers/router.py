@@ -149,7 +149,9 @@ def _check_coalesce_window(
         return False
     # Evict stale entries
     for stale_key in [
-        k for k, (ts, _, _) in _coalesce_window.items() if now_monotonic - ts >= _COALESCE_WINDOW_SECONDS
+        k
+        for k, (ts, _, _) in _coalesce_window.items()
+        if now_monotonic - ts >= _COALESCE_WINDOW_SECONDS
     ]:
         del _coalesce_window[stale_key]
     existing = _coalesce_window.get(key)
@@ -282,7 +284,10 @@ def _is_runtime_alert(event_name: str) -> bool:
     The catch-all "*" rule (T4 INFO) is excluded — it exists to ensure nothing fires silently,
     not to mark all events as ops alerts. Only named patterns qualify for ops-channel routing.
     """
-    return any(rule.event_pattern != "*" and fnmatch(event_name, rule.event_pattern) for rule in LIVE_ALERT_RULES)
+    return any(
+        rule.event_pattern != "*" and fnmatch(event_name, rule.event_pattern)
+        for rule in LIVE_ALERT_RULES
+    )
 
 
 def _deliver_message(event_name: str, summary: str) -> bool:
@@ -528,7 +533,11 @@ def _publish_kill_switch_event(event_name: str, details: dict[str, object], aler
         # Already logged in _find_kill_switch_rule — defensive-double check.
         return
     scope_key = _resolve_scope_key(scope, details)
-    reason = str(details.get("message") or details.get("reason") or f"alert {event_name} fired (alert_id={alert_id})")
+    reason = str(
+        details.get("message")
+        or details.get("reason")
+        or f"alert {event_name} fired (alert_id={alert_id})"
+    )
     try:
         bus = get_kill_switch_bus()
         bus.fire(

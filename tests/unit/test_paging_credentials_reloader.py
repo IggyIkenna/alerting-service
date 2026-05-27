@@ -223,7 +223,9 @@ class TestStop:
 
     def test_stop_is_idempotent(self) -> None:
         r = _PagingCredentialsReloader(refresh_interval=9999)
-        with patch("alerting_service.config_reloaders.SecretManagerClient", return_value=_make_sm_mock()):
+        with patch(
+            "alerting_service.config_reloaders.SecretManagerClient", return_value=_make_sm_mock()
+        ):
             r.start(project_id="test-project")
         r.stop()
         r.stop()  # second stop must not raise
@@ -244,7 +246,9 @@ class TestDoubleStart:
             call_count += 1
             return _make_sm_mock()
 
-        with patch("alerting_service.config_reloaders.SecretManagerClient", side_effect=counting_sm):
+        with patch(
+            "alerting_service.config_reloaders.SecretManagerClient", side_effect=counting_sm
+        ):
             r.start(project_id="test-project")
             r.start(project_id="test-project")  # second call must be a no-op
         try:
@@ -301,7 +305,9 @@ class TestCredentialRefresh:
                 r._refresh()
             mock_log.assert_called_once()
             call_kwargs = mock_log.call_args
-            event_name = call_kwargs.args[0] if call_kwargs.args else call_kwargs.kwargs.get("event")
+            event_name = (
+                call_kwargs.args[0] if call_kwargs.args else call_kwargs.kwargs.get("event")
+            )
             assert event_name == "CONFIG_CHANGED"
         r.stop()
 

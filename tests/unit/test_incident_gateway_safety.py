@@ -143,11 +143,15 @@ _ALL_ACTION_COMBOS: list[tuple[ActionType, dict[str, str], str]] = [
 def test_confirm_string_registry_covers_all_action_types() -> None:
     """Every ActionType member must have a template — registry completeness guard."""
     for action_type in ActionType:
-        assert action_type in mae._CONFIRM_STRING_TEMPLATES, f"No confirm-string template for {action_type}"
+        assert action_type in mae._CONFIRM_STRING_TEMPLATES, (
+            f"No confirm-string template for {action_type}"
+        )
 
 
 @pytest.mark.parametrize("action_type,scope,expected", _ALL_ACTION_COMBOS)
-def test_expected_confirm_string_all_combos(action_type: ActionType, scope: dict[str, str], expected: str) -> None:
+def test_expected_confirm_string_all_combos(
+    action_type: ActionType, scope: dict[str, str], expected: str
+) -> None:
     assert mae.expected_confirm_string(action_type, scope) == expected
 
 
@@ -252,7 +256,9 @@ def test_dispute_forces_safe_mode_and_sev0() -> None:
     # Forced through RECOVERY_VERIFICATION_STARTED → RECOVERY_UNCERTAIN → SAFE_MODE_ACTIVE.
     assert result.state is IncidentState.SAFE_MODE_ACTIVE
     assert result.severity_hint is AlertSeverity.CRITICAL
-    assert any(h.get("event") == "DISPUTE_FORCED_SAFE_MODE" for h in result.audit_ack_escalation_history)
+    assert any(
+        h.get("event") == "DISPUTE_FORCED_SAFE_MODE" for h in result.audit_ack_escalation_history
+    )
 
 
 def test_escalate_to_human_shortens_ack_window() -> None:
@@ -310,7 +316,9 @@ def test_fallback_cascade_configured_fires_voice_and_pager(monkeypatch: pytest.M
     monkeypatch.setattr(
         tv,
         "send_twilio_voice",
-        lambda **_: tv.TwilioVoiceResult(ok=True, call_sid="CA1", http_status=200, error_message=None),
+        lambda **_: tv.TwilioVoiceResult(
+            ok=True, call_sid="CA1", http_status=200, error_message=None
+        ),
     )
 
     class _FakePager:
@@ -318,7 +326,9 @@ def test_fallback_cascade_configured_fires_voice_and_pager(monkeypatch: pytest.M
             pass
 
         def send(self, **_: object) -> PagerNotifierResult:
-            return PagerNotifierResult(ok=True, vendor_message_id="m1", http_status=200, error_message=None)
+            return PagerNotifierResult(
+                ok=True, vendor_message_id="m1", http_status=200, error_message=None
+            )
 
     import alerting_service.notifiers.physical_pager as pp
 

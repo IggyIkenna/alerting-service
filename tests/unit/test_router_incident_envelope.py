@@ -199,7 +199,11 @@ class TestHandleAutoActionRecovery:
         verifier = _make_failing_verifier()
         with patch("alerting_service.notifiers.router._route_envelope_to_channels"):
             _handle_auto_action_recovery(env, _sm=sm, _verifier=verifier)
-            uncertain_call = [c for c in sm.transition.call_args_list if c[0][1] is IncidentState.RECOVERY_UNCERTAIN]
+            uncertain_call = [
+                c
+                for c in sm.transition.call_args_list
+                if c[0][1] is IncidentState.RECOVERY_UNCERTAIN
+            ]
             assert uncertain_call, "RECOVERY_UNCERTAIN transition not called"
             kwargs = uncertain_call[0][1]
             assert kwargs.get("severity_hint") == AlertSeverity.HIGH

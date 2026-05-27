@@ -148,7 +148,9 @@ class ProviderHealthProbe:
                 result,
             )
 
-    async def _probe_pagerduty(self, client: httpx.AsyncClient) -> tuple[bool, float | None, str | None]:
+    async def _probe_pagerduty(
+        self, client: httpx.AsyncClient
+    ) -> tuple[bool, float | None, str | None]:
         if not self._cfg.pagerduty_service_id or not self._cfg.pagerduty_api_token:
             return True, None, None  # no PagerDuty configured → not a failure
         url = f"https://api.pagerduty.com/services/{self._cfg.pagerduty_service_id}"
@@ -166,7 +168,9 @@ class ProviderHealthProbe:
         except (httpx.HTTPError, httpx.TimeoutException) as exc:
             return False, (time.monotonic() - t0) * 1000, repr(exc)[:200]
 
-    async def _probe_telegram(self, client: httpx.AsyncClient) -> tuple[bool, float | None, str | None]:
+    async def _probe_telegram(
+        self, client: httpx.AsyncClient
+    ) -> tuple[bool, float | None, str | None]:
         if not self._cfg.telegram_bot_token:
             return True, None, None  # no Telegram configured → not a failure
         url = f"https://api.telegram.org/bot{self._cfg.telegram_bot_token}/getMe"

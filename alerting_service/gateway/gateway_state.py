@@ -45,7 +45,9 @@ _ESCALATE_TO_HUMAN_ACK_SECONDS = 3600
 """ESCALATE_TO_HUMAN verdict shortens the audit-ack window to 1h (vs default 6h)."""
 
 
-def _shortest_transition_path(start: IncidentState, target: IncidentState) -> list[IncidentState] | None:
+def _shortest_transition_path(
+    start: IncidentState, target: IncidentState
+) -> list[IncidentState] | None:
     """BFS over ALLOWED_TRANSITIONS; returns the state sequence start→...→target (excl. start).
 
     Returns ``[]`` if already at target, or ``None`` if target is unreachable.
@@ -190,7 +192,9 @@ class GatewayState:
             return self._shorten_ack_window(env, signoff)
         return env
 
-    def _force_safe_mode(self, env: IncidentEnvelope, signoff: RecoveryAuditSignoff) -> IncidentEnvelope:
+    def _force_safe_mode(
+        self, env: IncidentEnvelope, signoff: RecoveryAuditSignoff
+    ) -> IncidentEnvelope:
         """Drive the incident to SAFE_MODE_ACTIVE + SEV0 via the shortest allowed path."""
         path = _shortest_transition_path(env.state, IncidentState.SAFE_MODE_ACTIVE)
         if path is None:
@@ -257,7 +261,9 @@ class GatewayState:
             self._incidents[incident_key] = updated
             return updated
 
-    def _shorten_ack_window(self, env: IncidentEnvelope, signoff: RecoveryAuditSignoff) -> IncidentEnvelope:
+    def _shorten_ack_window(
+        self, env: IncidentEnvelope, signoff: RecoveryAuditSignoff
+    ) -> IncidentEnvelope:
         """ESCALATE_TO_HUMAN — require operational ack + shorten audit-ack deadline to 1h."""
         new_due = datetime.now(UTC) + timedelta(seconds=_ESCALATE_TO_HUMAN_ACK_SECONDS)
         with self._lock:

@@ -147,7 +147,9 @@ async def post_manual_action(request: ManualActionRequest) -> ManualActionRespon
     """
     # 1. Authz
     if request.operator_id not in _OPERATOR_ALLOWLIST:
-        raise HTTPException(status_code=403, detail=f"Operator {request.operator_id} not on Safety Ops allowlist")
+        raise HTTPException(
+            status_code=403, detail=f"Operator {request.operator_id} not on Safety Ops allowlist"
+        )
 
     # 2. Rate-limit
     if not _check_rate_limit(request.operator_id):

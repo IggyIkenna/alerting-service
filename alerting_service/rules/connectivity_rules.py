@@ -128,7 +128,9 @@ def evaluate_dependency_recovered(
             "dependency_id": dependency_id,
             "dependency_class": policy.dependency_class.value,
             "venue": str(event_details.get("venue", "")),  # noqa: qg-empty-fallback
-            "message": (f"Dependency {dependency_id} recovered after {previous_outage:.0f}s outage"),
+            "message": (
+                f"Dependency {dependency_id} recovered after {previous_outage:.0f}s outage"
+            ),
             "created_at": now.isoformat(),
             "delivered": False,
             "delivery_channel": "telegram",

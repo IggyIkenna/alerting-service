@@ -97,9 +97,13 @@ class IncidentStateMachine:
 
         new_envelope = envelope.model_copy(update=update_kwargs)
         self._run_persist(new_envelope, previous, target)
-        return TransitionResult(envelope=new_envelope, previous_state=previous, succeeded=True, failure_reason=None)
+        return TransitionResult(
+            envelope=new_envelope, previous_state=previous, succeeded=True, failure_reason=None
+        )
 
-    def _run_persist(self, new_envelope: IncidentEnvelope, previous: IncidentState, target: IncidentState) -> None:
+    def _run_persist(
+        self, new_envelope: IncidentEnvelope, previous: IncidentState, target: IncidentState
+    ) -> None:
         """Fire the persist callback if set; never propagate its failures."""
         if self._persist is None:
             return

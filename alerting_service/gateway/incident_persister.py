@@ -104,7 +104,9 @@ class IncidentPersister:
                 content_type="application/x-ndjson",
             )
         except Exception:
-            _logger.exception("IncidentPersister write failed: blob=%s bucket=%s", blob_path, self._bucket)
+            _logger.exception(
+                "IncidentPersister write failed: blob=%s bucket=%s", blob_path, self._bucket
+            )
 
 
 def _resolve_bucket(config: UnifiedCloudConfig) -> str:

@@ -211,5 +211,7 @@ _REGISTRY: dict[str, type[PhysicalPagerNotifier]] = {
 def get_physical_pager_class(vendor_name: str) -> type[PhysicalPagerNotifier]:
     """Closed-set lookup. Raises KeyError on unknown vendor."""
     if vendor_name not in _REGISTRY:
-        raise KeyError(f"Unknown physical-pager vendor {vendor_name!r}; registered: {sorted(_REGISTRY)}")
+        raise KeyError(
+            f"Unknown physical-pager vendor {vendor_name!r}; registered: {sorted(_REGISTRY)}"
+        )
     return _REGISTRY[vendor_name]

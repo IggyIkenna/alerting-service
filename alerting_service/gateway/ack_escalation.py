@@ -131,7 +131,9 @@ class _DefaultEscalationNotifier:
             route_incident_envelope_to_fallbacks,
         )
 
-        route_incident_envelope_to_fallbacks(envelope, immediate_sev0_overrides=("ack_sla_breach_physical_pager",))
+        route_incident_envelope_to_fallbacks(
+            envelope, immediate_sev0_overrides=("ack_sla_breach_physical_pager",)
+        )
 
 
 async def run_ack_escalation_loop(interval_seconds: float = 30.0) -> None:

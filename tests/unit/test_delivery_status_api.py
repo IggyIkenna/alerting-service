@@ -23,7 +23,9 @@ def mock_storage_store() -> MagicMock:
 
 
 @pytest.fixture
-def client_non_mock(mock_storage_store: MagicMock, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+def client_non_mock(
+    mock_storage_store: MagicMock, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[TestClient]:
     """Create a FastAPI test client with mock mode disabled (tests real code path)."""
     from alerting_service.api.main import app
 

@@ -117,7 +117,9 @@ def test_acks_mock_mode(client: TestClient) -> None:
 # ── Live mode (in-memory GatewayState) ─────────────────────────────────────
 
 
-def test_live_queue_feed_and_audit_ack_clears_entry(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_live_queue_feed_and_audit_ack_clears_entry(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(safety_ops, "_cfg", _LiveCfg())
     state = get_gateway_state()
     state.register_incident(_envelope("inc-live-1"))
@@ -134,7 +136,9 @@ def test_live_queue_feed_and_audit_ack_clears_entry(client: TestClient, monkeypa
     assert feed[0]["parent_incident_key"] == "inc-live-1"
 
     # Audit-ack clears the SLA-countdown queue entry.
-    acked = client.post("/safety-ops/incidents/inc-live-1/audit-ack?operator_id=ikenna@odum-research.com")
+    acked = client.post(
+        "/safety-ops/incidents/inc-live-1/audit-ack?operator_id=ikenna@odum-research.com"
+    )
     assert acked.status_code == 200
     assert client.get("/safety-ops/audit-ack-queue").json() == []
 
@@ -145,7 +149,9 @@ def test_live_unknown_incident_404(client: TestClient, monkeypatch: pytest.Monke
     assert resp.status_code == 404
 
 
-def test_live_signoff_ingest_dispute_forces_safe_mode(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_live_signoff_ingest_dispute_forces_safe_mode(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
     monkeypatch.setattr(safety_ops, "_cfg", _LiveCfg())
     state = get_gateway_state()
     state.register_incident(_envelope("inc-sig", state=IncidentState.AUTO_ACTION_SUCCEEDED))

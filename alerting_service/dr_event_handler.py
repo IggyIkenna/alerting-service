@@ -110,7 +110,11 @@ def handle_kill_switch_armed_event(event: KillSwitchArmedEvent) -> None:
     """Route a ``KillSwitchArmedEvent`` to alerting channels at the severity tier
     implied by ``event.switch_id`` (global/wallet/asset-group → CRITICAL; else HIGH).
     """
-    severity = AlertSeverity.CRITICAL if event.switch_id in _CRITICAL_ARM_SWITCH_IDS else AlertSeverity.HIGH
+    severity = (
+        AlertSeverity.CRITICAL
+        if event.switch_id in _CRITICAL_ARM_SWITCH_IDS
+        else AlertSeverity.HIGH
+    )
     channels, pd_severity = _severity_channels(severity)
     event_name = "KILL_SWITCH_ARMED"
     details: dict[str, object] = {
@@ -137,7 +141,9 @@ def handle_kill_switch_armed_event(event: KillSwitchArmedEvent) -> None:
             "severity": severity.value,
         },
     )
-    route_event_with_explicit_channels(event_name, details, channels=channels, pd_severity=pd_severity)
+    route_event_with_explicit_channels(
+        event_name, details, channels=channels, pd_severity=pd_severity
+    )
 
 
 def handle_kill_switch_armed_payload(payload: dict[str, object]) -> None:
@@ -178,7 +184,10 @@ def handle_kill_switch_disarm_event(event: KillSwitchDisarmEvent) -> None:
         "disarmed_by": event.disarmed_by,
         "disarmed_at": event.disarmed_at.isoformat(),
     }
-    if event.recovery_mode is BreakerRecoveryMode.AUTO_COOLDOWN and event.cooldown_seconds_elapsed is not None:
+    if (
+        event.recovery_mode is BreakerRecoveryMode.AUTO_COOLDOWN
+        and event.cooldown_seconds_elapsed is not None
+    ):
         details["recovered_after_seconds"] = event.cooldown_seconds_elapsed
     if event.recovery_mode is BreakerRecoveryMode.MANUAL_UNKILL:
         details["unkilled_by_operator_id"] = event.disarmed_by
@@ -217,7 +226,11 @@ def handle_circuit_breaker_fire(breaker_id: CircuitBreakerId, details: dict[str,
     ``BreakerFiredEvent`` UAC model lands, this is the classification seam.
     """
     action = _breaker_action_for(breaker_id)
-    severity = _BREAKER_ACTION_SEVERITY.get(action, AlertSeverity.WARN) if action is not None else AlertSeverity.WARN
+    severity = (
+        _BREAKER_ACTION_SEVERITY.get(action, AlertSeverity.WARN)
+        if action is not None
+        else AlertSeverity.WARN
+    )
     channels, pd_severity = _severity_channels(severity)
     event_name = "CIRCUIT_BREAKER_FIRED"
     action_name = action.value if action is not None else "UNKNOWN"
@@ -238,7 +251,9 @@ def handle_circuit_breaker_fire(breaker_id: CircuitBreakerId, details: dict[str,
             "severity": severity.value,
         },
     )
-    route_event_with_explicit_channels(event_name, enriched, channels=channels, pd_severity=pd_severity)
+    route_event_with_explicit_channels(
+        event_name, enriched, channels=channels, pd_severity=pd_severity
+    )
 
 
 def handle_circuit_breaker_fire_payload(payload: dict[str, object]) -> None:

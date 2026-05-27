@@ -170,7 +170,9 @@ class TestEvaluateBalanceDiscrepancy:
         assert result[0]["delivery_channel"] == "pagerduty+telegram"
 
     def test_unknown_status_treated_as_warning(self) -> None:
-        result = evaluate_balance_discrepancy({"status": "SOME_OTHER_STATUS", "venue": "v", "currency": "c"})
+        result = evaluate_balance_discrepancy(
+            {"status": "SOME_OTHER_STATUS", "venue": "v", "currency": "c"}
+        )
         assert len(result) == 1
         assert result[0]["severity"] == "WARNING"
 

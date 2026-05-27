@@ -13,7 +13,9 @@ def mock_secret_client():
     """Patch get_secret_client to return a fixed routing key."""
     mock_client = MagicMock()
     mock_client.get_secret.return_value = "test-routing-key-abc123"
-    with patch("alerting_service.notifiers.pagerduty.get_secret_client", return_value=mock_client) as mock:
+    with patch(
+        "alerting_service.notifiers.pagerduty.get_secret_client", return_value=mock_client
+    ) as mock:
         yield mock
 
 
@@ -44,7 +46,9 @@ class TestSendEvent:
     def test_returns_true_on_202(
         self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
     ) -> None:
-        with patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)) as mock_post:
+        with patch(
+            "alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)
+        ) as mock_post:
             result = send_event(
                 summary="Kill switch fired",
                 severity="critical",
@@ -58,7 +62,9 @@ class TestSendEvent:
     def test_posts_to_correct_url(
         self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
     ) -> None:
-        with patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)) as mock_post:
+        with patch(
+            "alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)
+        ) as mock_post:
             send_event(
                 summary="test",
                 severity="info",
@@ -72,7 +78,9 @@ class TestSendEvent:
     def test_payload_contains_routing_key_and_summary(
         self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
     ) -> None:
-        with patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)) as mock_post:
+        with patch(
+            "alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)
+        ) as mock_post:
             send_event(
                 summary="Circuit breaker opened",
                 severity="critical",
@@ -125,23 +133,47 @@ class TestSendEvent:
     def test_severity_critical_accepted(
         self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
     ) -> None:
-        with patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)):
-            assert send_event(summary="test", severity="critical", source="alerting-service", details={}) is True
+        with patch(
+            "alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)
+        ):
+            assert (
+                send_event(
+                    summary="test", severity="critical", source="alerting-service", details={}
+                )
+                is True
+            )
 
     def test_severity_error_accepted(
         self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
     ) -> None:
-        with patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)):
-            assert send_event(summary="test", severity="error", source="alerting-service", details={}) is True
+        with patch(
+            "alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)
+        ):
+            assert (
+                send_event(summary="test", severity="error", source="alerting-service", details={})
+                is True
+            )
 
     def test_severity_warning_accepted(
         self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
     ) -> None:
-        with patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)):
-            assert send_event(summary="test", severity="warning", source="alerting-service", details={}) is True
+        with patch(
+            "alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)
+        ):
+            assert (
+                send_event(
+                    summary="test", severity="warning", source="alerting-service", details={}
+                )
+                is True
+            )
 
     def test_severity_info_accepted(
         self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
     ) -> None:
-        with patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)):
-            assert send_event(summary="test", severity="info", source="alerting-service", details={}) is True
+        with patch(
+            "alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)
+        ):
+            assert (
+                send_event(summary="test", severity="info", source="alerting-service", details={})
+                is True
+            )
