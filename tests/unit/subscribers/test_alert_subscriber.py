@@ -63,9 +63,7 @@ class TestDeserializeMessage:
 
 class TestAlertSubscriber:
     def _make_subscriber(self, project_id: str = "test-project") -> AlertSubscriber:
-        with patch(
-            "alerting_service.subscribers.alert_subscriber.get_queue_client"
-        ) as mock_factory:
+        with patch("alerting_service.subscribers.alert_subscriber.get_queue_client") as mock_factory:
             mock_factory.return_value = MagicMock()
             subscriber = AlertSubscriber(project_id=project_id)
         return subscriber

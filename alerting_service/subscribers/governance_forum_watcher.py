@@ -232,9 +232,7 @@ class SnapshotForumPoller:
             if exc.response.status_code == 429:
                 logger.warning("SnapshotForumPoller: rate limited (429), skipping cycle")
             else:
-                logger.warning(
-                    "SnapshotForumPoller HTTP error %s: %s", exc.response.status_code, exc
-                )
+                logger.warning("SnapshotForumPoller HTTP error %s: %s", exc.response.status_code, exc)
             return []
         except Exception as exc:
             logger.warning("SnapshotForumPoller fetch error: %s", exc)
@@ -254,11 +252,7 @@ class SnapshotForumPoller:
             if not matched_keywords:
                 continue
 
-            posted_at = (
-                datetime.fromtimestamp(p.created, tz=UTC)
-                if p.created is not None
-                else datetime.now(UTC)
-            )
+            posted_at = datetime.fromtimestamp(p.created, tz=UTC) if p.created is not None else datetime.now(UTC)
 
             space_id = p.space.id if p.space and p.space.id else ""
             url = f"https://snapshot.org/#/{space_id}/proposal/{p.id}"

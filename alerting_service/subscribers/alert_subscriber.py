@@ -246,9 +246,7 @@ class AlertSubscriber:
                         break
                     batch: list[tuple[bytes, dict[str, str]]] = await loop.run_in_executor(
                         None,
-                        lambda sub=subscription: self._client.subscribe_once(
-                            sub, timeout=self._poll_timeout
-                        ),
+                        lambda sub=subscription: self._client.subscribe_once(sub, timeout=self._poll_timeout),
                     )
                     for data, attrs in batch:
                         _start = time.perf_counter()
