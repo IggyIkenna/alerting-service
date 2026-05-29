@@ -35,6 +35,7 @@ _SM_TWILIO_FROM_NUMBER = "alerting-twilio-from-number"
 _SM_TWILIO_TO_PRIMARY = "alerting-twilio-to-number-primary"
 _SM_TWILIO_TO_SECONDARY = "alerting-twilio-to-number-secondary"
 _SM_TWILIO_TO_FOUNDER = "alerting-twilio-to-number-founder"
+_SM_UTS_LIVE_ALERTS_SLACK_WEBHOOK = "alerting-uts-live-alerts-slack-webhook"
 
 _ALL_PAGING_KEYS = {
     "bot_token",
@@ -46,6 +47,7 @@ _ALL_PAGING_KEYS = {
     "twilio_to_number_primary",
     "twilio_to_number_secondary",
     "twilio_to_number_founder",
+    "uts_live_alerts_slack_webhook",
 }
 
 
@@ -223,9 +225,7 @@ class TestStop:
 
     def test_stop_is_idempotent(self) -> None:
         r = _PagingCredentialsReloader(refresh_interval=9999)
-        with patch(
-            "alerting_service.config_reloaders.SecretManagerClient", return_value=_make_sm_mock()
-        ):
+        with patch("alerting_service.config_reloaders.SecretManagerClient", return_value=_make_sm_mock()):
             r.start(project_id="test-project")
         r.stop()
         r.stop()  # second stop must not raise
@@ -246,9 +246,7 @@ class TestDoubleStart:
             call_count += 1
             return _make_sm_mock()
 
-        with patch(
-            "alerting_service.config_reloaders.SecretManagerClient", side_effect=counting_sm
-        ):
+        with patch("alerting_service.config_reloaders.SecretManagerClient", side_effect=counting_sm):
             r.start(project_id="test-project")
             r.start(project_id="test-project")  # second call must be a no-op
         try:
@@ -305,9 +303,7 @@ class TestCredentialRefresh:
                 r._refresh()
             mock_log.assert_called_once()
             call_kwargs = mock_log.call_args
-            event_name = (
-                call_kwargs.args[0] if call_kwargs.args else call_kwargs.kwargs.get("event")
-            )
+            event_name = call_kwargs.args[0] if call_kwargs.args else call_kwargs.kwargs.get("event")
             assert event_name == "CONFIG_CHANGED"
         r.stop()
 
