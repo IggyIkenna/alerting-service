@@ -75,6 +75,20 @@ _ALERT_SUBSCRIPTIONS: tuple[str, ...] = (
     "margin-events",
 )
 
+# Topics with NO publisher in the codebase as of 2026-05-29 audit
+# (cefi_venue_backfill_coverage_remediation §6G). These subscriptions exist in
+# GCP and in _ALERT_SUBSCRIPTIONS but nothing publishes to them yet — expected
+# to see zero messages until publishers are implemented. Listed explicitly so
+# "zero traffic for 5+ days" is a known gap, not an unknown incident.
+_SUBSCRIPTIONS_WITH_NO_PUBLISHER: frozenset[str] = frozenset(
+    {
+        "risk_alerts_circuit_breaker_triggers",  # planned: execution-service circuit breaker
+        "balance_discrepancy_alerts",  # planned: batch-live-reconciliation-service
+        "order_rejection_spikes",  # planned: execution-service order gateway
+        "service_error_events",  # planned: cross-service error aggregation bus
+    }
+)
+
 # Coordination events from execution-service that must also be routed.
 _COORDINATION_EVENTS: frozenset[str] = frozenset({"KILL_SWITCH_ACTIVATED", "CIRCUIT_BREAKER_OPEN"})
 
@@ -157,6 +171,15 @@ class AlertSubscriber:
             self._subscriptions,
             self._project_id,
         )
+        no_pub = [s for s in self._subscriptions if s in _SUBSCRIPTIONS_WITH_NO_PUBLISHER]
+        if no_pub:
+            logger.warning(
+                "AlertSubscriber: %d subscription(s) have no publisher implemented yet — "
+                "zero traffic on these is expected, not an incident: %s. "
+                "See _SUBSCRIPTIONS_WITH_NO_PUBLISHER in alert_subscriber.py for context.",
+                len(no_pub),
+                no_pub,
+            )
 
     def stop(self) -> None:
         """Signal the stream loop to stop after the current poll cycle."""
@@ -246,9 +269,7 @@ class AlertSubscriber:
                         break
                     batch: list[tuple[bytes, dict[str, str]]] = await loop.run_in_executor(
                         None,
-                        lambda sub=subscription: self._client.subscribe_once(
-                            sub, timeout=self._poll_timeout
-                        ),
+                        lambda sub=subscription: self._client.subscribe_once(sub, timeout=self._poll_timeout),
                     )
                     for data, attrs in batch:
                         _start = time.perf_counter()
