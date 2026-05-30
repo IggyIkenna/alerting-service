@@ -73,6 +73,14 @@ _ALERT_SUBSCRIPTIONS: tuple[str, ...] = (
     "order_rejection_spikes",
     "service_error_events",
     "margin-events",
+    # DeFi data-quality alerts emitted by the MTDS subgraph_health_probe
+    # cron (6h cadence). Topic provisioned in
+    # deployment-service/terraform/gcp/subgraph_health_probe_scheduler.tf.
+    # Event kinds: SUBGRAPH_SILENT_DATA_LOSS / SUBGRAPH_PROBE_FAILED. The
+    # generic router.route_event() dispatches to PagerDuty/Slack based on
+    # event_name == "SUBGRAPH_SILENT_DATA_LOSS"; no dedicated handler is
+    # required for the May-23 cutover (kind alone is sufficient).
+    "defi_data_quality_alerts",
 )
 
 # Topics with NO publisher in the codebase as of 2026-05-29 audit
@@ -110,7 +118,10 @@ def _extract_event_name(payload: dict[str, object]) -> str:
     Looks for ``event_name``, ``event_type``, or ``type`` keys in that order.
     Falls back to ``"UNKNOWN_EVENT"`` when none are present.
     """
-    for key in ("event_name", "event_type", "type"):
+    # ``kind`` is the canonical field on subgraph_health_probe alerts
+    # (defi_data_quality_alerts topic) — listed first so probe alerts route
+    # cleanly without each probe having to pre-canonicalise to event_name.
+    for key in ("event_name", "event_type", "type", "kind"):
         value = payload.get(key)
         if isinstance(value, str) and value:
             return value
