@@ -85,9 +85,7 @@ class TestSendSlackAlert:
             "alerting_service.core.slack_dispatcher.aiohttp.ClientSession",
             return_value=mock_session,
         ):
-            result = await send_slack_alert(
-                "https://hooks.slack.com/test", event, "https://dash.io"
-            )
+            result = await send_slack_alert("https://hooks.slack.com/test", event, "https://dash.io")
 
         assert result == "123456.789"
 
@@ -110,8 +108,6 @@ class TestSendSlackAlert:
             "alerting_service.core.slack_dispatcher.aiohttp.ClientSession",
             return_value=mock_session,
         ):
-            result = await send_slack_alert(
-                "https://hooks.slack.com/test", event, "https://dash.io"
-            )
+            result = await send_slack_alert("https://hooks.slack.com/test", event, "https://dash.io")
 
         assert result is None

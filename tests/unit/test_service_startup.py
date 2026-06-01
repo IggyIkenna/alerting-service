@@ -98,9 +98,7 @@ def test_no_direct_google_pubsub_import() -> None:
     src = pathlib.Path("alerting_service/subscribers/alert_subscriber.py")
     content = src.read_text()
     # Match actual import statements, not docstring comments
-    has_direct_import = bool(
-        re.search(r"^\s*(import|from)\s+google\.cloud\.pubsub", content, re.MULTILINE)
-    )
+    has_direct_import = bool(re.search(r"^\s*(import|from)\s+google\.cloud\.pubsub", content, re.MULTILINE))
     assert not has_direct_import, (
         "alert_subscriber.py must not import google-cloud-pubsub directly; "
         "use get_queue_client from unified_trading_library.cloud_interface"

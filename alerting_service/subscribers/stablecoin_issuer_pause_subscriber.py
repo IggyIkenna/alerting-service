@@ -39,9 +39,7 @@ logger = logging.getLogger(__name__)
 _DEFAULT_POLL_INTERVAL_SECONDS: float = 60.0
 
 # Circle attestation endpoint
-_CIRCLE_ATTESTATION_URL: str = (
-    "https://www.circle.com/en/transparency/attestations/usdc-attestation"
-)
+_CIRCLE_ATTESTATION_URL: str = "https://www.circle.com/en/transparency/attestations/usdc-attestation"
 
 # Tether transparency URL
 _TETHER_TRANSPARENCY_URL: str = "https://tether.to/en/transparency/"

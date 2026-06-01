@@ -24,27 +24,21 @@ def _make_response(status_code: int, text: str = "") -> MagicMock:
 
 class TestSendTelegram:
     def test_returns_true_on_200(self, mock_log_event: MagicMock) -> None:
-        with patch(
-            "alerting_service.notifiers.telegram.httpx.post", return_value=_make_response(200)
-        ) as mock_post:
+        with patch("alerting_service.notifiers.telegram.httpx.post", return_value=_make_response(200)) as mock_post:
             result = send_telegram(message="Alert fired", bot_token="bot123", chat_id="chat456")
 
         assert result is True
         mock_post.assert_called_once()
 
     def test_posts_to_correct_url(self, mock_log_event: MagicMock) -> None:
-        with patch(
-            "alerting_service.notifiers.telegram.httpx.post", return_value=_make_response(200)
-        ) as mock_post:
+        with patch("alerting_service.notifiers.telegram.httpx.post", return_value=_make_response(200)) as mock_post:
             send_telegram(message="test", bot_token="mytoken", chat_id="123")
 
         call_url = mock_post.call_args[0][0]
         assert call_url == "https://api.telegram.org/botmytoken/sendMessage"
 
     def test_payload_contains_chat_id_and_text(self, mock_log_event: MagicMock) -> None:
-        with patch(
-            "alerting_service.notifiers.telegram.httpx.post", return_value=_make_response(200)
-        ) as mock_post:
+        with patch("alerting_service.notifiers.telegram.httpx.post", return_value=_make_response(200)) as mock_post:
             send_telegram(message="Kill switch fired", bot_token="t", chat_id="c")
 
         json_payload: dict[str, str] = mock_post.call_args.kwargs["json"]
@@ -61,9 +55,7 @@ class TestSendTelegram:
 
         assert result is False
 
-    def test_returns_false_on_http_error_and_does_not_raise(
-        self, mock_log_event: MagicMock
-    ) -> None:
+    def test_returns_false_on_http_error_and_does_not_raise(self, mock_log_event: MagicMock) -> None:
         with patch(
             "alerting_service.notifiers.telegram.httpx.post",
             side_effect=httpx.ConnectError("connection refused"),
@@ -73,9 +65,7 @@ class TestSendTelegram:
         assert result is False
 
     def test_logs_event_on_success(self, mock_log_event: MagicMock) -> None:
-        with patch(
-            "alerting_service.notifiers.telegram.httpx.post", return_value=_make_response(200)
-        ):
+        with patch("alerting_service.notifiers.telegram.httpx.post", return_value=_make_response(200)):
             send_telegram(message="test msg", bot_token="t", chat_id="c")
 
         mock_log_event.assert_called_once()

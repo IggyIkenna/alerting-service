@@ -46,9 +46,7 @@ def evaluate_position_discrepancy(
     now = datetime.now(UTC)
     return [
         {
-            "alert_id": (
-                f"recon-pos-{event_details.get('deviation_id', 'unknown')}-{now.strftime('%H%M%S')}"
-            ),
+            "alert_id": (f"recon-pos-{event_details.get('deviation_id', 'unknown')}-{now.strftime('%H%M%S')}"),
             "rule_id": "position_qty_discrepancy",
             "metric_name": "position_discrepancy",
             "metric_value": str(event_details.get("discrepancy", "0")),
@@ -162,9 +160,7 @@ def evaluate_batch_vs_live_recon_drifted(
     date = str(event_details.get("date", ""))  # noqa: qg-empty-fallback
 
     # P&L gap >2x threshold is CRITICAL; between 1x-2x is WARNING
-    severity: Literal["WARNING", "CRITICAL"] = (
-        "CRITICAL" if alpha_pnl_gap_bps > threshold_bps * 2 else "WARNING"
-    )
+    severity: Literal["WARNING", "CRITICAL"] = "CRITICAL" if alpha_pnl_gap_bps > threshold_bps * 2 else "WARNING"
     now = datetime.now(UTC)
     return [
         {
@@ -300,9 +296,7 @@ _SEV0_PREDICATE_KEYS: dict[ImmediateSev0Override, str] = {
     ImmediateSev0Override.POSITION_EXISTS_EXTERNALLY_UNKNOWN_INTERNALLY: (
         "position_exists_externally_unknown_internally"
     ),
-    ImmediateSev0Override.MATERIAL_BALANCE_MOVEMENT_UNEXPLAINED: (
-        "material_balance_movement_unexplained"
-    ),
+    ImmediateSev0Override.MATERIAL_BALANCE_MOVEMENT_UNEXPLAINED: ("material_balance_movement_unexplained"),
     ImmediateSev0Override.MARGIN_COLLATERAL_SAFETY_UNCERTAIN: "margin_collateral_safety_uncertain",
 }
 
