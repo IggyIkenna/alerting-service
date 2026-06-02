@@ -322,6 +322,10 @@ def evaluate_immediate_sev0(
     venue = str(row.get("venue", ""))  # noqa: qg-empty-fallback
     instrument = str(row.get("instrument", ""))  # noqa: qg-empty-fallback
     strategy_id = str(row.get("strategy_id", ""))  # noqa: qg-empty-fallback
+    # account_id / client_id are carried through so account-level SEV0 overrides can
+    # arm an ACCOUNT-WIDE recon-freeze (recon_freeze_publisher) with account context.
+    account_id = str(row.get("account_id", ""))  # noqa: qg-empty-fallback
+    client_id = str(row.get("client_id", ""))  # noqa: qg-empty-fallback
 
     alerts: list[dict[str, object]] = []
     for override, key in _SEV0_PREDICATE_KEYS.items():
@@ -337,6 +341,8 @@ def evaluate_immediate_sev0(
                     "venue": venue,
                     "instrument": instrument,
                     "strategy_id": strategy_id,
+                    "account_id": account_id,
+                    "client_id": client_id,
                     "message": (
                         f"ImmediateSev0Override triggered: {override.value} "
                         f"on {venue}:{instrument} (strategy={strategy_id})"
