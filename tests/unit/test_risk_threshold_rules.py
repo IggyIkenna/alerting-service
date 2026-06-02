@@ -2,6 +2,8 @@
 
 from decimal import Decimal
 
+from unified_api_contracts import AlertCode
+
 from alerting_service.rules.risk_threshold_rules import (
     evaluate_risk_thresholds,
     get_threshold_status,
@@ -62,3 +64,25 @@ class TestEvaluateRiskThresholds:
         }
         alerts = evaluate_risk_thresholds(metrics)
         assert alerts[0]["client_id"] == "test-client"
+
+    def test_critical_breach_has_risk_rule_blocked_alert_code(self) -> None:
+        """CRITICAL threshold breach must carry AlertCode.RISK_RULE_BLOCKED."""
+        metrics = {"leverage": "11", "concentration": "0.2", "drawdown": "0.05"}
+        alerts = evaluate_risk_thresholds(metrics)
+        assert len(alerts) == 1
+        assert alerts[0]["severity"] == "CRITICAL"
+        assert alerts[0]["alert_code"] == AlertCode.RISK_RULE_BLOCKED.value
+
+    def test_warning_breach_has_risk_rule_monitor_fired_alert_code(self) -> None:
+        """WARNING threshold breach must carry AlertCode.RISK_RULE_MONITOR_FIRED."""
+        metrics = {"leverage": "8.5", "concentration": "0.2", "drawdown": "0.05"}
+        alerts = evaluate_risk_thresholds(metrics)
+        assert len(alerts) == 1
+        assert alerts[0]["severity"] == "WARNING"
+        assert alerts[0]["alert_code"] == AlertCode.RISK_RULE_MONITOR_FIRED.value
+
+    def test_alert_code_absent_when_ok(self) -> None:
+        """No alerts emitted when all metrics are below warning threshold."""
+        metrics = {"leverage": "3", "concentration": "0.2", "drawdown": "0.05"}
+        alerts = evaluate_risk_thresholds(metrics)
+        assert alerts == []
