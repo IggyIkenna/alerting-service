@@ -29,6 +29,7 @@ from unified_trading_library import (
 from .config import AlertingSystemConfig
 from .engine.mock_data_provider import run_mock_pipeline
 from .notifiers.router import get_batch_stats, set_batch_mode
+from .persistence.storage_store import AlertStorageStore, QuietnessReport
 from .subscribers.alert_subscriber import AlertSubscriber
 from .subscribers.batch_event_reader import BatchEventReader
 
@@ -135,6 +136,25 @@ async def _run_batch_replay(
     logger.info("Services w/data:%d", reader_stats.services_with_data)
     logger.info("Errors:         %d", reader_stats.errors)
     logger.info("=" * 60)
+
+    # Emit a per-run quietness/false-positive report for operator audit.
+    # Granularity: the batch-replay stats are tracked per-channel + run-level
+    # (not per-alert-code), so we emit one run-level aggregate row keyed "*".
+    # fp_count/fp_rate stay 0 (false-positive classification is a downstream
+    # operator step — batch replay has no automatic FP signal) and threshold is
+    # 0.0 (no per-code FP budget is configured yet).
+    run_id = str(uuid.uuid4())
+    fires = sum(would_deliver.values())
+    suppressed = cast(int, stats.get("deduplicated", 0))
+    quietness = QuietnessReport(
+        alert_code="*",
+        fires=fires,
+        suppressed=suppressed,
+        fp_count=0,
+        fp_rate=0.0,
+        threshold=0.0,
+    )
+    AlertStorageStore().write_quietness_report(run_id, [quietness])
 
 
 async def main() -> None:
