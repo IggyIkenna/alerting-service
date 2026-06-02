@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from alerting_service.persistence.storage_store import AlertStorageStore
+from alerting_service.persistence.storage_store import AlertStorageStore, QuietnessReport
 
 
 @pytest.fixture
@@ -186,6 +186,119 @@ class TestCooldownState:
     ) -> None:
         mock_storage_client.upload_bytes.side_effect = RuntimeError("GCS down")
         storage_store.write_cooldown_state({"rule-1": "2026-03-08"})
+
+
+class TestWriteQuietnessReport:
+    """Tests for write_quietness_report — mirrors write_alert_history pattern."""
+
+    def test_writes_jsonl_to_correct_blob_path(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+    ) -> None:
+        """Blob path must be events/alerting-service/{date}/quietness-{run_id}/report.jsonl."""
+        report = [
+            QuietnessReport(
+                alert_code="RISK_RULE_BLOCKED",
+                fires=5,
+                suppressed=2,
+                fp_count=1,
+                fp_rate=0.2,
+                threshold=0.1,
+            )
+        ]
+        storage_store.write_quietness_report("run-abc", report)
+
+        mock_storage_client.upload_bytes.assert_called_once()
+        call_kwargs = mock_storage_client.upload_bytes.call_args.kwargs
+        assert call_kwargs["bucket"] == "test-bucket"
+        blob_path: str = call_kwargs["blob_path"]
+        assert blob_path.startswith("events/alerting-service/")
+        assert "quietness-run-abc" in blob_path
+        assert blob_path.endswith("/report.jsonl")
+        assert call_kwargs["content_type"] == "application/x-ndjson"
+
+    def test_data_is_valid_jsonl_with_all_report_fields(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+    ) -> None:
+        """Each QuietnessReport row must serialize as a JSONL line with all fields."""
+        report = [
+            QuietnessReport(
+                alert_code="RISK_RULE_MONITOR_FIRED",
+                fires=10,
+                suppressed=3,
+                fp_count=0,
+                fp_rate=0.0,
+                threshold=0.05,
+            )
+        ]
+        storage_store.write_quietness_report("run-xyz", report)
+
+        call_kwargs = mock_storage_client.upload_bytes.call_args.kwargs
+        raw = call_kwargs["data"].decode("utf-8").strip()
+        parsed = json.loads(raw)
+        assert parsed["alert_code"] == "RISK_RULE_MONITOR_FIRED"
+        assert parsed["fires"] == 10
+        assert parsed["suppressed"] == 3
+        assert parsed["fp_count"] == 0
+        assert parsed["fp_rate"] == 0.0
+        assert parsed["threshold"] == 0.05
+
+    def test_multiple_rows_written_as_multi_line_jsonl(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+    ) -> None:
+        """Multiple QuietnessReport rows must produce one line per row."""
+        report = [
+            QuietnessReport(alert_code="CODE_A", fires=1, suppressed=0, fp_count=0, fp_rate=0.0, threshold=0.0),
+            QuietnessReport(alert_code="CODE_B", fires=2, suppressed=1, fp_count=0, fp_rate=0.0, threshold=0.0),
+        ]
+        storage_store.write_quietness_report("run-multi", report)
+
+        call_kwargs = mock_storage_client.upload_bytes.call_args.kwargs
+        lines = [ln for ln in call_kwargs["data"].decode("utf-8").strip().splitlines() if ln]
+        assert len(lines) == 2
+        codes = {json.loads(ln)["alert_code"] for ln in lines}
+        assert codes == {"CODE_A", "CODE_B"}
+
+    def test_empty_report_writes_empty_bytes(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+    ) -> None:
+        """An empty report list must not raise and must write empty/newline-only bytes."""
+        storage_store.write_quietness_report("run-empty", [])
+        mock_storage_client.upload_bytes.assert_called_once()
+
+    def test_logs_persistence_completed_event(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+    ) -> None:
+        report = [QuietnessReport(alert_code="*", fires=0, suppressed=0, fp_count=0, fp_rate=0.0, threshold=0.0)]
+        storage_store.write_quietness_report("run-log", report)
+        mock_log_event.assert_called_once()
+        assert mock_log_event.call_args[0][0] == "PERSISTENCE_COMPLETED"
+
+    def test_does_not_raise_on_upload_failure(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+    ) -> None:
+        """Upload failures must be swallowed (same isolation as write_alert_history)."""
+        mock_storage_client.upload_bytes.side_effect = RuntimeError("GCS down")
+        report = [QuietnessReport(alert_code="*", fires=1, suppressed=0, fp_count=0, fp_rate=0.0, threshold=0.0)]
+        # Must not raise
+        storage_store.write_quietness_report("run-err", report)
 
 
 class TestReadDeliveryRecords:
