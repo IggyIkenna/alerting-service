@@ -21,6 +21,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Final, Literal
 
+from unified_api_contracts import AlertCode
 from unified_api_contracts.internal.modes import OperationalMode
 
 ThresholdStatus = Literal["OK", "WARNING", "CRITICAL"]
@@ -94,6 +95,9 @@ def evaluate_risk_thresholds(
         status = get_threshold_status(value, warning, critical)
 
         if status != "OK":
+            alert_code = (
+                AlertCode.RISK_RULE_BLOCKED.value if status == "CRITICAL" else AlertCode.RISK_RULE_MONITOR_FIRED.value
+            )
             alerts.append(
                 {
                     "alert_id": f"mock-{metric_name}-{now.strftime('%Y%m%d%H%M%S')}",
@@ -102,6 +106,7 @@ def evaluate_risk_thresholds(
                     "threshold_warning": str(warning),
                     "threshold_critical": str(critical),
                     "severity": status,
+                    "alert_code": alert_code,
                     "mode": mode.value,
                     "wake_operator": wake_operator,
                     "client_id": str(risk_metrics.get("client_id", "mock-client")),
