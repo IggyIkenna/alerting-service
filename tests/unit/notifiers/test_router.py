@@ -59,6 +59,7 @@ def mock_config_with_telegram():
     mock_cfg.telegram_bot_token = "bot-token-123"
     mock_cfg.telegram_chat_id = "chat-456"
     mock_cfg.telegram_chat_id_ops = ""
+    mock_cfg.uts_live_alerts_slack_webhook = ""
     mock_cfg.gcp_project_id = "test-project"
     mock_cfg.pagerduty_disabled = False
     mock_cfg.quietness_baseline_mode = False
@@ -89,6 +90,7 @@ def mock_config_without_telegram():
     mock_cfg.telegram_bot_token = ""
     mock_cfg.telegram_chat_id = ""
     mock_cfg.telegram_chat_id_ops = ""
+    mock_cfg.uts_live_alerts_slack_webhook = ""
     mock_cfg.gcp_project_id = "test-project"
     mock_cfg.pagerduty_disabled = False
     mock_cfg.quietness_baseline_mode = False
@@ -626,6 +628,7 @@ class TestTelegramOpsChannelRouting:
         mock_cfg.telegram_bot_token = "bot-token-123"
         mock_cfg.telegram_chat_id = "chat-456"
         mock_cfg.telegram_chat_id_ops = "ops-chat-789"
+        mock_cfg.uts_live_alerts_slack_webhook = ""
         mock_cfg.gcp_project_id = "test-project"
         mock_cfg.pagerduty_disabled = False
         mock_cfg.quietness_baseline_mode = False
@@ -692,3 +695,121 @@ class TestTelegramOpsChannelRouting:
         mock_send_telegram.assert_called_once()
         tg_kwargs = mock_send_telegram.call_args.kwargs
         assert tg_kwargs["chat_id"] == "chat-456"
+
+
+class TestUtsLiveAlertsSlackMirror:
+    """Tests for mirroring live-ops alerts to the #uts-live-alerts Slack channel."""
+
+    @pytest.fixture
+    def mock_config_with_slack_mirror(self):
+        """AlertingSystemConfig with Telegram creds + a configured Slack mirror webhook."""
+        from alerting_service.notifiers.router import _get_cloud_config
+
+        _get_cloud_config.cache_clear()
+        mock_cfg = MagicMock()
+        mock_cfg.telegram_bot_token = "bot-token-123"
+        mock_cfg.telegram_chat_id = "chat-456"
+        mock_cfg.telegram_chat_id_ops = ""
+        mock_cfg.uts_live_alerts_slack_webhook = "https://hooks.slack.com/services/T/B/xyz"
+        mock_cfg.gcp_project_id = "test-project"
+        mock_cfg.pagerduty_disabled = False
+        mock_cfg.quietness_baseline_mode = False
+        mock_cfg.routing_rules = [
+            {"event_pattern": "*", "channels": ["telegram"], "severity_filter": None},
+        ]
+        with patch("alerting_service.notifiers.router.AlertingSystemConfig", return_value=mock_cfg):
+            yield mock_cfg
+
+    @pytest.fixture
+    def mock_send_uts_live_alert(self):
+        """Patch the Slack mirror notifier; returns True by default."""
+        with patch("alerting_service.notifiers.router.send_uts_live_alert", return_value=True) as mock:
+            yield mock
+
+    @pytest.fixture
+    def empty_paging_creds(self):
+        """Force SM paging creds empty so the config-level webhook fallback is used."""
+        with patch(
+            "alerting_service.notifiers.router.get_paging_credentials",
+            return_value={"uts_live_alerts_slack_webhook": ""},
+        ) as mock:
+            yield mock
+
+    def test_runtime_alert_is_mirrored_to_slack(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_telegram: MagicMock,
+        mock_slack_send_message: MagicMock,
+        mock_log_event: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        mock_config_with_slack_mirror: MagicMock,
+        mock_send_uts_live_alert: MagicMock,
+        empty_paging_creds: MagicMock,
+    ) -> None:
+        # PREFLIGHT_FAILED matches a LIVE_ALERT_RULES pattern → runtime alert.
+        route_event("PREFLIGHT_FAILED", {"message": "venue auth ping failed", "venue": "binance"})
+
+        mock_send_telegram.assert_called_once()
+        mock_send_uts_live_alert.assert_called_once()
+        args = mock_send_uts_live_alert.call_args.args
+        assert args[0] == "https://hooks.slack.com/services/T/B/xyz"
+        assert args[1] == "PREFLIGHT_FAILED"
+
+    def test_non_runtime_alert_is_not_mirrored(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_telegram: MagicMock,
+        mock_slack_send_message: MagicMock,
+        mock_log_event: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        mock_config_with_slack_mirror: MagicMock,
+        mock_send_uts_live_alert: MagicMock,
+        empty_paging_creds: MagicMock,
+    ) -> None:
+        # INTERNAL_QG_HEALTH is NOT in LIVE_ALERT_RULES → no Slack mirror.
+        route_event("INTERNAL_QG_HEALTH", {"check": "ping"})
+
+        mock_send_telegram.assert_called_once()
+        mock_send_uts_live_alert.assert_not_called()
+
+    def test_sm_webhook_takes_precedence_over_config(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_telegram: MagicMock,
+        mock_slack_send_message: MagicMock,
+        mock_log_event: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        mock_config_with_slack_mirror: MagicMock,
+        mock_send_uts_live_alert: MagicMock,
+    ) -> None:
+        with patch(
+            "alerting_service.notifiers.router.get_paging_credentials",
+            return_value={"uts_live_alerts_slack_webhook": "https://hooks.slack.com/services/SM/HOOK"},
+        ):
+            route_event("PREFLIGHT_FAILED", {"message": "x"})
+
+        mock_send_uts_live_alert.assert_called_once()
+        assert mock_send_uts_live_alert.call_args.args[0] == "https://hooks.slack.com/services/SM/HOOK"
+
+    def test_slack_mirror_failure_does_not_break_telegram(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_telegram: MagicMock,
+        mock_slack_send_message: MagicMock,
+        mock_log_event: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        mock_config_with_slack_mirror: MagicMock,
+        empty_paging_creds: MagicMock,
+    ) -> None:
+        with patch(
+            "alerting_service.notifiers.router.send_uts_live_alert",
+            side_effect=RuntimeError("slack down"),
+        ):
+            # Must not raise — mirror is best-effort.
+            route_event("PREFLIGHT_FAILED", {"message": "x"})
+
+        mock_send_telegram.assert_called_once()

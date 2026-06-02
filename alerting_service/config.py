@@ -43,6 +43,16 @@ class AlertingSystemConfig(UnifiedCloudConfig):
         description="Cloud storage bucket for domain config store (hot reload)",
     )
     slack_webhook_url: str = Field(default="", description="Slack incoming webhook URL")
+    uts_live_alerts_slack_webhook: str = Field(
+        default="",
+        description=(
+            "Slack Incoming Webhook for the #uts-live-alerts channel. Live-ops runtime "
+            "alerts (LIVE_ALERT_RULES) delivered to the Telegram 'UTS Live Alerts' group "
+            "are mirrored here. Same agent-orchestrator-alerts Slack app. "
+            "SM hot-reload via 'alerting-uts-live-alerts-slack-webhook'; env "
+            "UTS_LIVE_ALERTS_SLACK_WEBHOOK is the fallback. Empty = mirror disabled."
+        ),
+    )
     telegram_bot_token: str = Field(default="", description="Telegram Bot API token")
     telegram_chat_id: str = Field(default="", description="Telegram chat ID for alerts")
     telegram_chat_id_ops: str = Field(

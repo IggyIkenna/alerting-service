@@ -100,9 +100,7 @@ class TestRouteEventSyntheticSuppression:
         mock_pd_send_event.assert_not_called()
         mock_send_telegram.assert_not_called()
         # ALERT_SUPPRESSED_SYNTHETIC MUST appear in the log_event call set.
-        suppressed_calls = [
-            c for c in mock_log_event.call_args_list if c.args[0] == "ALERT_SUPPRESSED_SYNTHETIC"
-        ]
+        suppressed_calls = [c for c in mock_log_event.call_args_list if c.args[0] == "ALERT_SUPPRESSED_SYNTHETIC"]
         assert len(suppressed_calls) == 1
         # Record was persisted as log_only with synthetic-suppressed status.
         mock_persist_delivery.assert_called_once()
@@ -139,9 +137,7 @@ class TestRouteEventSyntheticSuppression:
                     {"synthetic": False, "kill_switch_id": "KILL_ALL_LIVE"},
                 )
 
-        suppressed_calls = [
-            c for c in mock_log_event.call_args_list if c.args[0] == "ALERT_SUPPRESSED_SYNTHETIC"
-        ]
+        suppressed_calls = [c for c in mock_log_event.call_args_list if c.args[0] == "ALERT_SUPPRESSED_SYNTHETIC"]
         assert suppressed_calls == [], (
             f"Real-fire path must NOT emit ALERT_SUPPRESSED_SYNTHETIC; got {len(suppressed_calls)}"
         )
@@ -168,8 +164,6 @@ class TestRouteEventExplicitChannelsSyntheticSuppression:
         )
         mock_pd_send_event.assert_not_called()
         mock_send_telegram.assert_not_called()
-        suppressed_calls = [
-            c for c in mock_log_event.call_args_list if c.args[0] == "ALERT_SUPPRESSED_SYNTHETIC"
-        ]
+        suppressed_calls = [c for c in mock_log_event.call_args_list if c.args[0] == "ALERT_SUPPRESSED_SYNTHETIC"]
         assert len(suppressed_calls) == 1
         mock_persist_delivery.assert_called_once()

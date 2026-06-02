@@ -53,6 +53,7 @@ from .pagerduty import PagerDutySeverity
 from .pagerduty import send_event as pd_send_event
 from .slack import send_message as slack_send_message  # DEPRECATED: use Telegram
 from .telegram import send_telegram
+from .uts_live_alerts_slack import send_uts_live_alert
 
 logger = logging.getLogger(__name__)
 
@@ -149,9 +150,7 @@ def _check_coalesce_window(
         return False
     # Evict stale entries
     for stale_key in [
-        k
-        for k, (ts, _, _) in _coalesce_window.items()
-        if now_monotonic - ts >= _COALESCE_WINDOW_SECONDS
+        k for k, (ts, _, _) in _coalesce_window.items() if now_monotonic - ts >= _COALESCE_WINDOW_SECONDS
     ]:
         del _coalesce_window[stale_key]
     existing = _coalesce_window.get(key)
@@ -284,10 +283,7 @@ def _is_runtime_alert(event_name: str) -> bool:
     The catch-all "*" rule (T4 INFO) is excluded — it exists to ensure nothing fires silently,
     not to mark all events as ops alerts. Only named patterns qualify for ops-channel routing.
     """
-    return any(
-        rule.event_pattern != "*" and fnmatch(event_name, rule.event_pattern)
-        for rule in LIVE_ALERT_RULES
-    )
+    return any(rule.event_pattern != "*" and fnmatch(event_name, rule.event_pattern) for rule in LIVE_ALERT_RULES)
 
 
 def _deliver_message(event_name: str, summary: str) -> bool:
@@ -324,6 +320,38 @@ def _deliver_message(event_name: str, summary: str) -> bool:
     if not ok:
         logger.error("Slack delivery failed for event %s", event_name)
     return ok
+
+
+def _mirror_to_uts_live_alerts_slack(
+    event_name: str,
+    summary: str,
+    details: dict[str, object],
+    config: AlertingSystemConfig,
+) -> None:
+    """Mirror a live-ops runtime alert to the #uts-live-alerts Slack channel.
+
+    Live alerts (matched by LIVE_ALERT_RULES) are delivered to the Telegram
+    "UTS Live Alerts" group; this posts the same alert to the parallel Slack
+    channel so Slack-watching operators see it too. CI/QG events are NOT
+    mirrored — they already have their own Slack channel via notify-slack.yml.
+
+    Best-effort: a Slack failure never affects the primary Telegram delivery.
+    No-op when no webhook is configured (mock / CI / not-yet-provisioned).
+
+    SM-hot-reloaded webhook (alerting-uts-live-alerts-slack-webhook) takes
+    precedence over the env-var value (UTS_LIVE_ALERTS_SLACK_WEBHOOK) when set.
+    """
+    if not _is_runtime_alert(event_name):
+        return
+    sm_creds = get_paging_credentials()
+    webhook = sm_creds.get("uts_live_alerts_slack_webhook") or config.uts_live_alerts_slack_webhook
+    if not webhook:
+        return
+    try:
+        send_uts_live_alert(webhook, event_name, summary, details)
+    except Exception as exc:
+        # Mirror is strictly best-effort — never break Telegram delivery.
+        logger.warning("UTS-live-alerts Slack mirror raised for %s: %s", event_name, exc)
 
 
 def _build_delivery_record(
@@ -533,11 +561,7 @@ def _publish_kill_switch_event(event_name: str, details: dict[str, object], aler
         # Already logged in _find_kill_switch_rule — defensive-double check.
         return
     scope_key = _resolve_scope_key(scope, details)
-    reason = str(
-        details.get("message")
-        or details.get("reason")
-        or f"alert {event_name} fired (alert_id={alert_id})"
-    )
+    reason = str(details.get("message") or details.get("reason") or f"alert {event_name} fired (alert_id={alert_id})")
     try:
         bus = get_kill_switch_bus()
         bus.fire(
@@ -781,6 +805,9 @@ def _deliver_to_channels(
                 event_name,
             )
         )
+        # Parallel mirror of live-ops alerts to the #uts-live-alerts Slack channel.
+        # Best-effort; does not affect the Telegram delivery status above.
+        _mirror_to_uts_live_alerts_slack(event_name, summary, details, config)
 
     return any_failed
 

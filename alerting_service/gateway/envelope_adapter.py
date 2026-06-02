@@ -71,9 +71,7 @@ def wrap_legacy_alert(
     # Required fields with defaults
     service = body.get("service") or fallback_service
     component = body.get("component") or "legacy"
-    problem_type = (
-        body.get("event") or body.get("event_name") or body.get("problem_type") or "LEGACY_ALERT"
-    )
+    problem_type = body.get("event") or body.get("event_name") or body.get("problem_type") or "LEGACY_ALERT"
     problem_summary = body.get("message") or body.get("problem_summary") or str(problem_type)
 
     # Optional scope fields

@@ -83,9 +83,7 @@ async def test_circle_no_halt_returns_none() -> None:
 async def test_tether_halt_keyword_detected() -> None:
     """TetherAttestationPoller detects halt keyword in response body."""
     respx.get("https://tether.to/en/transparency/").mock(
-        return_value=httpx.Response(
-            200, text="Tether halted redemptions pending regulatory review."
-        )
+        return_value=httpx.Response(200, text="Tether halted redemptions pending regulatory review.")
     )
     poller = TetherAttestationPoller()
     async with httpx.AsyncClient() as client:

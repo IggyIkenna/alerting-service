@@ -38,8 +38,6 @@ async def post_ai_triage(
         messages=[{"role": "user", "content": context}],
     )
     first_block = response.content[0] if response.content else None
-    triage_text = (
-        first_block.text if isinstance(first_block, TextBlock) else "No analysis available."
-    )
+    triage_text = first_block.text if isinstance(first_block, TextBlock) else "No analysis available."
     logger.info("AI triage generated for alert %s (slack_ts=%s)", event.alert_id, slack_ts)
     _ = triage_text

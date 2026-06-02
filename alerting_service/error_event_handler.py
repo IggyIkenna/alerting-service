@@ -191,9 +191,7 @@ def _check_dead_letter(
 
     retry_count = int(retry_count_raw) if isinstance(retry_count_raw, (int, float, str)) else 0
     max_retries_raw = event_details.get("max_retries", _MAX_RETRIES)
-    max_retries = (
-        int(max_retries_raw) if isinstance(max_retries_raw, (int, float, str)) else _MAX_RETRIES
-    )
+    max_retries = int(max_retries_raw) if isinstance(max_retries_raw, (int, float, str)) else _MAX_RETRIES
 
     if retry_count < max_retries:
         return
@@ -201,11 +199,7 @@ def _check_dead_letter(
     # Retries exhausted -> dead letter
     now = datetime.now(UTC)
     first_failure_raw = event_details.get("first_failure_at")
-    first_failure_at = (
-        datetime.fromisoformat(str(first_failure_raw))
-        if isinstance(first_failure_raw, str)
-        else now
-    )
+    first_failure_at = datetime.fromisoformat(str(first_failure_raw)) if isinstance(first_failure_raw, str) else now
 
     error_category = ErrorCategory.UNKNOWN
     error_message = str(event_details.get("message", "Unknown error"))
@@ -225,9 +219,7 @@ def _check_dead_letter(
         last_failure_at=now,
         source_service=source_service,
         dead_lettered_at=now,
-        correlation_id=str(event_details.get("correlation_id"))
-        if event_details.get("correlation_id")
-        else None,
+        correlation_id=str(event_details.get("correlation_id")) if event_details.get("correlation_id") else None,
         trace_id=str(event_details.get("trace_id")) if event_details.get("trace_id") else None,
         venue=venue_str,
         recovery_strategy=ErrorRecoveryStrategy.DEAD_LETTER,
