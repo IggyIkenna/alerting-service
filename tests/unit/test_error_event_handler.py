@@ -126,16 +126,12 @@ class TestHandleServiceError:
         assert cb.get_state("execution-service", "binance") == STATE_OPEN
 
         # Verify CIRCUIT_OPEN log_event was emitted
-        circuit_open_calls = [
-            call for call in mock_log_event.call_args_list if str(call.args[0]) == "CIRCUIT_OPEN"
-        ]
+        circuit_open_calls = [call for call in mock_log_event.call_args_list if str(call.args[0]) == "CIRCUIT_OPEN"]
         assert len(circuit_open_calls) == 1
 
         # Verify CIRCUIT_BREAKER_OPEN was routed for alerting
         circuit_route_calls = [
-            call
-            for call in mock_route_event.call_args_list
-            if call.args[0] == "CIRCUIT_BREAKER_OPEN"
+            call for call in mock_route_event.call_args_list if call.args[0] == "CIRCUIT_BREAKER_OPEN"
         ]
         assert len(circuit_route_calls) == 1
 
@@ -156,9 +152,7 @@ class TestHandleServiceError:
 
         assert cb.get_state("execution-service", "binance") == STATE_CLOSED
 
-        circuit_open_calls = [
-            call for call in mock_log_event.call_args_list if str(call.args[0]) == "CIRCUIT_OPEN"
-        ]
+        circuit_open_calls = [call for call in mock_log_event.call_args_list if str(call.args[0]) == "CIRCUIT_OPEN"]
         assert len(circuit_open_calls) == 0
 
     @patch("alerting_service.error_event_handler.route_event")

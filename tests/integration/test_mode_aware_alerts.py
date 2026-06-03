@@ -113,9 +113,7 @@ class TestModeAwareRiskThresholdsMultipleAlerts:
         assert len(live_alerts) == 3
         assert len(paper_alerts) == 0
 
-    @pytest.mark.parametrize(
-        "mode", [OperationalMode.LIVE, OperationalMode.MANUAL, OperationalMode.PAPER]
-    )
+    @pytest.mark.parametrize("mode", [OperationalMode.LIVE, OperationalMode.MANUAL, OperationalMode.PAPER])
     def test_all_non_backtest_modes_have_mode_field(self, mode: OperationalMode) -> None:
         metrics: dict[str, object] = {"leverage": "11", "concentration": "0.6", "drawdown": "0.2"}
         alerts = evaluate_risk_thresholds(metrics, mode=mode)

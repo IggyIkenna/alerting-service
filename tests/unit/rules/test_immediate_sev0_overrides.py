@@ -93,10 +93,7 @@ class TestPositionExistsExternallyUnknownInternally:
         )
 
     def test_no_alert_when_false(self) -> None:
-        assert (
-            evaluate_immediate_sev0(_base_row(position_exists_externally_unknown_internally=False))
-            == []
-        )
+        assert evaluate_immediate_sev0(_base_row(position_exists_externally_unknown_internally=False)) == []
 
 
 class TestMaterialBalanceMovementUnexplained:

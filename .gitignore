@@ -1,6 +1,10 @@
 # --- Keep these (do not ignore): uv.lock, package.json, .env.example, tsconfig.json ---
 # --- Repo-specific exceptions (add below; sync preserves this section) ---
 
+# QG sentinels — local cache written by quality-gates.sh; never tracked (else untracked churn every run)
+.qg_last_passed_sha
+.qg_content_sentinel
+
 # =============================================================================
 # Central .gitignore — workspace SSOT (Python + React/TS + security)
 # Copy to repo root as .gitignore. Source: unified-trading-pm/scripts/templates/

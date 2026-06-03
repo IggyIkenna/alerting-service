@@ -16,18 +16,14 @@ from alerting_service.rules.data_freshness_rules import route_data_freshness_eve
 @pytest.fixture
 def mock_pd_send_event() -> MagicMock:
     """Patch PagerDuty send_event; returns True by default."""
-    with patch(
-        "alerting_service.rules.data_freshness_rules.pd_send_event", return_value=True
-    ) as mock:
+    with patch("alerting_service.rules.data_freshness_rules.pd_send_event", return_value=True) as mock:
         yield mock
 
 
 @pytest.fixture
 def mock_slack_send_message() -> MagicMock:
     """Patch Slack send_message; returns True by default."""
-    with patch(
-        "alerting_service.rules.data_freshness_rules.slack_send_message", return_value=True
-    ) as mock:
+    with patch("alerting_service.rules.data_freshness_rules.slack_send_message", return_value=True) as mock:
         yield mock
 
 
@@ -116,9 +112,7 @@ class TestFeedUnhealthyRouting:
             {"criticality": "critical", "source": "binance"},
         )
 
-        mock_log_event.assert_any_call(
-            "DATA_FRESHNESS_ALERT_FAILED", details={"event_name": "FEED_UNHEALTHY"}
-        )
+        mock_log_event.assert_any_call("DATA_FRESHNESS_ALERT_FAILED", details={"event_name": "FEED_UNHEALTHY"})
 
     def test_slack_failure_emits_alert_failed(
         self,
@@ -133,9 +127,7 @@ class TestFeedUnhealthyRouting:
             {"criticality": "important", "source": "glassnode"},
         )
 
-        mock_log_event.assert_any_call(
-            "DATA_FRESHNESS_ALERT_FAILED", details={"event_name": "FEED_UNHEALTHY"}
-        )
+        mock_log_event.assert_any_call("DATA_FRESHNESS_ALERT_FAILED", details={"event_name": "FEED_UNHEALTHY"})
 
 
 # ---------------------------------------------------------------------------
@@ -201,9 +193,7 @@ class TestDataStaleRouting:
             {"criticality": "critical", "source": "binance"},
         )
 
-        mock_log_event.assert_any_call(
-            "DATA_FRESHNESS_ALERT_FAILED", details={"event_name": "DATA_STALE"}
-        )
+        mock_log_event.assert_any_call("DATA_FRESHNESS_ALERT_FAILED", details={"event_name": "DATA_STALE"})
 
 
 # ---------------------------------------------------------------------------
@@ -296,9 +286,7 @@ class TestDataGapDetectedRouting:
             {"source": "binance", "age_seconds": 10, "expected_cadence_seconds": 1},
         )
 
-        mock_log_event.assert_any_call(
-            "DATA_FRESHNESS_ALERT_FAILED", details={"event_name": "DATA_GAP_DETECTED"}
-        )
+        mock_log_event.assert_any_call("DATA_FRESHNESS_ALERT_FAILED", details={"event_name": "DATA_GAP_DETECTED"})
 
 
 # ---------------------------------------------------------------------------
@@ -329,6 +317,4 @@ class TestUnknownFreshnessEvent:
             {"criticality": "critical", "source": "okx"},
         )
 
-        mock_log_event.assert_any_call(
-            "DATA_FRESHNESS_ALERT_ROUTED", details={"event_name": "FEED_UNHEALTHY"}
-        )
+        mock_log_event.assert_any_call("DATA_FRESHNESS_ALERT_ROUTED", details={"event_name": "FEED_UNHEALTHY"})

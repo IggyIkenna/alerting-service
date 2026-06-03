@@ -13,9 +13,7 @@ def mock_secret_client():
     """Patch get_secret_client to return a fixed webhook URL."""
     mock_client = MagicMock()
     mock_client.get_secret.return_value = "https://hooks.slack.com/services/T000/B000/xxxx"
-    with patch(
-        "alerting_service.notifiers.slack.get_secret_client", return_value=mock_client
-    ) as mock:
+    with patch("alerting_service.notifiers.slack.get_secret_client", return_value=mock_client) as mock:
         yield mock
 
 
@@ -46,9 +44,7 @@ class TestSendMessage:
     def test_returns_true_on_200(
         self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
     ) -> None:
-        with patch(
-            "alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)
-        ) as mock_post:
+        with patch("alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)) as mock_post:
             result = send_message(text="Pipeline failed")
 
         assert result is True
@@ -57,9 +53,7 @@ class TestSendMessage:
     def test_posts_to_webhook_url(
         self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
     ) -> None:
-        with patch(
-            "alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)
-        ) as mock_post:
+        with patch("alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)) as mock_post:
             send_message(text="test")
 
         call_url = mock_post.call_args[0][0]
@@ -68,9 +62,7 @@ class TestSendMessage:
     def test_payload_contains_text(
         self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
     ) -> None:
-        with patch(
-            "alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)
-        ) as mock_post:
+        with patch("alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)) as mock_post:
             send_message(text="Preflight failed for session s1")
 
         json_payload: dict[str, object] = mock_post.call_args.kwargs["json"]
@@ -79,9 +71,7 @@ class TestSendMessage:
     def test_channel_included_when_provided(
         self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
     ) -> None:
-        with patch(
-            "alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)
-        ) as mock_post:
+        with patch("alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)) as mock_post:
             send_message(text="test", channel="#pipeline-alerts")
 
         json_payload: dict[str, object] = mock_post.call_args.kwargs["json"]
@@ -90,9 +80,7 @@ class TestSendMessage:
     def test_channel_omitted_when_none(
         self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
     ) -> None:
-        with patch(
-            "alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)
-        ) as mock_post:
+        with patch("alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)) as mock_post:
             send_message(text="test")
 
         json_payload: dict[str, object] = mock_post.call_args.kwargs["json"]
@@ -101,12 +89,8 @@ class TestSendMessage:
     def test_blocks_included_when_provided(
         self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
     ) -> None:
-        blocks: list[dict[str, object]] = [
-            {"type": "section", "text": {"type": "mrkdwn", "text": "hello"}}
-        ]
-        with patch(
-            "alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)
-        ) as mock_post:
+        blocks: list[dict[str, object]] = [{"type": "section", "text": {"type": "mrkdwn", "text": "hello"}}]
+        with patch("alerting_service.notifiers.slack.httpx.post", return_value=_make_response(200)) as mock_post:
             send_message(text="fallback", blocks=blocks)
 
         json_payload: dict[str, object] = mock_post.call_args.kwargs["json"]

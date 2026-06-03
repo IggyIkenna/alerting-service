@@ -122,9 +122,7 @@ class RecoveryVerifier:
             return result, list(result.failure_reasons)
         except Exception as exc:
             msg = f"{service_id}: callback raised {type(exc).__name__}({exc})"
-            _logger.exception(
-                "RecoveryVerifier callback failed: %s incident_key=%s", msg, incident_key
-            )
+            _logger.exception("RecoveryVerifier callback failed: %s incident_key=%s", msg, incident_key)
             return _ALL_FAILED, [msg]
 
     @property

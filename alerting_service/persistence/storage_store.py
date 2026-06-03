@@ -10,10 +10,12 @@ Path conventions (see ``docs/GCS_PATHS.md``):
   - ``alerting/state/`` — cooldown state JSON
 """
 
+import dataclasses
 import json
 import logging
 import uuid
-from datetime import UTC, datetime, timedelta
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
 from functools import lru_cache
 from typing import cast
 
@@ -33,6 +35,32 @@ _HISTORY_PREFIX = "alerting/history"
 _CONFIGS_PREFIX = "alerting/configs"
 _STATE_PREFIX = "alerting/state"
 _COOLDOWN_BLOB = f"{_STATE_PREFIX}/cooldowns.json"
+_QUIETNESS_PREFIX = "events/alerting-service"
+
+
+@dataclass(frozen=True)
+class QuietnessReport:
+    """Per-(alert_code) quietness/false-positive accounting for one alerting run.
+
+    Emitted at the end of a batch-replay run so operators can audit how noisy
+    each alert code is and whether the false-positive rate justifies the
+    configured threshold.
+
+    Fields:
+        alert_code:  The ``AlertCode`` value this row accounts for.
+        fires:       Count of times the code routed through to delivery.
+        suppressed:  Count of times the code was deduplicated/suppressed.
+        fp_count:    Count of fires later classified as false positives.
+        fp_rate:     ``fp_count / fires`` (0.0 when ``fires == 0``).
+        threshold:   The configured false-positive-rate budget for this code.
+    """
+
+    alert_code: str
+    fires: int
+    suppressed: int
+    fp_count: int
+    fp_rate: float
+    threshold: float
 
 
 @lru_cache(maxsize=1)
@@ -116,6 +144,54 @@ class AlertStorageStore:
                 exc,
                 service_name="alerting-service",
                 operation="write_alert_history",
+                shard=blob_path,
+            )
+
+    # ------------------------------------------------------------------
+    # Quietness report (JSONL)
+    # ------------------------------------------------------------------
+
+    def _record_manifest_row(self, *, processing_date: date, row_count: int, data_type: str) -> None:
+        """Best-effort ManifestWriter accounting for a single written object."""
+        try:
+            writer = ManifestWriter(service_name="alerting-service", catalogue_bucket=self._bucket)
+            writer.add(processing_date=processing_date, row_count=row_count, data_type=data_type)
+            writer.write()
+        except Exception as _mw_err:
+            logger.debug("ManifestWriter failed: %s", _mw_err)
+
+    def write_quietness_report(self, run_id: str, report: list[QuietnessReport]) -> None:
+        """Write a per-run quietness/false-positive report as JSONL.
+
+        One JSONL line per ``QuietnessReport`` row (one row per alert_code) to
+        ``events/alerting-service/{date}/quietness-{run_id}/report.jsonl``. Mirrors
+        :meth:`write_alert_history` for bucket resolution, serialization, the UCI
+        ``upload_bytes`` write path, ManifestWriter accounting, and error handling.
+        """
+        now = datetime.now(UTC)
+        date_partition = now.strftime("%Y-%m-%d")
+        blob_path = f"{_QUIETNESS_PREFIX}/{date_partition}/quietness-{run_id}/report.jsonl"
+
+        lines = [json.dumps(dataclasses.asdict(row), default=str) for row in report]
+        data = ("\n".join(lines) + "\n").encode("utf-8") if lines else b""
+
+        try:
+            self._client.upload_bytes(
+                bucket=self._bucket,
+                blob_path=blob_path,
+                data=data,
+                content_type="application/x-ndjson",
+            )
+            self._record_manifest_row(processing_date=now.date(), row_count=len(report), data_type="quietness_report")
+            log_event(
+                "PERSISTENCE_COMPLETED",
+                details={"target": "quietness_report", "blob_path": blob_path, "run_id": run_id, "rows": len(report)},
+            )
+        except Exception as exc:
+            classify_and_emit_error(
+                exc,
+                service_name="alerting-service",
+                operation="write_quietness_report",
                 shard=blob_path,
             )
 

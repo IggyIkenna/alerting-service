@@ -114,9 +114,7 @@ class TestPayloadShape:
         )
         event = _make_event(snapshot=snap)
         # Drop the optional distance_to_liquidation_pct and recommended_action.
-        event = event.model_copy(
-            update={"distance_to_liquidation_pct": None, "recommended_action": None}
-        )
+        event = event.model_copy(update={"distance_to_liquidation_pct": None, "recommended_action": None})
         with patch("alerting_service.rules.margin_rules.route_event") as mock_route:
             route_margin_event(event)
         _, payload = mock_route.call_args.args
