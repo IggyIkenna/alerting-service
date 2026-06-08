@@ -49,12 +49,30 @@ jobs:
 
           LOCKED=$(echo "$MANIFEST" | python3 -c "import json,sys; m=json.load(sys.stdin); print(str(m.get('staging_status',{}).get('locked',False)).lower())" 2>/dev/null || echo "false")
 
-          if [ "$LOCKED" = "true" ]; then
-            REASON=$(echo "$MANIFEST" | python3 -c "import json,sys; m=json.load(sys.stdin); print(m.get('staging_status',{}).get('locked_reason','SIT running'))" 2>/dev/null || echo "SIT running")
-            echo "Staging is LOCKED: $REASON"
-            echo "This PR will auto-merge once SIT completes and staging is unlocked."
-            echo "No action needed -- the check will re-run automatically when staging unlocks."
+          if [ "$LOCKED" != "true" ]; then
+            echo "Staging is unlocked -- will auto-merge when all checks pass"
+            exit 0
+          fi
+
+          # SCOPED LOCK (2026-06-08): the lock only protects the repos under the *currently-running*
+          # SIT — the `pending_repos` snapshot `sit-gate` recorded. A SIT is an integrated test of
+          # that exact cohort, so only those repos must not change staging mid-validation. A repo NOT
+          # in the running cohort promotes normally (its own quality-gates-v2 is the gate). Previously
+          # ANY locked==true blocked EVERY promote PR fleet-wide, so the breaking-cascade re-locking
+          # staging re-blocked repos whose SIT already passed → the staging→main drain dead-locked
+          # (incident 2026-06-07: 7 promote PRs wedged with pending_repos=['agent-orchestrator']).
+          # Fail-safe: unparseable pending_repos → default to block (never let a moving target through).
+          # SSOT: this template + sit-gate.yml. Plan: cicd_contract_hardening_2026_06_01.md.
+          REPO_NAME="${GITHUB_REPOSITORY##*/}"
+          # pending_repos None/missing → block (can't determine the cohort → never let a moving
+          # target through). pending_repos is a list → membership decides. JSON error → '|| yes' blocks.
+          IN_COHORT=$(echo "$MANIFEST" | REPO_NAME="$REPO_NAME" python3 -c "import json,os,sys; m=json.load(sys.stdin); pend=m.get('staging_status',{}).get('pending_repos'); print('yes' if (pend is None or os.environ['REPO_NAME'] in pend) else 'no')" 2>/dev/null || echo "yes")
+          REASON=$(echo "$MANIFEST" | python3 -c "import json,sys; m=json.load(sys.stdin); print(m.get('staging_status',{}).get('locked_reason','SIT running'))" 2>/dev/null || echo "SIT running")
+
+          if [ "$IN_COHORT" = "yes" ]; then
+            echo "Staging LOCKED ($REASON) and $REPO_NAME IS in the running SIT cohort (pending_repos) — waiting for SIT to complete + unlock."
             exit 1
           fi
 
-          echo "Staging is unlocked -- will auto-merge when all checks pass"
+          echo "Staging LOCKED ($REASON) but $REPO_NAME is NOT in the running SIT cohort — promoting normally (quality-gates-v2 is the gate)."
+          exit 0
