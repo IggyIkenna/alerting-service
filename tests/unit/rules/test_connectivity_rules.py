@@ -10,6 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 
 import pytest
+from unified_api_contracts.alerting import AlertSeverity
 from unified_api_contracts.dependency import DependencyClass, DependencyHealthPolicy
 
 from alerting_service.rules.connectivity_rules import (
@@ -83,16 +84,16 @@ class TestWarningBand:
         alerts = evaluate_dependency_health(_event(120), _policy())
         assert len(alerts) == 1
         a = alerts[0]
-        assert a["severity"] == "WARNING"
+        assert a["severity"] == AlertSeverity.WARN
         assert a["sev1_escalate"] is False
         assert a["delivery_channel"] == "telegram"
         assert a["rule_id"] == "DEPENDENCY_DEGRADED_WARN"
 
     def test_just_below_sev1_is_warning(self) -> None:
-        # sev1_at = 120 + 900 = 1020; at 1019 → WARNING (no sev1)
+        # sev1_at = 120 + 900 = 1020; at 1019 → WARN (no sev1)
         alerts = evaluate_dependency_health(_event(1019), _policy())
         assert len(alerts) == 1
-        assert alerts[0]["severity"] == "WARNING"
+        assert alerts[0]["severity"] == AlertSeverity.WARN
         assert alerts[0]["sev1_escalate"] is False
 
 
@@ -105,7 +106,7 @@ class TestSev1Band:
         alerts = evaluate_dependency_health(_event(1020), _policy())
         assert len(alerts) == 1
         a = alerts[0]
-        assert a["severity"] == "WARNING"
+        assert a["severity"] == AlertSeverity.WARN
         assert a["sev1_escalate"] is True
         assert a["rule_id"] == "DEPENDENCY_DEGRADED_SEV1"
 
@@ -113,7 +114,7 @@ class TestSev1Band:
         alerts = evaluate_dependency_health(_event(1799), _policy())
         assert len(alerts) == 1
         assert alerts[0]["sev1_escalate"] is True
-        assert alerts[0]["severity"] == "WARNING"
+        assert alerts[0]["severity"] == AlertSeverity.WARN
 
 
 # ── CRITICAL / SEV0 band ─────────────────────────────────────────────────────

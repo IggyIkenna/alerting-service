@@ -8,6 +8,8 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
+from unified_api_contracts.alerting import AlertSeverity
+
 from alerting_service.rules.reconciliation_rules import (
     _severity_from_pct,
     evaluate_balance_discrepancy,
@@ -149,7 +151,7 @@ class TestEvaluateBalanceDiscrepancy:
         )
         assert len(result) == 1
         alert = result[0]
-        assert alert["severity"] == "WARNING"
+        assert alert["severity"] == AlertSeverity.WARN
         assert alert["venue"] == "bybit"
         assert alert["rule_id"] == "balance_discrepancy"
         assert alert["delivery_channel"] == "telegram"
@@ -172,7 +174,7 @@ class TestEvaluateBalanceDiscrepancy:
     def test_unknown_status_treated_as_warning(self) -> None:
         result = evaluate_balance_discrepancy({"status": "SOME_OTHER_STATUS", "venue": "v", "currency": "c"})
         assert len(result) == 1
-        assert result[0]["severity"] == "WARNING"
+        assert result[0]["severity"] == AlertSeverity.WARN
 
 
 # ---------------------------------------------------------------------------
