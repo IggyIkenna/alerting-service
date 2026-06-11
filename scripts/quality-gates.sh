@@ -33,6 +33,8 @@ else
 fi
 # ISS-032: router.py is a large orchestration entrypoint; P0.12-P0.14 additions push it to ~1000L
 MAX_FILE_LINES=1100
+# CODEX_MAX_VIOLATIONS pinned 2026-06-11 per plans/active/codex_violations_ratchet_to_five_2026_06_10.md (census-honest: 0 current violations; ratchet-down only).
+CODEX_MAX_VIOLATIONS=0
 source "${WORKSPACE_ROOT}/unified-trading-pm/scripts/quality-gates-base/base-service.sh"
 
 # Codex enforcement: every entrypoint must emit STARTED, STOPPED, FAILED
