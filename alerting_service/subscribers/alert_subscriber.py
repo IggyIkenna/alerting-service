@@ -61,6 +61,10 @@ from ..recon_drift_event_handler import (
     handle_batch_vs_live_recon_drifted_payload,
 )
 from ..risk_rule_event_handler import handle_risk_rule_fired_payload
+from ..rules.consolidator_rules import (
+    handle_consolidator_down_payload,
+    handle_manifest_consolidation_failed_payload,
+)
 from ..rules.margin_rules import route_margin_event_payload
 
 logger = logging.getLogger(__name__)
@@ -110,6 +114,10 @@ _KILL_SWITCH_DISARM_EVENT: str = "KillSwitchDisarmEvent"
 _CIRCUIT_BREAKER_FIRED_EVENT: str = "CircuitBreakerFired"
 _BATCH_VS_LIVE_RECON_DRIFTED_EVENT: str = "BATCH_VS_LIVE_RECON_DRIFTED"
 _BATCH_LIVE_RECON_DRIFT_EVENT: str = "BATCH_LIVE_RECON_DRIFT"
+# Manifest-consolidator liveness events (UTL consolidator_liveness watchdog +
+# manifest_consolidator) — see rules/consolidator_rules.py.
+_CONSOLIDATOR_DOWN_EVENT: str = "CONSOLIDATOR_DOWN"
+_MANIFEST_CONSOLIDATION_FAILED_EVENT: str = "MANIFEST_CONSOLIDATION_FAILED"
 
 
 def _extract_event_name(payload: dict[str, object]) -> str:
@@ -240,6 +248,8 @@ class AlertSubscriber:
         _CIRCUIT_BREAKER_FIRED_EVENT: handle_circuit_breaker_fire_payload,
         _BATCH_VS_LIVE_RECON_DRIFTED_EVENT: handle_batch_vs_live_recon_drifted_payload,
         _BATCH_LIVE_RECON_DRIFT_EVENT: handle_batch_live_recon_drift_payload,
+        _CONSOLIDATOR_DOWN_EVENT: handle_consolidator_down_payload,
+        _MANIFEST_CONSOLIDATION_FAILED_EVENT: handle_manifest_consolidation_failed_payload,
     }
 
     @classmethod
