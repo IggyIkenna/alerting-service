@@ -24,6 +24,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Literal
 
+from unified_api_contracts.alerting import AlertSeverity
 from unified_api_contracts.incident import ImmediateSev0Override
 
 
@@ -78,7 +79,7 @@ def evaluate_balance_discrepancy(
     if status == "MATCH":
         return []
 
-    severity: Literal["WARNING", "CRITICAL"] = "CRITICAL" if status == "CRITICAL" else "WARNING"
+    severity: AlertSeverity = AlertSeverity.CRITICAL if status == "CRITICAL" else AlertSeverity.WARN
     now = datetime.now(UTC)
     return [
         {
@@ -100,7 +101,7 @@ def evaluate_balance_discrepancy(
             ),
             "created_at": now.isoformat(),
             "delivered": False,
-            "delivery_channel": "telegram" if severity == "WARNING" else "pagerduty+telegram",
+            "delivery_channel": "telegram" if severity is AlertSeverity.WARN else "pagerduty+telegram",
         }
     ]
 
@@ -159,8 +160,8 @@ def evaluate_batch_vs_live_recon_drifted(
     archetype = str(event_details.get("archetype", "unknown"))  # noqa: qg-empty-fallback
     date = str(event_details.get("date", ""))  # noqa: qg-empty-fallback
 
-    # P&L gap >2x threshold is CRITICAL; between 1x-2x is WARNING
-    severity: Literal["WARNING", "CRITICAL"] = "CRITICAL" if alpha_pnl_gap_bps > threshold_bps * 2 else "WARNING"
+    # P&L gap >2x threshold is CRITICAL; between 1x-2x is WARN
+    severity: AlertSeverity = AlertSeverity.CRITICAL if alpha_pnl_gap_bps > threshold_bps * 2 else AlertSeverity.WARN
     now = datetime.now(UTC)
     return [
         {
@@ -176,7 +177,7 @@ def evaluate_batch_vs_live_recon_drifted(
             ),
             "created_at": now.isoformat(),
             "delivered": False,
-            "delivery_channel": "telegram" if severity == "WARNING" else "pagerduty+telegram",
+            "delivery_channel": "telegram" if severity is AlertSeverity.WARN else "pagerduty+telegram",
         }
     ]
 
@@ -248,17 +249,17 @@ def evaluate_recon_age(
     dimension = str(event_details.get("dimension", "UNKNOWN"))  # noqa: qg-empty-fallback
 
     if age >= critical_seconds:
-        severity: Literal["WARNING", "CRITICAL"] = "CRITICAL"
+        severity: AlertSeverity = AlertSeverity.CRITICAL
         rule_id = "RECONCILIATION_AGE_CRITICAL"
         delivery_channel = "pagerduty+telegram"
         threshold = critical_seconds
     elif age >= investigate_seconds:
-        severity = "WARNING"
+        severity = AlertSeverity.WARN
         rule_id = "RECONCILIATION_AGE_INVESTIGATE"
         delivery_channel = "telegram"
         threshold = investigate_seconds
     else:
-        severity = "WARNING"
+        severity = AlertSeverity.WARN
         rule_id = "RECONCILIATION_AGE_WARN"
         delivery_channel = "telegram"
         threshold = warn_seconds

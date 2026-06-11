@@ -80,7 +80,7 @@ wheels = [
 
 [[package]]
 name = "alerting-service"
-version = "0.1.0"
+version = "0.4.0"
 source = { editable = "." }
 dependencies = [
     { name = "aiohttp" },
@@ -282,11 +282,20 @@ wheels = [
 ]
 
 [package.optional-dependencies]
+logs = [
+    { name = "mypy-boto3-logs" },
+]
 s3 = [
     { name = "mypy-boto3-s3" },
 ]
 secretsmanager = [
     { name = "mypy-boto3-secretsmanager" },
+]
+sns = [
+    { name = "mypy-boto3-sns" },
+]
+sqs = [
+    { name = "mypy-boto3-sqs" },
 ]
 
 [[package]]
@@ -1557,6 +1566,15 @@ wheels = [
 ]
 
 [[package]]
+name = "mypy-boto3-logs"
+version = "1.43.9"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c3/4c/d85ba9ef29b9a0905a51f4f83a2c8467fc51f841212c2dbdaed2f2d9aac7/mypy_boto3_logs-1.43.9.tar.gz", hash = "sha256:cffd3e1e311aa123e32d54115c18ce4a1694ef16e3eb3b5029d2c512a17f3d77", size = 54601, upload-time = "2026-05-15T20:09:47.243Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/d2/ae/6ddf66be709dc7957ca179cb487e4033ec6c571702dc5579d0494571596a/mypy_boto3_logs-1.43.9-py3-none-any.whl", hash = "sha256:ca299837ded34371078f46ac3e3932916c065e66e20dc2fb8974aa9762262bca", size = 61918, upload-time = "2026-05-15T20:09:45.49Z" },
+]
+
+[[package]]
 name = "mypy-boto3-s3"
 version = "1.43.5"
 source = { registry = "https://pypi.org/simple" }
@@ -1572,6 +1590,24 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c6/e0/3b9f954dcce063407224e6601ed5af2d684185387b0572901c5f984fc8f6/mypy_boto3_secretsmanager-1.43.0.tar.gz", hash = "sha256:265ee2fddf9d3e42ae39685625fb7861a539110d8e324372847c0e1cbd666b20", size = 19967, upload-time = "2026-04-29T23:05:45.139Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/4f/93/ae939d61eed240972553395b5e31f780825685b99f0ab4ebe5767430f103/mypy_boto3_secretsmanager-1.43.0-py3-none-any.whl", hash = "sha256:38415cdecb73dd20e485707a7cf456f6dde54ff4b155e7fb255eb001eb47d5bc", size = 27335, upload-time = "2026-04-29T23:05:43.152Z" },
+]
+
+[[package]]
+name = "mypy-boto3-sns"
+version = "1.43.23"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/41/8d/21ec0b76b6097d49635a20b4d6ebc7cc66a5da1421220dac191f1cbd98db/mypy_boto3_sns-1.43.23.tar.gz", hash = "sha256:6f8a19b64c6abf1bd623ad91be7e76ce27f2396da1f1083058921d0de4176ad1", size = 32716, upload-time = "2026-06-04T21:04:42.802Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/99/60/6d827ba2a569fccd535b72af50966d1d2c34cd02368774c8bf119d46ad51/mypy_boto3_sns-1.43.23-py3-none-any.whl", hash = "sha256:9144245c5fecf865f3fb1b73bbb750d5284ec63c7dbfea9d270d35205eab0aa2", size = 40038, upload-time = "2026-06-04T21:04:40.8Z" },
+]
+
+[[package]]
+name = "mypy-boto3-sqs"
+version = "1.43.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/42/1e/226725696a99c7dadfe8ebfba01575107fa15146029a7fb0082c650d8689/mypy_boto3_sqs-1.43.0.tar.gz", hash = "sha256:3ec8e1e651e830affcf7fe151b2e3090b8ea98d73cb069053b09ca4c7f4c8636", size = 23318, upload-time = "2026-04-29T23:06:17.614Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f2/5e/5d4deb1ee7aec7fcdddbca616c623f07bfc72a1cd3e80b0e2a0c39904fae/mypy_boto3_sqs-1.43.0-py3-none-any.whl", hash = "sha256:f90225486756a4041db9f056967cb3cee202264bbe57682031c1e94d83e8ca39", size = 33604, upload-time = "2026-04-29T23:06:15.339Z" },
 ]
 
 [[package]]
@@ -2104,6 +2140,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/84/a7/90007d476b9f0dc308e3bc57b832d004f848fd6c0da601375d20d92d1519/pyarrow-23.0.1-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:c2139549494445609f35a5cda4eb94e2c9e4d704ce60a095b342f82460c73a83", size = 48236269, upload-time = "2026-02-16T10:12:04.47Z" },
     { url = "https://files.pythonhosted.org/packages/b0/3f/b16fab3e77709856eb6ac328ce35f57a6d4a18462c7ca5186ef31b45e0e0/pyarrow-23.0.1-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:7044b442f184d84e2351e5084600f0d7343d6117aabcbc1ac78eb1ae11eb4125", size = 50604794, upload-time = "2026-02-16T10:12:11.797Z" },
     { url = "https://files.pythonhosted.org/packages/e9/a1/22df0620a9fac31d68397a75465c344e83c3dfe521f7612aea33e27ab6c0/pyarrow-23.0.1-cp313-cp313t-win_amd64.whl", hash = "sha256:a35581e856a2fafa12f3f54fce4331862b1cfb0bef5758347a858a4aa9d6bae8", size = 27660642, upload-time = "2026-02-16T10:12:17.746Z" },
+]
+
+[[package]]
+name = "pyarrow-stubs"
+version = "20.0.0.20251215"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyarrow" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/30/16/ca991ada0416dc02c246e4b3c853f35053676eb704c63720ef24547d2d68/pyarrow_stubs-20.0.0.20251215.tar.gz", hash = "sha256:92c1fda4998f0c13e608d8abc7e4b8537e3ef108f6bf42c58e5af97e7d143e75", size = 236578, upload-time = "2025-12-15T06:47:46.187Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b3/7c/a467f91c6c3aa4c34d5a1dafca9ae4db01b757877577d6b0ae04908a0180/pyarrow_stubs-20.0.0.20251215-py3-none-any.whl", hash = "sha256:0634e70388cd23e7c78e2abbb1989822edc34df2d2ff4fd50a2316dd0cdafd9f", size = 235697, upload-time = "2025-12-15T06:47:44.643Z" },
 ]
 
 [[package]]
@@ -2892,7 +2940,7 @@ wheels = [
 
 [[package]]
 name = "unified-api-contracts"
-version = "0.1.20"
+version = "0.6.0"
 source = { editable = "../unified-api-contracts" }
 dependencies = [
     { name = "bandit" },
@@ -2959,14 +3007,14 @@ requires-dist = [
 
 [[package]]
 name = "unified-trading-library"
-version = "0.3.167"
+version = "0.6.0"
 source = { editable = "../unified-trading-library" }
 dependencies = [
     { name = "aiohttp" },
     { name = "bandit" },
     { name = "basedpyright" },
     { name = "boto3" },
-    { name = "boto3-stubs", extra = ["s3", "secretsmanager"] },
+    { name = "boto3-stubs", extra = ["logs", "s3", "secretsmanager", "sns", "sqs"] },
     { name = "botocore" },
     { name = "databento" },
     { name = "duckdb" },
@@ -2999,6 +3047,7 @@ dependencies = [
     { name = "prometheus-client" },
     { name = "psutil" },
     { name = "pyarrow" },
+    { name = "pyarrow-stubs" },
     { name = "pyasn1" },
     { name = "pydantic" },
     { name = "pydantic-settings" },
@@ -3029,7 +3078,7 @@ requires-dist = [
     { name = "bandit", specifier = ">=1.7.0,<2.0.0" },
     { name = "basedpyright", specifier = "==1.38.2" },
     { name = "boto3", specifier = ">=1.40.70,<2.0.0" },
-    { name = "boto3-stubs", extras = ["s3", "secretsmanager"], specifier = ">=1.35.0,<2.0.0" },
+    { name = "boto3-stubs", extras = ["s3", "secretsmanager", "logs", "sns", "sqs"], specifier = ">=1.35.0,<2.0.0" },
     { name = "botocore", specifier = ">=1.34.0,<2.0.0" },
     { name = "databento", specifier = ">=0.32.0,<1.0.0" },
     { name = "duckdb", specifier = ">=1.5.0,<2.0.0" },
@@ -3062,6 +3111,7 @@ requires-dist = [
     { name = "prometheus-client", specifier = ">=0.20.0,<1.0.0" },
     { name = "psutil", specifier = ">=6.0.0,<7.0.0" },
     { name = "pyarrow", specifier = ">=23.0.0,<24.0.0" },
+    { name = "pyarrow-stubs", specifier = ">=20.0.0,<21.0.0" },
     { name = "pyasn1", specifier = ">=0.6.3,<0.7.0" },
     { name = "pydantic", specifier = ">=2.12.5,<3.0.0" },
     { name = "pydantic-settings", specifier = ">=2.12.0,<3.0.0" },

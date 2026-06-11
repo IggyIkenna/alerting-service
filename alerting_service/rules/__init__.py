@@ -3,6 +3,11 @@
 from unified_api_contracts import DefiAlertType
 from unified_api_contracts.internal import DefiAlert  # noqa: qg-deep-import
 
+from .consolidator_rules import (
+    handle_consolidator_down_payload,
+    handle_manifest_consolidation_failed_payload,
+    route_consolidator_event,
+)
 from .data_freshness_rules import route_data_freshness_event
 from .defi_rules import (
     check_aave_utilization,
@@ -45,6 +50,9 @@ __all__ = [
     "evaluate_batch_vs_live_recon_drifted",
     "evaluate_pnl_discrepancy",
     "evaluate_position_discrepancy",
+    "handle_consolidator_down_payload",
+    "handle_manifest_consolidation_failed_payload",
+    "route_consolidator_event",
     "route_data_freshness_event",
     "route_defi_alert",
 ]

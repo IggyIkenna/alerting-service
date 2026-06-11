@@ -20,8 +20,8 @@ Phase 3 P0.6-P0.7.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Literal
 
+from unified_api_contracts.alerting import AlertSeverity
 from unified_api_contracts.dependency import DependencyHealthPolicy
 
 
@@ -55,17 +55,17 @@ def evaluate_dependency_health(
 
     # SEV0 conditions: exceeded hard ceiling OR zero fallback available
     if outage >= policy.hard_escalation_seconds or not policy.fallback_available:
-        severity: Literal["WARNING", "CRITICAL"] = "CRITICAL"
+        severity: AlertSeverity = AlertSeverity.CRITICAL
         delivery_channel = "pagerduty+telegram"
         rule_id = "DEPENDENCY_DEGRADED_CRITICAL"
         sev1_escalate = False
     elif outage >= sev1_at:
-        severity = "WARNING"
+        severity = AlertSeverity.WARN
         delivery_channel = "telegram"
         rule_id = "DEPENDENCY_DEGRADED_SEV1"
         sev1_escalate = True
     elif outage >= warn_at:
-        severity = "WARNING"
+        severity = AlertSeverity.WARN
         delivery_channel = "telegram"
         rule_id = "DEPENDENCY_DEGRADED_WARN"
         sev1_escalate = False
