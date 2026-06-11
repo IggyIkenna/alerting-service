@@ -29,7 +29,7 @@ from fnmatch import fnmatch
 from functools import lru_cache
 from typing import cast, get_args
 
-from unified_api_contracts import LIVE_ALERT_RULES, AlertRule, AlertSeverity, KillSwitchScope
+from unified_api_contracts import LIVE_ALERT_RULES, AlertSeverity
 from unified_api_contracts.incident import (
     ImmediateSev0Override,
     IncidentEnvelope,
@@ -37,7 +37,6 @@ from unified_api_contracts.incident import (
 )
 from unified_trading_library import (
     classify_and_emit_error,
-    get_kill_switch_bus,
     log_event,
 )
 
@@ -62,117 +61,29 @@ _VALID_SEVERITIES: frozenset[str] = frozenset(get_args(PagerDutySeverity))
 # Module-level deduplicator (shared across all route_event calls).
 _deduplicator = AlertDeduplicator(ttl_seconds=60.0)
 
-# ── Tick-staleness + connectivity-gap coalesce window ────────────────────
-# Per alerting_service_live_rules_2026_05_07 § "Tick-staleness +
-# connectivity-gap event taxonomy", when both TICK_STALENESS (MDPS) and
-# CONNECTIVITY_GAP_DETECTED (MTDS) fire on the same (venue, instrument)
-# within a 30-second window, operators see ONE merged alert rather than
-# two separate fires. The 30s window keys on ``(venue, instrument)``
-# extracted from the alert payload ``details`` dict.
-#
-# Coalesce state: maps (venue, instrument) → (last_fire_monotonic, last_event_name,
-# merged_payload). The first event in the window fires normally + records
-# the timestamp; subsequent events within 30s short-circuit return after
-# logging a COALESCE_MERGED event with the merged payload (no second fire,
-# no second persistence record, no second channel dispatch).
-#
-# Non-staleness / non-connectivity alerts pass through untouched — the
-# coalesce only fires for the closed set ``_COALESCED_EVENT_NAMES``.
-_COALESCE_WINDOW_SECONDS: float = 30.0
-_COALESCED_EVENT_NAMES: frozenset[str] = frozenset(
-    {
-        "TICK_STALENESS",
-        "CONNECTIVITY_GAP_DETECTED",
-    }
+# Coalesce-window + synthetic-event suppression live in ``coalesce.py``
+# (split 2026-06-12, codex ratchet plan Phase 1.5 — file-size <900).
+# Re-bound here under the original private names so the test surface
+# (router._is_synthetic / router._check_coalesce_window / …) and in-repo
+# consumers resolve unchanged.
+from alerting_service.notifiers.coalesce import (
+    COALESCE_WINDOW_SECONDS as _COALESCE_WINDOW_SECONDS,
 )
-_coalesce_window: dict[tuple[str, str], tuple[float, str, dict[str, object]]] = {}
-
-
-# ── Synthetic-event paging suppression (Phase 3.F of simulation_scenarios) ──
-# When a scenario harness drives the pipeline via AdversarialMatchingEngine /
-# arm_breaker(synthetic=True), downstream alerts carry ``synthetic=True`` in
-# their ``details`` payload. The router logs the synthetic alert + persists
-# the delivery record (so operator-visible dashboards still see it) but does
-# NOT dispatch to PagerDuty / Telegram — paging during synthetic scenario
-# drills is unnecessary noise and could confuse on-call.
-#
-# Per CLAUDE.md "Live = batch" rule, real-fire alerts continue to page
-# normally — the ONLY distinction is the ``synthetic`` flag on the payload.
-
-_SYNTHETIC_TRUTHY: frozenset[object] = frozenset({True, "True", "true", "TRUE", "1"})
-
-
-def _is_synthetic(details: dict[str, object]) -> bool:
-    """Return True iff the details payload signals a synthetic scenario fire.
-
-    Per Phase 3.F the producer stamps ``synthetic=True`` (bool) — we accept
-    common string serialisations as well so handlers that re-serialise via
-    JSON / Pub/Sub envelope conventions still match.
-    """
-    return details.get("synthetic") in _SYNTHETIC_TRUTHY
-
-
-def _coalesce_key(event_name: str, details: dict[str, object]) -> tuple[str, str] | None:
-    """Extract the (venue, instrument) coalesce key from an alert payload.
-
-    Returns ``None`` if either field is missing — caller MUST pass through
-    without coalescing in that case (operator-visible over-broad alert is
-    preferred to a silent merge that drops the second fire).
-    """
-    venue_raw = details.get("venue")
-    instrument_raw = details.get("instrument")
-    if venue_raw is None or instrument_raw is None:
-        return None
-    return (str(venue_raw), str(instrument_raw))
-
-
-def _check_coalesce_window(
-    event_name: str,
-    details: dict[str, object],
-    now_monotonic: float,
-) -> bool:
-    """Return True if this event should be COALESCED (suppressed); False if it should fire.
-
-    Side-effect: when False (fires normally), records the (key, now, event_name, details)
-    entry in ``_coalesce_window`` for future suppression. When True (suppressed),
-    merges the new payload into the in-flight entry so the original fire's
-    audit trail captures the union of both signals.
-
-    Cleanup: stale entries (>30s old) are evicted on every call to keep
-    the dict bounded under high-frequency emission. Eviction is O(N)
-    over the window dict, which is bounded by the operator's distinct
-    (venue, instrument) set per 30s — small.
-    """
-    if event_name not in _COALESCED_EVENT_NAMES:
-        return False
-    key = _coalesce_key(event_name, details)
-    if key is None:
-        return False
-    # Evict stale entries
-    for stale_key in [
-        k for k, (ts, _, _) in _coalesce_window.items() if now_monotonic - ts >= _COALESCE_WINDOW_SECONDS
-    ]:
-        del _coalesce_window[stale_key]
-    existing = _coalesce_window.get(key)
-    if existing is not None and now_monotonic - existing[0] < _COALESCE_WINDOW_SECONDS:
-        # Merge new payload into in-flight entry; suppress this fire.
-        merged = dict(existing[2])
-        merged.update(details)
-        merged["_coalesced_with"] = event_name
-        _coalesce_window[key] = (existing[0], existing[1], merged)
-        return True
-    # Record this fire as the in-flight entry; do not suppress.
-    _coalesce_window[key] = (now_monotonic, event_name, dict(details))
-    return False
-
-
-def _reset_coalesce_window_for_tests() -> None:  # pyright: ignore[reportUnusedFunction]
-    """Test-only helper: clear the coalesce-window dict.
-
-    Used by ``tests/unit/test_router_coalesce.py`` between cases so each
-    test starts from a clean window. Not part of the public API."""
-    _coalesce_window.clear()
-
+from alerting_service.notifiers.coalesce import (  # noqa: F401 — test-surface re-export (router._COALESCED_EVENT_NAMES)
+    COALESCED_EVENT_NAMES as _COALESCED_EVENT_NAMES,
+)
+from alerting_service.notifiers.coalesce import (
+    check_coalesce_window as _check_coalesce_window,
+)
+from alerting_service.notifiers.coalesce import (  # noqa: F401 — test-surface re-export
+    coalesce_key as _coalesce_key,
+)
+from alerting_service.notifiers.coalesce import (
+    is_synthetic as _is_synthetic,
+)
+from alerting_service.notifiers.coalesce import (  # noqa: F401 — test-surface re-export
+    reset_coalesce_window_for_tests as _reset_coalesce_window_for_tests,
+)
 
 # Module-level GCS store (lazily initialised).
 _storage_store_instance: object | None = None
@@ -477,126 +388,14 @@ def _record_batch_audit(
     )
 
 
-def _find_kill_switch_rule(event_name: str) -> AlertRule | None:
-    """Return the LIVE_ALERT_RULES entry that matches event_name AND triggers a kill-switch.
-
-    KILL_SWITCH_* AlertCodes carry ``triggers_kill_switch=True`` + a non-None
-    ``kill_switch_scope`` per UAC ``alerting_service_live_rules_2026_05_07``
-    Phase 1 + the 2026-05-08 publisher-hook migration. Non-kill-switch codes
-    return ``None`` (the hook is skipped — channel dispatch still happens).
-
-    Defensive about UAC version-skew: if the running UAC predates the
-    ``kill_switch_scope`` field (in-flight ship), we surface a clear log warning
-    + return None rather than raising — the alert still pages on-call via the
-    normal channel dispatch path.
-    """
-    for rule in LIVE_ALERT_RULES:
-        if not fnmatch(event_name, rule.event_pattern):
-            continue
-        if not rule.triggers_kill_switch:
-            return None
-        scope = rule.kill_switch_scope
-        if scope is None:
-            logger.warning(
-                "Kill-switch publisher hook: AlertRule for %s has triggers_kill_switch=True "
-                "but kill_switch_scope is None — UAC field not yet shipped or seed not "
-                "populated; skipping bus.fire() and routing channels only.",
-                event_name,
-            )
-            return None
-        return rule
-    return None
-
-
-def _resolve_scope_key(scope: KillSwitchScope, details: dict[str, object]) -> str | None:
-    """Pick a scope_key from the alert payload appropriate for this scope.
-
-    Per ``KillSwitchBus`` semantics, scope_key=None means "wildcard halt all keys
-    under this scope" — only intended for GLOBAL. For VENUE / STRATEGY / etc.,
-    we extract the corresponding identifier from ``details`` (set by the alert
-    emitter); if missing, log + still fire with None (operator-visible
-    over-broad halt is safer than no halt).
-    """
-    if scope is KillSwitchScope.GLOBAL:
-        return None
-    key_field_by_scope: dict[KillSwitchScope, str] = {
-        KillSwitchScope.VENUE: "venue",
-        KillSwitchScope.CLIENT: "client_id",
-        KillSwitchScope.STRATEGY: "strategy_id",
-        KillSwitchScope.ARCHETYPE: "archetype",
-        KillSwitchScope.INSTRUMENT: "instrument_id",
-    }
-    field_name = key_field_by_scope.get(scope)
-    if field_name is None:
-        return None
-    raw_value = details.get(field_name)
-    if raw_value is None:
-        logger.warning(
-            "Kill-switch publisher hook: scope=%s requires details.%s but field "
-            "is missing from alert payload; firing with scope_key=None (over-broad halt).",
-            scope,
-            field_name,
-        )
-        return None
-    return str(raw_value)
-
-
-def _publish_kill_switch_event(event_name: str, details: dict[str, object], alert_id: str) -> None:
-    """Emit a typed KillSwitchEvent to the in-process bus on KILL_SWITCH_* alerts.
-
-    Side-effect-free vs the channel dispatch: if the bus publish raises (e.g. a
-    subscriber crashes), the exception is swallowed + logged — the channel
-    dispatch must remain reliable. Per the operator directive 2026-05-08, the
-    bus subscribers (execution-service / strategy-service / position-balance-monitor)
-    own their own retry / circuit-breaker behaviour.
-
-    Reference: ``alerting_service_live_rules_2026_05_07`` Phase 2 → Migrated
-    issues 2026-05-08 → "Kill-switch publisher hook."
-    """
-    rule = _find_kill_switch_rule(event_name)
-    if rule is None:
-        return
-    scope = rule.kill_switch_scope
-    if scope is None:
-        # Already logged in _find_kill_switch_rule — defensive-double check.
-        return
-    scope_key = _resolve_scope_key(scope, details)
-    reason = str(details.get("message") or details.get("reason") or f"alert {event_name} fired (alert_id={alert_id})")
-    try:
-        bus = get_kill_switch_bus()
-        bus.fire(
-            scope,
-            scope_key,
-            reason=reason,
-            fired_by="alerting-service",
-        )
-        log_event(
-            "KILL_SWITCH_PUBLISHED",
-            details={
-                "event_name": event_name,
-                "alert_id": alert_id,
-                "scope": scope.value,
-                "scope_key": scope_key,
-            },
-        )
-    except Exception as exc:
-        # Channel dispatch must never fail because the kill-switch bus failed.
-        # Log loud + classify so the operator can diagnose, but DO NOT raise.
-        classify_and_emit_error(
-            exc,
-            service_name="alerting-service",
-            operation="publish_kill_switch_event",
-        )
-        log_event(
-            "KILL_SWITCH_PUBLISH_FAILED",
-            details={
-                "event_name": event_name,
-                "alert_id": alert_id,
-                "scope": scope.value,
-                "scope_key": scope_key,
-                "error": str(exc),
-            },
-        )
+# Kill-switch rule matching + bus publish live in ``kill_switch_rules.py``
+# (split 2026-06-12, codex ratchet plan Phase 1.5). Re-bound under the original
+# private names: tests patch ``router._publish_kill_switch_event`` and the
+# route_event call below resolves it from THIS module's globals at call time,
+# so the patch surface is unchanged.
+from alerting_service.notifiers.kill_switch_rules import (
+    publish_kill_switch_event as _publish_kill_switch_event,
+)
 
 
 def route_event(event_name: str, details: dict[str, object]) -> None:
