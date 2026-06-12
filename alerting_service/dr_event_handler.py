@@ -78,16 +78,22 @@ _RECOVERY_MODE_ALERT_CODE: dict[BreakerRecoveryMode, AlertCode] = {
 }
 
 
-def _breaker_action_for(breaker_id: CircuitBreakerId) -> BreakerAction | None:
+def _breaker_action_for(
+    breaker_id: CircuitBreakerId,
+    archetype: str | None = None,
+) -> BreakerAction | None:
     """Look up the ``BreakerAction`` for a ``CircuitBreakerId`` in the UAC registry.
 
-    The per-archetype breaker registry can declare the same ``breaker_id`` for
-    multiple archetypes with the same action; we return the first match. Returns
-    ``None`` if the id is not registered (defensive — caller falls back to WARN).
+    When ``archetype`` is provided the lookup is scoped to that archetype's
+    breaker config (different archetypes may assign different actions to the same
+    breaker_id — e.g. CARRY_STAKED_BASIS uses SCALE_DOWN for DRAWDOWN_DAILY_BPS
+    while ML_DIRECTIONAL_CONTINUOUS uses KILL_ALL). Without ``archetype`` we return
+    the first match found across all archetypes.
+    Returns ``None`` if the id is not registered.
     """
-    for breakers in PER_ARCHETYPE_BREAKERS.values():
+    for applies_to, breakers in PER_ARCHETYPE_BREAKERS.items():
         for cfg in breakers:
-            if cfg.breaker_id is breaker_id:
+            if cfg.breaker_id is breaker_id and (archetype is None or applies_to == archetype):
                 return cfg.action
     return None
 
@@ -216,7 +222,8 @@ def handle_circuit_breaker_fire(breaker_id: CircuitBreakerId, details: dict[str,
     applies_to); we enrich it with a summary + severity and route. Until a typed
     ``BreakerFiredEvent`` UAC model lands, this is the classification seam.
     """
-    action = _breaker_action_for(breaker_id)
+    archetype = str(details.get("applies_to") or "") or None
+    action = _breaker_action_for(breaker_id, archetype=archetype)
     severity = _BREAKER_ACTION_SEVERITY.get(action, AlertSeverity.WARN) if action is not None else AlertSeverity.WARN
     channels, pd_severity = _severity_channels(severity)
     event_name = "CIRCUIT_BREAKER_FIRED"

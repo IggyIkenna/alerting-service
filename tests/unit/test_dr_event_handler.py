@@ -233,7 +233,8 @@ class TestCircuitBreakerFire:
         mock_route.assert_called_once()
 
     def test_breaker_action_lookup_resolves_registry_entries(self) -> None:
-        # Every registry breaker id resolves to its declared action.
-        for breakers in PER_ARCHETYPE_BREAKERS.values():
+        # Every registry breaker id resolves to its declared action when archetype is supplied.
+        # (Different archetypes may assign different BreakerActions to the same breaker_id.)
+        for archetype, breakers in PER_ARCHETYPE_BREAKERS.items():
             for cfg in breakers:
-                assert _breaker_action_for(cfg.breaker_id) is cfg.action
+                assert _breaker_action_for(cfg.breaker_id, archetype=archetype) is cfg.action
