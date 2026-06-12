@@ -44,6 +44,10 @@ from typing import ClassVar, cast
 
 from unified_trading_library import QueueClient, get_queue_client, log_event
 
+from ..cefi_ml_event_handler import (
+    CEFI_ML_EVENT_NAMES,
+    handle_cefi_ml_event,
+)
 from ..defi_feature_event_handler import (
     DEFI_FEATURE_EVENT_NAMES,
     handle_defi_feature_event,
@@ -269,6 +273,9 @@ class AlertSubscriber:
             return
         if event_name in DEFI_FEATURE_EVENT_NAMES:
             handle_defi_feature_event(event_name, enriched)
+            return
+        if event_name in CEFI_ML_EVENT_NAMES:
+            handle_cefi_ml_event(event_name, enriched)
             return
         route_event(event_name, enriched)
 
