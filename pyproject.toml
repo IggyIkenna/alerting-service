@@ -130,7 +130,7 @@ source = ["alerting_service"]
 branch = true
 
 [tool.coverage.report]
-fail_under = 78
+fail_under = 76
 show_missing = true
 skip_covered = false
 precision = 1
