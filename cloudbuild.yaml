@@ -131,6 +131,35 @@ steps:
         docker pull "$${BASE}:latest" || true
     waitFor: ["configure-docker"]
 
+  # ── STEP 3.5: Stage sibling repos into the build context ──────────────────
+  # The Dockerfile `COPY unified-api-contracts/ ...` / `COPY unified-trading-library/ ...`
+  # need the sibling repos present in the GCP Cloud Build context — which (unlike the AWS
+  # buildspec.aws.yaml pre_build) does NOT include them, so the build died at COPY
+  # ("file not found in build context"). Mirror the AWS pre_build: clone the siblings
+  # @live-defi-rollout (auth via the GH_PAT secret as an http extraheader so the token
+  # never lands in git's URL/log output). Idempotent (skips if already present).
+  - name: "gcr.io/cloud-builders/gcloud"
+    id: "stage-siblings"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -e
+        TOKEN="$$(gcloud secrets versions access latest --secret=GH_PAT)"
+        AUTH="$$(printf 'x-access-token:%s' "$$TOKEN" | base64 | tr -d '\n')"
+        for dep in unified-api-contracts unified-trading-library; do
+          if [ ! -d "$$dep" ]; then
+            git -c http.extraheader="AUTHORIZATION: basic $$AUTH" clone --depth 1 \
+              --branch live-defi-rollout "https://github.com/IggyIkenna/$$dep" "$$dep" \
+              || git -c http.extraheader="AUTHORIZATION: basic $$AUTH" clone --depth 1 \
+              --branch main "https://github.com/IggyIkenna/$$dep" "$$dep"
+            echo "Staged $$dep@$$(cd $$dep && git rev-parse --short HEAD)"
+          else
+            echo "$$dep already present in context — skipping clone"
+          fi
+        done
+    waitFor: ["-"]
+
   # ── STEP 4: Build Docker image ────────────────────────────────────────────
   - name: "gcr.io/cloud-builders/docker"
     id: "build"
@@ -145,7 +174,7 @@ steps:
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
           .
-    waitFor: ["pull-base-image", "ensure-repo", "extract-version"]
+    waitFor: ["pull-base-image", "ensure-repo", "extract-version", "stage-siblings"]
 
   # ── STEP 5: REQUIRED — Run quality gates INSIDE the image ─────────────────
   # CRITICAL: Use --entrypoint "" to clear the image's default ENTRYPOINT.
