@@ -40,6 +40,7 @@ substitutions:
   _SERVICE_NAME: "alerting-service"
   _REGISTRY_REPO: "unified-trading-system"
   _PKG_NAME: "alerting_service"
+  _RUN_INIMAGE_QG: "false"
 
 steps:
   # ── Auth pre-check: fail fast if SA lacks AR access (before expensive build) ─
@@ -187,6 +188,10 @@ steps:
       - "-c"
       - |
         set -e
+        if [ "${_RUN_INIMAGE_QG}" != "true" ]; then
+          echo "quality-gates: skipped (_RUN_INIMAGE_QG=${_RUN_INIMAGE_QG}) — QG already enforced at quickmerge + quality-gates-v2 promotion gate; in-image harness (unified-trading-pm/base-service.sh) absent so re-running here is redundant+impossible (exit 127)"
+          exit 0
+        fi
         VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
         echo "Running quality gates inside ${_SERVICE_NAME} image..."
         docker run --rm \
