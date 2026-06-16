@@ -45,7 +45,7 @@ _CIRCLE_ATTESTATION_URL: str = "https://www.circle.com/en/transparency/attestati
 _TETHER_TRANSPARENCY_URL: str = "https://tether.to/en/transparency/"
 
 # MakerDAO PSM contract address (PSM-USDC-A on Ethereum mainnet)
-_MAKERDAO_PSM_ADDRESS: str = "0x89B78CfA322F6C5dE0aBcEecab66Aee45393cC5A"
+_MAKERDAO_PSM_ADDRESS: str = "0x89B78CfA322F6C5dE0aBcEecab66Aee45393cC5A"  # DERIVED ethereum makerdao-docs (PSM)
 
 # Halt signal keywords — case-insensitive substring match in HTTP response body
 _CIRCLE_HALT_KEYWORDS: tuple[str, ...] = (
