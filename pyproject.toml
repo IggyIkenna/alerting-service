@@ -6,13 +6,13 @@ build-backend = "hatchling.build"
 
 [project]
 name = "alerting-service"
-version = "0.5.2"
+version = "0.10.0"
 description = "Multi-channel alerting (Slack, email, PagerDuty) for system health and trading events"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-    "unified-trading-library>=0.1.0,<1.0.0",
-    "unified-api-contracts>=0.5.0,<1.0.0",
+    "unified-trading-library>=0.13.0,<1.0.0",
+    "unified-api-contracts>=0.19.0,<1.0.0",
     "fastapi<1.0.0,>=0.115.0",
     "uvicorn>=0.27.0,<1.0.0",
     "prometheus-client<1.0.0,>=0.20.0",
