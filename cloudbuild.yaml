@@ -203,11 +203,41 @@ steps:
           /bin/bash -c "scripts/quality-gates.sh --no-fix --quick"
     waitFor: ["build"]
 
-  # ── STEP 6: REQUIRED — Push image ONLY if quality gates passed ────────────
+  # ── STEP 5.5: REQUIRED — Operability smoke (import + entrypoint) ─────────
+  # Validates the freshly-built image (1) IMPORTS cleanly (catches --no-sources /
+  # dropped-dep installs that let docker build succeed but break runtime) and
+  # (2) RUNS (entrypoint + ServiceBootstrap bootstrap) under credential-free env.
+  # MUST run BEFORE push — a broken image must never reach the registry.
+  # Credential-free env mirrors the unit-test suite (CLOUD_PROVIDER=local +
+  # CLOUD_MOCK_MODE=true). A bare --help without these envs is WRONG: ServiceBootstrap
+  # emits STARTED (needs GCP_PROJECT_ID + a cloud event sink) BEFORE handling --help.
+  - name: "gcr.io/cloud-builders/docker"
+    id: "operability-probe"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -e
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
+        IMG="asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION"
+        echo "=== Operability probe: IMPORT ${_PKG_NAME} ==="
+        docker run --rm --entrypoint python "$$IMG" \
+          -c "import ${_PKG_NAME}; print('IMPORT OK')"
+        echo "=== Operability probe: RUN --help ==="
+        docker run --rm \
+          -e CLOUD_PROVIDER=local \
+          -e CLOUD_MOCK_MODE=true \
+          -e GCP_PROJECT_ID=smoke \
+          -e ENVIRONMENT=dev \
+          "$$IMG" --help
+        echo "=== Operability probe PASSED ==="
+    waitFor: ["quality-gates"]
+
+  # ── STEP 6: REQUIRED — Push image ONLY if quality gates + operability probe passed ─
   - name: "gcr.io/cloud-builders/docker"
     id: "push"
     args: ["push", "--all-tags", "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}"]
-    waitFor: ["quality-gates"]
+    waitFor: ["operability-probe"]
 
   # ── STEP 7: REQUIRED — Vulnerability scan (CRITICAL CVE gate) ────────────
   # Container Analysis scans asynchronously after push; poll up to 3 minutes.

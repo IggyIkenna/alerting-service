@@ -17,6 +17,11 @@ from .defi_rules import (
     check_weeth_depeg,
     route_defi_alert,
 )
+from .feed_refetch_rules import (
+    evaluate_stale_critical_feed,
+    get_refetch_failure_breaker,
+    handle_refetch_failed,
+)
 from .reconciliation_rules import (
     evaluate_balance_discrepancy,
     evaluate_batch_vs_live_recon_drifted,
@@ -50,8 +55,11 @@ __all__ = [
     "evaluate_batch_vs_live_recon_drifted",
     "evaluate_pnl_discrepancy",
     "evaluate_position_discrepancy",
+    "evaluate_stale_critical_feed",
+    "get_refetch_failure_breaker",
     "handle_consolidator_down_payload",
     "handle_manifest_consolidation_failed_payload",
+    "handle_refetch_failed",
     "route_consolidator_event",
     "route_data_freshness_event",
     "route_defi_alert",
