@@ -51,6 +51,8 @@ _KNOWN_CATCH_ALL_ONLY: frozenset[AlertCode] = frozenset(
     {
         AlertCode.CHAOS_DRILL_FAILED,  # DR drill; explicit rule is a future UAC addition
         AlertCode.RECON_DEGRADED,  # RECON_DEGRADED_CLOSE has an explicit rule via RECON_DEGRADED_*
+        AlertCode.DAILY_LEDGER_DIGEST,  # Always INFO informational digest (never a paged alert);
+        # catch-all INFO routing is correct — explicit AlertRule deferred per UAC docstring
     }
 )
 
