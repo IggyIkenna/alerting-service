@@ -46,6 +46,7 @@ _CONFIRM_STRING_TEMPLATES: dict[ActionType, str] = {
     ActionType.REDEPLOY_KNOWN_GOOD: "REDEPLOY_{service}_to_{to_revision}",
     ActionType.RESIZE_MACHINE_AFTER_OOM: "RESIZE_{vm}",
     ActionType.FAILOVER_FEED: "FAILOVER_{venue}_{primary}_to_{backup}",
+    ActionType.REFETCH_FEED: "REFETCH_{feed_id}",
     ActionType.PAUSE_STRATEGY: "PAUSE_{strategy}",
     ActionType.CANCEL_OPEN_ORDERS: "CANCEL_ALL_{venue}",
     ActionType.DISABLE_VENUE: "DISABLE_{venue}",
