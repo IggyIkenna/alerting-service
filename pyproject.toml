@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "alerting-service"
-version = "0.11.0"
+version = "0.12.0"
 description = "Multi-channel alerting (Slack, email, PagerDuty) for system health and trading events"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
