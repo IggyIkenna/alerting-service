@@ -306,10 +306,21 @@ class AlertSubscriber:
                 for subscription in self._subscriptions:
                     if not self._running:
                         break
-                    batch: list[tuple[bytes, dict[str, str]]] = await loop.run_in_executor(
-                        None,
-                        lambda sub=subscription: self._client.subscribe_once(sub, timeout=self._poll_timeout),
-                    )
+                    try:
+                        batch: list[tuple[bytes, dict[str, str]]] = await loop.run_in_executor(
+                            None,
+                            lambda sub=subscription: self._client.subscribe_once(sub, timeout=self._poll_timeout),
+                        )
+                    except Exception as _sub_err:  # noqa: BLE001 — one bad subscription must not crash the whole subscriber
+                        # A missing/misconfigured subscription (e.g. a 404 NotFound when its
+                        # topic exists but the subscription was never provisioned in GCP) must
+                        # NOT take down alerting for every OTHER subscription. Log + skip this
+                        # round; the loop retries next tick and self-heals once provisioned.
+                        # (Incident 2026-06-22: a never-created `defi_data_quality_alerts`
+                        # subscription crashed the whole subscriber on startup → all alerting
+                        # offline. SSOT: dp_event_pubsub_delivery_gap_2026_06_22.md.)
+                        logger.warning("subscribe_once(%s) failed — skipping this round: %s", subscription, _sub_err)
+                        continue
                     for data, attrs in batch:
                         _start = time.perf_counter()
                         try:
