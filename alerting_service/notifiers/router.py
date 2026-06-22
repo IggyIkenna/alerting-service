@@ -285,13 +285,27 @@ def _mirror_to_data_pipeline_slack(
 
     SM-hot-reloaded webhook (DATA_PIPELINE_ALERTS_SLACK_WEBHOOK) takes
     precedence over the env-var value (data_pipeline_slack_webhook) when set.
+
+    The ``deployment_ui_base_url`` + ``deployment_scripts_log_bucket`` (SM-first,
+    env-fallback) are threaded into the notifier so the alert carries
+    click-through deep-links (VM logs / deployment detail / data status / GCS
+    run.log). Both empty → links omitted (no broken link).
     """
     sm_creds = get_paging_credentials()
     webhook = sm_creds.get("data_pipeline_slack_webhook") or config.data_pipeline_slack_webhook
     if not webhook:
         return
+    deployment_ui_base_url = sm_creds.get("deployment_ui_base_url") or config.deployment_ui_base_url
+    log_bucket = sm_creds.get("deployment_scripts_log_bucket") or config.deployment_scripts_log_bucket
     try:
-        send_data_pipeline_alert(webhook, event_name, summary, details)
+        send_data_pipeline_alert(
+            webhook,
+            event_name,
+            summary,
+            details,
+            deployment_ui_base_url=deployment_ui_base_url,
+            log_bucket=log_bucket,
+        )
     except Exception as exc:
         # Mirror is strictly best-effort — never break the CRITICAL incident path.
         logger.warning("data-pipeline-alerts Slack mirror raised for %s: %s", event_name, exc)
@@ -542,6 +556,30 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
             _record_batch_audit(alert_id, event_name, dp_channels, dp_pd, source, details)
             return
         _route_data_pipeline_event(event_name, summary, details, dp_rule.severity, config)
+        log_event("ALERT_SENT", details={"event_name": event_name, "alert_id": alert_id})
+        _persist_config_snapshot(config)
+        return
+
+    # Deployment lifecycle alert (DEPLOYMENT_STARTED/COMPLETED/FAILED) — Slack
+    # parity at /repos grade: the #data-pipeline-alerts mirror with the umbrella
+    # + cloud + a /deployments/{name} deep-link. FAILED is CRITICAL → ALSO pages
+    # via the shared incident path. Reuses _route_data_pipeline_event (same
+    # dedup / persistence / deep-link enrichment), never forked. Lazy import for
+    # the same partial-init-cycle reason as data_pipeline_rules above.
+    from alerting_service.rules.deployment_rules import deployment_rule_for
+
+    deploy_rule = deployment_rule_for(event_name)
+    if deploy_rule is not None:
+        if _batch_mode:
+            dep_pd = "critical" if deploy_rule.severity is AlertSeverity.CRITICAL else None
+            dep_channels = (
+                {AlertChannel.SLACK.value, AlertChannel.TELEGRAM.value, AlertChannel.PAGERDUTY.value}
+                if deploy_rule.severity is AlertSeverity.CRITICAL
+                else {AlertChannel.SLACK.value}
+            )
+            _record_batch_audit(alert_id, event_name, dep_channels, dep_pd, source, details)
+            return
+        _route_data_pipeline_event(event_name, summary, details, deploy_rule.severity, config)
         log_event("ALERT_SENT", details={"event_name": event_name, "alert_id": alert_id})
         _persist_config_snapshot(config)
         return
