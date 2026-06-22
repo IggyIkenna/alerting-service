@@ -21,6 +21,10 @@ from .defi_rules import (
     check_weeth_depeg,
     route_defi_alert,
 )
+from .deployment_rules import (
+    deployment_rule_for,
+    is_deployment_event,
+)
 from .feed_refetch_rules import (
     evaluate_stale_critical_feed,
     get_refetch_failure_breaker,
@@ -56,6 +60,7 @@ __all__ = [
     "check_steam_alert",
     "check_weeth_depeg",
     "data_pipeline_rule_for",
+    "deployment_rule_for",
     "evaluate_balance_discrepancy",
     "evaluate_batch_vs_live_recon_drifted",
     "evaluate_pnl_discrepancy",
@@ -66,6 +71,7 @@ __all__ = [
     "handle_manifest_consolidation_failed_payload",
     "handle_refetch_failed",
     "is_data_pipeline_event",
+    "is_deployment_event",
     "route_consolidator_event",
     "route_data_freshness_event",
     "route_defi_alert",

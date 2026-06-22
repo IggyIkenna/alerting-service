@@ -33,6 +33,9 @@ _SM_TWILIO_TO_FOUNDER = "alerting-twilio-to-number-founder"
 _SM_UTS_LIVE_ALERTS_SLACK_WEBHOOK = "alerting-uts-live-alerts-slack-webhook"
 # Data-pipeline alerts → Slack webhook (#data-pipeline-alerts; DP_* + CONSOLIDATOR_DOWN)
 _SM_DATA_PIPELINE_SLACK_WEBHOOK = "DATA_PIPELINE_ALERTS_SLACK_WEBHOOK"
+# Deployment-ui base URL + durable run.log bucket — for alert deep-link enrichment
+_SM_DEPLOYMENT_UI_BASE_URL = "DEPLOYMENT_UI_BASE_URL"
+_SM_DEPLOYMENT_SCRIPTS_LOG_BUCKET = "DEPLOYMENT_SCRIPTS_LOG_BUCKET"
 
 _ALL_PAGING_SM_KEYS = (
     _SM_BOT_TOKEN,
@@ -46,6 +49,8 @@ _ALL_PAGING_SM_KEYS = (
     _SM_TWILIO_TO_FOUNDER,
     _SM_UTS_LIVE_ALERTS_SLACK_WEBHOOK,
     _SM_DATA_PIPELINE_SLACK_WEBHOOK,
+    _SM_DEPLOYMENT_UI_BASE_URL,
+    _SM_DEPLOYMENT_SCRIPTS_LOG_BUCKET,
 )
 
 _PAGING_REFRESH_INTERVAL = 300.0  # 5 minutes
@@ -113,6 +118,14 @@ class _PagingCredentialsReloader:
         with self._lock:
             return self._credentials.get("data_pipeline_slack_webhook") or ""  # noqa: qg-empty-fallback
 
+    def get_deployment_ui_base_url(self) -> str:
+        with self._lock:
+            return self._credentials.get("deployment_ui_base_url") or ""  # noqa: qg-empty-fallback
+
+    def get_deployment_scripts_log_bucket(self) -> str:
+        with self._lock:
+            return self._credentials.get("deployment_scripts_log_bucket") or ""  # noqa: qg-empty-fallback
+
     def start(self, project_id: str | None) -> None:
         if self._started:
             return
@@ -155,6 +168,8 @@ class _PagingCredentialsReloader:
                 _SM_TWILIO_TO_FOUNDER: "twilio_to_number_founder",
                 _SM_UTS_LIVE_ALERTS_SLACK_WEBHOOK: "uts_live_alerts_slack_webhook",
                 _SM_DATA_PIPELINE_SLACK_WEBHOOK: "data_pipeline_slack_webhook",
+                _SM_DEPLOYMENT_UI_BASE_URL: "deployment_ui_base_url",
+                _SM_DEPLOYMENT_SCRIPTS_LOG_BUCKET: "deployment_scripts_log_bucket",
             }
             for sm_key, cred_key in _mapping.items():
                 val = raw.get(sm_key)
@@ -208,6 +223,8 @@ def get_paging_credentials() -> dict[str, str]:
     ``twilio_to_number_secondary``, ``twilio_to_number_founder``.
     Slack mirror keys: ``uts_live_alerts_slack_webhook``,
     ``data_pipeline_slack_webhook``.
+    Deep-link enrichment keys: ``deployment_ui_base_url``,
+    ``deployment_scripts_log_bucket``.
     Empty string for keys not yet provisioned in SM.
     """
     return {
@@ -222,6 +239,8 @@ def get_paging_credentials() -> dict[str, str]:
         "twilio_to_number_founder": _paging_creds_reloader.get_twilio_to_founder(),
         "uts_live_alerts_slack_webhook": _paging_creds_reloader.get_uts_live_alerts_slack_webhook(),
         "data_pipeline_slack_webhook": _paging_creds_reloader.get_data_pipeline_slack_webhook(),
+        "deployment_ui_base_url": _paging_creds_reloader.get_deployment_ui_base_url(),
+        "deployment_scripts_log_bucket": _paging_creds_reloader.get_deployment_scripts_log_bucket(),
     }
 
 

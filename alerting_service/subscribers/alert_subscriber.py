@@ -89,6 +89,17 @@ _ALERT_SUBSCRIPTIONS: tuple[str, ...] = (
     # event_name == "SUBGRAPH_SILENT_DATA_LOSS"; no dedicated handler is
     # required for the May-23 cutover (kind alone is sufficient).
     "defi_data_quality_alerts",
+    # lifecycle-events: the canonical UTL `log_event` live-mode topic
+    # (PubSubEventSink default). Carries the data-pipeline DP_* family
+    # (data_pipeline_hardening_self_monitoring_2026_06_22 — daily digest /
+    # hygiene / re-probe crons + the deployment-service fleet monitors via
+    # _ensure_live_events) AND CONSOLIDATOR_DOWN / CONSOLIDATOR_RECOVERED.
+    # route_event() exact-matches DP_* against the UAC DATA_PIPELINE_ALERT_RULES
+    # registry → _route_data_pipeline_event → #data-pipeline-alerts. Without
+    # this subscription DP_* / CONSOLIDATOR_DOWN are published but never
+    # consumed → never reach Slack (the delivery gap closed 2026-06-22; see
+    # plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md).
+    "lifecycle-events-sub",
 )
 
 # Topics with NO publisher in the codebase as of 2026-05-29 audit
@@ -295,10 +306,21 @@ class AlertSubscriber:
                 for subscription in self._subscriptions:
                     if not self._running:
                         break
-                    batch: list[tuple[bytes, dict[str, str]]] = await loop.run_in_executor(
-                        None,
-                        lambda sub=subscription: self._client.subscribe_once(sub, timeout=self._poll_timeout),
-                    )
+                    try:
+                        batch: list[tuple[bytes, dict[str, str]]] = await loop.run_in_executor(
+                            None,
+                            lambda sub=subscription: self._client.subscribe_once(sub, timeout=self._poll_timeout),
+                        )
+                    except Exception as _sub_err:  # one bad subscription must not crash the whole subscriber
+                        # A missing/misconfigured subscription (e.g. a 404 NotFound when its
+                        # topic exists but the subscription was never provisioned in GCP) must
+                        # NOT take down alerting for every OTHER subscription. Log + skip this
+                        # round; the loop retries next tick and self-heals once provisioned.
+                        # (Incident 2026-06-22: a never-created `defi_data_quality_alerts`
+                        # subscription crashed the whole subscriber on startup → all alerting
+                        # offline. SSOT: dp_event_pubsub_delivery_gap_2026_06_22.md.)
+                        logger.warning("subscribe_once(%s) failed — skipping this round: %s", subscription, _sub_err)
+                        continue
                     for data, attrs in batch:
                         _start = time.perf_counter()
                         try:

@@ -49,6 +49,8 @@ _ALL_PAGING_KEYS = {
     "twilio_to_number_founder",
     "uts_live_alerts_slack_webhook",
     "data_pipeline_slack_webhook",
+    "deployment_ui_base_url",
+    "deployment_scripts_log_bucket",
 }
 
 
@@ -262,7 +264,7 @@ class TestDoubleStart:
 
 
 class TestGetPagingCredentials:
-    def test_returns_dict_with_all_ten_keys(self) -> None:
+    def test_returns_dict_with_all_paging_keys(self) -> None:
         creds = get_paging_credentials()
         assert set(creds.keys()) == _ALL_PAGING_KEYS
 

@@ -63,6 +63,25 @@ class AlertingSystemConfig(UnifiedCloudConfig):
             "DATA_PIPELINE_ALERTS_SLACK_WEBHOOK is the fallback. Empty = mirror disabled."
         ),
     )
+    deployment_ui_base_url: str = Field(
+        default="",
+        description=(
+            "Base URL of the deployment-ui (e.g. https://deployment.odum-research.com). Used to "
+            "build click-through deep-links in #data-pipeline-alerts / deployment alerts — VM "
+            "logs ({base}/ops/vms/{vm}), deployment detail ({base}/deployments/{name}), data "
+            "status ({base}/service/{svc}/data-status). SM hot-reload via 'DEPLOYMENT_UI_BASE_URL'; "
+            "env DEPLOYMENT_UI_BASE_URL is the fallback. Empty = links omitted (no broken link)."
+        ),
+    )
+    deployment_scripts_log_bucket: str = Field(
+        default="",
+        description=(
+            "GCS bucket holding the durable per-VM run.log (gs://{bucket}/vm-logs/{vm}/run.log). "
+            "Used to build a GCS console link in alert actions. SM hot-reload via "
+            "'DEPLOYMENT_SCRIPTS_LOG_BUCKET'; env DEPLOYMENT_SCRIPTS_LOG_BUCKET is the fallback. "
+            "Empty = run.log console link omitted."
+        ),
+    )
     telegram_bot_token: str = Field(default="", description="Telegram Bot API token")
     telegram_chat_id: str = Field(default="", description="Telegram chat ID for alerts")
     telegram_chat_id_ops: str = Field(
