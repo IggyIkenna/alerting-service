@@ -89,6 +89,17 @@ _ALERT_SUBSCRIPTIONS: tuple[str, ...] = (
     # event_name == "SUBGRAPH_SILENT_DATA_LOSS"; no dedicated handler is
     # required for the May-23 cutover (kind alone is sufficient).
     "defi_data_quality_alerts",
+    # lifecycle-events: the canonical UTL `log_event` live-mode topic
+    # (PubSubEventSink default). Carries the data-pipeline DP_* family
+    # (data_pipeline_hardening_self_monitoring_2026_06_22 — daily digest /
+    # hygiene / re-probe crons + the deployment-service fleet monitors via
+    # _ensure_live_events) AND CONSOLIDATOR_DOWN / CONSOLIDATOR_RECOVERED.
+    # route_event() exact-matches DP_* against the UAC DATA_PIPELINE_ALERT_RULES
+    # registry → _route_data_pipeline_event → #data-pipeline-alerts. Without
+    # this subscription DP_* / CONSOLIDATOR_DOWN are published but never
+    # consumed → never reach Slack (the delivery gap closed 2026-06-22; see
+    # plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md).
+    "lifecycle-events-sub",
 )
 
 # Topics with NO publisher in the codebase as of 2026-05-29 audit
