@@ -53,6 +53,16 @@ class AlertingSystemConfig(UnifiedCloudConfig):
             "UTS_LIVE_ALERTS_SLACK_WEBHOOK is the fallback. Empty = mirror disabled."
         ),
     )
+    data_pipeline_slack_webhook: str = Field(
+        default="",
+        description=(
+            "Slack Incoming Webhook for the #data-pipeline-alerts channel. Data-pipeline "
+            "self-monitoring alerts (the DP_* family + CONSOLIDATOR_DOWN, matched by UAC "
+            "DATA_PIPELINE_ALERT_RULES) are mirrored here; CRITICAL ones ALSO page via the "
+            "incident path. SM hot-reload via 'DATA_PIPELINE_ALERTS_SLACK_WEBHOOK'; env "
+            "DATA_PIPELINE_ALERTS_SLACK_WEBHOOK is the fallback. Empty = mirror disabled."
+        ),
+    )
     telegram_bot_token: str = Field(default="", description="Telegram Bot API token")
     telegram_chat_id: str = Field(default="", description="Telegram chat ID for alerts")
     telegram_chat_id_ops: str = Field(
