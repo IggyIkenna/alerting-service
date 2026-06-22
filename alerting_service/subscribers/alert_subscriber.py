@@ -311,7 +311,7 @@ class AlertSubscriber:
                             None,
                             lambda sub=subscription: self._client.subscribe_once(sub, timeout=self._poll_timeout),
                         )
-                    except Exception as _sub_err:  # noqa: BLE001 — one bad subscription must not crash the whole subscriber
+                    except Exception as _sub_err:  # one bad subscription must not crash the whole subscriber
                         # A missing/misconfigured subscription (e.g. a 404 NotFound when its
                         # topic exists but the subscription was never provisioned in GCP) must
                         # NOT take down alerting for every OTHER subscription. Log + skip this
