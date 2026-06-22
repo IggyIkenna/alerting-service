@@ -37,6 +37,25 @@ class TestExtractEventName:
         payload: dict[str, object] = {"event_name": "", "event_type": "REAL_EVENT"}
         assert _extract_event_name(payload) == "REAL_EVENT"
 
+    def test_utl_event_key_extracted(self) -> None:
+        """REGRESSION (dp_event_pubsub_delivery_gap_2026_06_22): UTL ``log_event`` /
+        ``PubSubEventSink.write_event`` publishes the name under ``event`` —
+        ``{"event": name, "service": ..., "metadata": {...}}``. The extractor MUST
+        read ``event`` or every DP_* / CONSOLIDATOR_DOWN on lifecycle-events
+        mis-extracts to UNKNOWN_EVENT and is silently dropped before Slack.
+        """
+        payload: dict[str, object] = {
+            "event": "DP_DIVERGENT_EMPTY",
+            "service": "dp_audit",
+            "metadata": {"severity": "WARN", "details": {"asset_group": "defi"}},
+        }
+        assert _extract_event_name(payload) == "DP_DIVERGENT_EMPTY"
+
+    def test_event_key_priority_over_legacy_keys(self) -> None:
+        """``event`` (the UTL canonical key) wins over the legacy fallbacks."""
+        payload: dict[str, object] = {"event": "DP_EMPTY_REPROBE_DISAGREEMENT", "type": "OTHER"}
+        assert _extract_event_name(payload) == "DP_EMPTY_REPROBE_DISAGREEMENT"
+
 
 class TestDeserializeMessage:
     def test_valid_payload(self) -> None:

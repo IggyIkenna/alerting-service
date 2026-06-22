@@ -138,13 +138,25 @@ _MANIFEST_CONSOLIDATION_FAILED_EVENT: str = "MANIFEST_CONSOLIDATION_FAILED"
 def _extract_event_name(payload: dict[str, object]) -> str:
     """Extract the canonical event_name from a deserialized PubSub payload.
 
-    Looks for ``event_name``, ``event_type``, or ``type`` keys in that order.
-    Falls back to ``"UNKNOWN_EVENT"`` when none are present.
+    Looks for ``event``, ``event_name``, ``event_type``, ``type``, or ``kind``
+    keys in that order. Falls back to ``"UNKNOWN_EVENT"`` when none are present.
+
+    ``event`` is FIRST + REQUIRED: it is the canonical key the UTL
+    ``PubSubEventSink.write_event`` publishes the event name under
+    (``{"event": name, "service": ..., "metadata": {...}}`` — see
+    unified-trading-library/unified_trading_library/event_sink.py). Every UTL
+    ``log_event`` on the ``lifecycle-events`` topic (all ``DP_*`` data-pipeline
+    alerts + ``CONSOLIDATOR_DOWN``) serializes the name to ``event``. Omitting it
+    here mis-extracts every such event to ``UNKNOWN_EVENT`` → no rule match →
+    silently DROPPED before reaching ``#data-pipeline-alerts`` (root-caused
+    2026-06-22: the subscriber was attached to ``lifecycle-events-sub`` + pulling
+    messages but every ``DP_*`` fell through to ``UNKNOWN_EVENT``). SSOT:
+    plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md.
+    ``kind`` is the canonical field on subgraph_health_probe alerts
+    (defi_data_quality_alerts topic) so probe alerts route cleanly without each
+    probe having to pre-canonicalise to event_name.
     """
-    # ``kind`` is the canonical field on subgraph_health_probe alerts
-    # (defi_data_quality_alerts topic) — listed first so probe alerts route
-    # cleanly without each probe having to pre-canonicalise to event_name.
-    for key in ("event_name", "event_type", "type", "kind"):
+    for key in ("event", "event_name", "event_type", "type", "kind"):
         value = payload.get(key)
         if isinstance(value, str) and value:
             return value
