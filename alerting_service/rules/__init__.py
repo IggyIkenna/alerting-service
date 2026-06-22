@@ -9,6 +9,10 @@ from .consolidator_rules import (
     route_consolidator_event,
 )
 from .data_freshness_rules import route_data_freshness_event
+from .data_pipeline_rules import (
+    data_pipeline_rule_for,
+    is_data_pipeline_event,
+)
 from .defi_rules import (
     check_aave_utilization,
     check_feature_staleness,
@@ -51,6 +55,7 @@ __all__ = [
     "check_health_factor",
     "check_steam_alert",
     "check_weeth_depeg",
+    "data_pipeline_rule_for",
     "evaluate_balance_discrepancy",
     "evaluate_batch_vs_live_recon_drifted",
     "evaluate_pnl_discrepancy",
@@ -60,6 +65,7 @@ __all__ = [
     "handle_consolidator_down_payload",
     "handle_manifest_consolidation_failed_payload",
     "handle_refetch_failed",
+    "is_data_pipeline_event",
     "route_consolidator_event",
     "route_data_freshness_event",
     "route_defi_alert",

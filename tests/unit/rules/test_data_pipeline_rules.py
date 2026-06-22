@@ -1,0 +1,177 @@
+"""Unit tests for data-pipeline alert routing (DP_* family + CONSOLIDATOR_DOWN).
+
+Covers:
+  * the ``data_pipeline_rule_for`` lookup (exact-match, unmatched → None);
+  * ``router.route_event`` for a DP_* CRITICAL event → mirror to
+    data_pipeline_slack + the CRITICAL incident path (PagerDuty + Telegram);
+  * a DP_* WARN event → mirror only, deduped within the TTL window;
+  * an unmatched event does NOT mirror to data_pipeline_slack.
+
+The webhook POST is mocked (QG runs ``--block-network``).
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from alerting_service.core.dedup import AlertDeduplicator
+from alerting_service.notifiers import router
+from alerting_service.notifiers.router import route_event
+from alerting_service.rules.data_pipeline_rules import (
+    data_pipeline_rule_for,
+    is_data_pipeline_event,
+)
+
+pytestmark = pytest.mark.unit
+
+_WEBHOOK = "https://hooks.slack.com/services/T/B/secret"
+
+
+# ---------------------------------------------------------------------------
+# Lookup
+# ---------------------------------------------------------------------------
+
+
+class TestDataPipelineRuleFor:
+    def test_dp_critical_event_matches(self) -> None:
+        rule = data_pipeline_rule_for("DP_UNPROVEN_HONEST_ABSENCE")
+        assert rule is not None
+        assert rule.severity.value == "CRITICAL"
+
+    def test_dp_warn_event_matches(self) -> None:
+        rule = data_pipeline_rule_for("DP_VM_STALL")
+        assert rule is not None
+        assert rule.severity.value == "WARN"
+
+    def test_consolidator_down_is_a_member(self) -> None:
+        assert data_pipeline_rule_for("CONSOLIDATOR_DOWN") is not None
+        assert is_data_pipeline_event("CONSOLIDATOR_DOWN")
+
+    def test_unmatched_event_returns_none(self) -> None:
+        assert data_pipeline_rule_for("KILL_SWITCH_ACTIVATED") is None
+        assert not is_data_pipeline_event("KILL_SWITCH_ACTIVATED")
+
+
+# ---------------------------------------------------------------------------
+# Router integration
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def _fresh_dedup(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Give every test a fresh module-level deduplicator (no cross-test leakage)."""
+    monkeypatch.setattr(router, "_deduplicator", AlertDeduplicator(ttl_seconds=60.0))
+
+
+@pytest.fixture
+def mock_config() -> Iterator[MagicMock]:
+    """Patch _get_cloud_config to a config carrying the DP webhook + paging."""
+    cfg = MagicMock()
+    cfg.data_pipeline_slack_webhook = _WEBHOOK
+    cfg.telegram_bot_token = "bot-token-123"
+    cfg.telegram_chat_id = "chat-456"
+    cfg.telegram_chat_id_ops = ""
+    cfg.uts_live_alerts_slack_webhook = ""
+    cfg.gcp_project_id = "test-project"
+    cfg.pagerduty_disabled = False
+    cfg.quietness_baseline_mode = False
+    cfg.routing_rules = [{"event_pattern": "*", "channels": ["telegram"], "severity_filter": None}]
+    with patch("alerting_service.notifiers.router._get_cloud_config", return_value=cfg):
+        yield cfg
+
+
+@pytest.fixture
+def mock_creds() -> Iterator[MagicMock]:
+    """Patch get_paging_credentials — no SM webhook (use config fallback)."""
+    creds: dict[str, str] = {}
+    with patch("alerting_service.notifiers.router.get_paging_credentials", return_value=creds) as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_send_dp() -> Iterator[MagicMock]:
+    """Mock the data_pipeline_slack notifier POST (block-network safe)."""
+    with patch("alerting_service.notifiers.router.send_data_pipeline_alert", return_value=True) as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_explicit_route() -> Iterator[MagicMock]:
+    """Mock the CRITICAL incident path (route_event_with_explicit_channels)."""
+    with patch("alerting_service.notifiers.router.route_event_with_explicit_channels") as mock:
+        yield mock
+
+
+@pytest.fixture
+def mock_persist_and_log() -> Iterator[None]:
+    """Suppress log_event + config-snapshot persistence side-effects."""
+    with (
+        patch("alerting_service.notifiers.router.log_event"),
+        patch("alerting_service.notifiers.router._persist_config_snapshot"),
+    ):
+        yield
+
+
+@pytest.mark.usefixtures("_fresh_dedup", "mock_config", "mock_creds", "mock_persist_and_log")
+class TestRouteEventDataPipeline:
+    def test_critical_dp_event_mirrors_and_pages(
+        self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
+    ) -> None:
+        route_event(
+            "DP_UNPROVEN_HONEST_ABSENCE",
+            {"message": "401 stamped as empty", "asset_group": "defi", "source": "thegraph"},
+        )
+
+        # Slack mirror fired with the DP webhook + the CRITICAL severity.
+        mock_send_dp.assert_called_once()
+        assert mock_send_dp.call_args.args[0] == _WEBHOOK
+        assert mock_send_dp.call_args.args[1] == "DP_UNPROVEN_HONEST_ABSENCE"
+        mirror_details = mock_send_dp.call_args.args[3]
+        assert mirror_details["severity"] == "CRITICAL"
+
+        # CRITICAL → incident path (PagerDuty + Telegram), reusing existing plumbing.
+        mock_explicit_route.assert_called_once()
+        assert mock_explicit_route.call_args.args[0] == "DP_UNPROVEN_HONEST_ABSENCE"
+        assert mock_explicit_route.call_args.kwargs["channels"] == {"pagerduty", "telegram"}
+        assert mock_explicit_route.call_args.kwargs["pd_severity"] == "critical"
+
+    def test_warn_dp_event_mirrors_only_no_page(
+        self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
+    ) -> None:
+        route_event("DP_VM_STALL", {"message": "vm idle", "vm": "vm-defi-1"})
+
+        mock_send_dp.assert_called_once()
+        assert mock_send_dp.call_args.args[3]["severity"] == "WARN"
+        # WARN does NOT page.
+        mock_explicit_route.assert_not_called()
+
+    def test_warn_dp_event_deduped_within_window(
+        self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
+    ) -> None:
+        details = {"message": "vm idle", "vm": "vm-defi-1"}
+        route_event("DP_VM_STALL", details)
+        route_event("DP_VM_STALL", details)  # identical → deduped by AlertDeduplicator
+
+        # Only the first fire reaches the mirror.
+        mock_send_dp.assert_called_once()
+
+    def test_unmatched_event_does_not_mirror_to_data_pipeline_slack(
+        self,
+        mock_send_dp: MagicMock,
+        mock_explicit_route: MagicMock,
+        mock_send_telegram: MagicMock,
+    ) -> None:
+        route_event("SOME_OTHER_EVENT", {"message": "unrelated"})
+
+        mock_send_dp.assert_not_called()
+        mock_explicit_route.assert_not_called()
+
+
+@pytest.fixture
+def mock_send_telegram() -> Iterator[MagicMock]:
+    """Patch Telegram so the generic fallback path for non-DP events is inert."""
+    with patch("alerting_service.notifiers.router.send_telegram", return_value=True) as mock:
+        yield mock
