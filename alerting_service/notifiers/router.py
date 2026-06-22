@@ -29,7 +29,7 @@ from fnmatch import fnmatch
 from functools import lru_cache
 from typing import cast, get_args
 
-from unified_api_contracts import LIVE_ALERT_RULES, AlertSeverity
+from unified_api_contracts import LIVE_ALERT_RULES, AlertChannel, AlertSeverity
 from unified_api_contracts.incident import (
     ImmediateSev0Override,
     IncidentEnvelope,
@@ -47,6 +47,7 @@ from ..gateway.envelope_adapter import wrap_legacy_alert
 from ..gateway.recovery_verifier import RecoveryVerifier
 from ..gateway.state_machine import IncidentStateMachine
 from ..persistence.storage_store import AlertStorageStore
+from .data_pipeline_slack import send_data_pipeline_alert
 from .incident_fallback import route_incident_envelope_to_fallbacks
 from .pagerduty import PagerDutySeverity
 from .pagerduty import send_event as pd_send_event
@@ -265,6 +266,65 @@ def _mirror_to_uts_live_alerts_slack(
         logger.warning("UTS-live-alerts Slack mirror raised for %s: %s", event_name, exc)
 
 
+def _mirror_to_data_pipeline_slack(
+    event_name: str,
+    summary: str,
+    details: dict[str, object],
+    config: AlertingSystemConfig,
+) -> None:
+    """Mirror a data-pipeline alert to the #data-pipeline-alerts Slack channel.
+
+    Called for every DP_* / CONSOLIDATOR_DOWN event (matched by
+    ``data_pipeline_rule_for``) — the start-verbose channel of
+    ``data_pipeline_hardening_self_monitoring_2026_06_22.md``. CRITICAL events
+    ALSO page via the incident path (see ``_route_data_pipeline_event``); this
+    is the channel mirror, not the only sink.
+
+    Best-effort: a Slack failure never affects the CRITICAL incident path.
+    No-op when no webhook is configured (mock / CI / not-yet-provisioned).
+
+    SM-hot-reloaded webhook (DATA_PIPELINE_ALERTS_SLACK_WEBHOOK) takes
+    precedence over the env-var value (data_pipeline_slack_webhook) when set.
+    """
+    sm_creds = get_paging_credentials()
+    webhook = sm_creds.get("data_pipeline_slack_webhook") or config.data_pipeline_slack_webhook
+    if not webhook:
+        return
+    try:
+        send_data_pipeline_alert(webhook, event_name, summary, details)
+    except Exception as exc:
+        # Mirror is strictly best-effort — never break the CRITICAL incident path.
+        logger.warning("data-pipeline-alerts Slack mirror raised for %s: %s", event_name, exc)
+
+
+def _route_data_pipeline_event(
+    event_name: str,
+    summary: str,
+    details: dict[str, object],
+    severity: AlertSeverity,
+    config: AlertingSystemConfig,
+) -> None:
+    """Route a matched data-pipeline alert: channel mirror + CRITICAL incident path.
+
+    Always mirrors to ``#data-pipeline-alerts``. For ``severity == CRITICAL``,
+    ALSO routes through the existing incident plumbing
+    (``route_event_with_explicit_channels`` → PagerDuty + Telegram) — the SAME
+    path consolidator-rules CRITICAL events use; dedup / ack / persistence are
+    reused, never forked. INFO/WARN stay channel-only (the WARN dedup was
+    already applied by ``route_event`` before this is called).
+    """
+    details_with_sev: dict[str, object] = {**details, "severity": severity.value}
+    _mirror_to_data_pipeline_slack(event_name, summary, details_with_sev, config)
+
+    if severity is AlertSeverity.CRITICAL:
+        route_event_with_explicit_channels(
+            event_name,
+            details_with_sev,
+            channels={"pagerduty", "telegram"},
+            pd_severity="critical",
+        )
+
+
 def _build_delivery_record(
     alert_id: str,
     channel: str,
@@ -460,6 +520,31 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
 
     config = _get_cloud_config()
     summary = f"[{event_name}] {details.get('message', event_name)}"
+
+    # Data-pipeline alert (DP_* family + CONSOLIDATOR_DOWN) — mirror to
+    # #data-pipeline-alerts; CRITICAL ones ALSO page via the incident path.
+    # Short-circuits the generic routing rules (a DP_* event must NOT also
+    # mirror to #uts-live-alerts / fall through to the telegram catch-all).
+    # CI/QG notify-slack.yml events are NOT in DATA_PIPELINE_ALERT_RULES, so
+    # they are untouched by this branch.
+    #
+    # Lazy import (deferred to call time, like coalesce / kill_switch_rules
+    # below): the rules package imports router at module load (consolidator_rules
+    # needs route_event_with_explicit_channels), so a top-level
+    # `from ..rules.data_pipeline_rules import …` would form a partial-init cycle.
+    from alerting_service.rules.data_pipeline_rules import data_pipeline_rule_for
+
+    dp_rule = data_pipeline_rule_for(event_name)
+    if dp_rule is not None:
+        if _batch_mode:
+            dp_channels = {ch.value for ch in dp_rule.channels} or {AlertChannel.LOG_ONLY.value}
+            dp_pd = "critical" if dp_rule.severity is AlertSeverity.CRITICAL else None
+            _record_batch_audit(alert_id, event_name, dp_channels, dp_pd, source, details)
+            return
+        _route_data_pipeline_event(event_name, summary, details, dp_rule.severity, config)
+        log_event("ALERT_SENT", details={"event_name": event_name, "alert_id": alert_id})
+        _persist_config_snapshot(config)
+        return
 
     # Determine channels from config-driven routing rules
     channels, pd_severity = _match_routing_rules(event_name, config.routing_rules)

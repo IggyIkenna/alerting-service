@@ -7,7 +7,7 @@ Covers:
   4. SM fetch failure on _refresh — keeps previous credentials (no regression)
   5. stop() — joins thread, idempotent
   6. Double start() — idempotent, no duplicate thread
-  7. get_paging_credentials() module function — returns dict with all 9 keys
+  7. get_paging_credentials() module function — returns dict with all 10 keys
   8. Credential refresh on SM change — second SM response supersedes first
   9. Twilio SM keys loaded and accessible via getters
 """
@@ -48,6 +48,7 @@ _ALL_PAGING_KEYS = {
     "twilio_to_number_secondary",
     "twilio_to_number_founder",
     "uts_live_alerts_slack_webhook",
+    "data_pipeline_slack_webhook",
 }
 
 
@@ -261,7 +262,7 @@ class TestDoubleStart:
 
 
 class TestGetPagingCredentials:
-    def test_returns_dict_with_all_nine_keys(self) -> None:
+    def test_returns_dict_with_all_ten_keys(self) -> None:
         creds = get_paging_credentials()
         assert set(creds.keys()) == _ALL_PAGING_KEYS
 

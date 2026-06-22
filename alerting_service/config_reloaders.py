@@ -31,6 +31,8 @@ _SM_TWILIO_TO_SECONDARY = "alerting-twilio-to-number-secondary"
 _SM_TWILIO_TO_FOUNDER = "alerting-twilio-to-number-founder"
 # UTS Live Alerts → Slack mirror webhook (#uts-live-alerts; same agent-orchestrator-alerts app)
 _SM_UTS_LIVE_ALERTS_SLACK_WEBHOOK = "alerting-uts-live-alerts-slack-webhook"
+# Data-pipeline alerts → Slack webhook (#data-pipeline-alerts; DP_* + CONSOLIDATOR_DOWN)
+_SM_DATA_PIPELINE_SLACK_WEBHOOK = "DATA_PIPELINE_ALERTS_SLACK_WEBHOOK"
 
 _ALL_PAGING_SM_KEYS = (
     _SM_BOT_TOKEN,
@@ -43,6 +45,7 @@ _ALL_PAGING_SM_KEYS = (
     _SM_TWILIO_TO_SECONDARY,
     _SM_TWILIO_TO_FOUNDER,
     _SM_UTS_LIVE_ALERTS_SLACK_WEBHOOK,
+    _SM_DATA_PIPELINE_SLACK_WEBHOOK,
 )
 
 _PAGING_REFRESH_INTERVAL = 300.0  # 5 minutes
@@ -106,6 +109,10 @@ class _PagingCredentialsReloader:
         with self._lock:
             return self._credentials.get("uts_live_alerts_slack_webhook") or ""  # noqa: qg-empty-fallback
 
+    def get_data_pipeline_slack_webhook(self) -> str:
+        with self._lock:
+            return self._credentials.get("data_pipeline_slack_webhook") or ""  # noqa: qg-empty-fallback
+
     def start(self, project_id: str | None) -> None:
         if self._started:
             return
@@ -147,6 +154,7 @@ class _PagingCredentialsReloader:
                 _SM_TWILIO_TO_SECONDARY: "twilio_to_number_secondary",
                 _SM_TWILIO_TO_FOUNDER: "twilio_to_number_founder",
                 _SM_UTS_LIVE_ALERTS_SLACK_WEBHOOK: "uts_live_alerts_slack_webhook",
+                _SM_DATA_PIPELINE_SLACK_WEBHOOK: "data_pipeline_slack_webhook",
             }
             for sm_key, cred_key in _mapping.items():
                 val = raw.get(sm_key)
@@ -198,7 +206,8 @@ def get_paging_credentials() -> dict[str, str]:
     Twilio keys: ``twilio_account_sid``, ``twilio_auth_token``,
     ``twilio_from_number``, ``twilio_to_number_primary``,
     ``twilio_to_number_secondary``, ``twilio_to_number_founder``.
-    Slack mirror key: ``uts_live_alerts_slack_webhook``.
+    Slack mirror keys: ``uts_live_alerts_slack_webhook``,
+    ``data_pipeline_slack_webhook``.
     Empty string for keys not yet provisioned in SM.
     """
     return {
@@ -212,6 +221,7 @@ def get_paging_credentials() -> dict[str, str]:
         "twilio_to_number_secondary": _paging_creds_reloader.get_twilio_to_secondary(),
         "twilio_to_number_founder": _paging_creds_reloader.get_twilio_to_founder(),
         "uts_live_alerts_slack_webhook": _paging_creds_reloader.get_uts_live_alerts_slack_webhook(),
+        "data_pipeline_slack_webhook": _paging_creds_reloader.get_data_pipeline_slack_webhook(),
     }
 
 
