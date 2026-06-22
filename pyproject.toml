@@ -128,6 +128,12 @@ markers = [
 [tool.coverage.run]
 source = ["alerting_service"]
 branch = true
+# pytest-cov + xdist: workers are separate processes; without parallel-combine the terminal
+# fail-under reads PARTIAL (controller-only) data and spuriously fails (2026-06-22: mtds saw
+# terminal 46.4% while coverage.xml correctly combined to 83.95%). parallel-combine fixes the gate.
+parallel = true
+concurrency = ["thread", "multiprocessing"]
+sigterm = true
 
 [tool.coverage.report]
 fail_under = 76
