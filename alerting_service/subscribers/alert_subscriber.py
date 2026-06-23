@@ -188,8 +188,70 @@ def _extract_event_name(payload: dict[str, object]) -> str:
     return "UNKNOWN_EVENT"
 
 
+def _unwrap_utl_envelope(payload: dict[str, object]) -> dict[str, object]:
+    """Flatten the UTL ``log_event`` envelope into a FLAT details dict.
+
+    Root cause of the generic-alert bug (operator escalation 2026-06-23): every
+    ``log_event`` on the ``lifecycle-events`` topic is published by
+    ``PubSubEventSink.write_event`` as::
+
+        {"event": <name>, "service": <svc>,
+         "metadata": {"timestamp": ..., "service_name": ..., "severity": ...,
+                      "details": {<the emitter's real payload>},
+                      "correlation_id": ...}}
+
+    i.e. the emitter's ``log_event(..., details={vm_name, exit_code,
+    error_message, run_log_tail, umbrella, asset_group, ...})`` lands TWO levels
+    deep at ``payload["metadata"]["details"]``, and ``severity`` lands at
+    ``payload["metadata"]["severity"]``. The subscriber previously routed the
+    RAW top-level dict as ``details``, so every ``details.get("vm_name")`` /
+    ``.get("exit_code")`` / ``.get("severity")`` / ``.get("umbrella")`` the
+    router + the ``data_pipeline_slack`` formatter look up returned ``None`` →
+    the delivered Slack alert was generic (event name + nothing actionable).
+
+    This lifts the envelope so the rich payload is at the TOP level the router /
+    formatter read:
+
+      - ``metadata["details"]`` keys → top level (vm_name, exit_code,
+        error_message, run_log_tail, umbrella, asset_group, message, …);
+      - ``metadata["severity"]`` → top-level ``severity`` (the field-renderer +
+        the emoji + the CRITICAL→PagerDuty gate key off it);
+      - ``metadata["correlation_id"]`` → top-level ``correlation_id`` for tracing.
+
+    A FLAT legacy payload (kill-switch / margin / risk-rule emitters that
+    publish a flat dict with no ``metadata`` envelope) is returned UNCHANGED —
+    the unwrap only fires on the canonical ``{event|event_name, metadata:{…}}``
+    shape, so the typed handlers that read those flat payloads are untouched.
+    SSOT: plans/active/data_completion_to_100_all_ag_2026_06_21.md (alerting
+    verbosity items).
+    """
+    metadata = payload.get("metadata")
+    if not isinstance(metadata, dict):
+        return payload
+    meta = cast("dict[str, object]", metadata)
+    flat: dict[str, object] = {}
+    inner = meta.get("details")
+    if isinstance(inner, dict):
+        flat.update(cast("dict[str, object]", inner))
+    # Promote the envelope-level fields the router/formatter read at top level.
+    # These never clobber a same-named key the emitter put in ``details`` — the
+    # inner payload wins (it is the more-specific value).
+    for env_key in ("severity", "correlation_id", "service_name", "timestamp"):
+        env_val = meta.get(env_key)
+        if env_val not in (None, "") and env_key not in flat:
+            flat[env_key] = env_val
+    return flat
+
+
 def _deserialize_message(data: bytes) -> tuple[str, dict[str, object]]:
     """Deserialize raw PubSub bytes into (event_name, details).
+
+    Unwraps the UTL ``log_event`` envelope (``{event, metadata:{severity,
+    details}}``) into a FLAT details dict so the router + the
+    ``data_pipeline_slack`` formatter see vm_name / exit_code / error_message /
+    run_log_tail / severity / umbrella at the TOP level — see
+    ``_unwrap_utl_envelope`` for the root-cause + the flat-legacy-payload
+    pass-through.
 
     Returns ("MALFORMED_EVENT", {}) on decode/parse failure so the caller
     can still log the anomaly without crashing the subscriber loop.
@@ -201,7 +263,7 @@ def _deserialize_message(data: bytes) -> tuple[str, dict[str, object]]:
         return "MALFORMED_EVENT", {}
 
     event_name = _extract_event_name(payload)
-    return event_name, payload
+    return event_name, _unwrap_utl_envelope(payload)
 
 
 class AlertSubscriber:
@@ -266,13 +328,12 @@ class AlertSubscriber:
 
         Returns (event_name, enriched_details) ready to route and yield.
         """
-        try:
-            raw: dict[str, object] = cast(dict[str, object], json.loads(data.decode("utf-8")))
-            correlation_id = str(raw.get("correlation_id") or uuid.uuid4())
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            correlation_id = str(uuid.uuid4())
-
         event_name, details = _deserialize_message(data)
+        # correlation_id precedence: the UTL envelope value (lifted into ``details``
+        # from ``metadata.correlation_id`` by ``_unwrap_utl_envelope``) → a flat
+        # top-level value → a fresh uuid. The raw ``metadata`` envelope carries it
+        # nested, so reading the raw top level alone would always miss it.
+        correlation_id = str(details.get("correlation_id") or uuid.uuid4())
         enriched: dict[str, object] = {
             **details,
             "correlation_id": correlation_id,
