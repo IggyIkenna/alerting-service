@@ -430,7 +430,7 @@ class TestUnifiedTradingLibrary:
         channels3, _severity3 = _match_routing_rules("RANDOM_EVENT", rules)
         assert "telegram" in channels3
 
-    @patch("alerting_service.notifiers.router._deliver_message", return_value=True)
+    @patch("alerting_service.notifiers.router._deliver_to_uts_live_alerts_slack", return_value=True)
     @patch("alerting_service.notifiers.router._persist_delivery_record")
     @patch("alerting_service.notifiers.router._persist_config_snapshot")
     @patch("alerting_service.notifiers.router.pd_send_event", return_value=True)

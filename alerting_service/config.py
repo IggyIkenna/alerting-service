@@ -138,3 +138,14 @@ class AlertingSystemConfig(UnifiedCloudConfig):
     anthropic_api_key: str | None = None
     poll_interval_seconds: int = 10
     metrics_endpoints: ClassVar[dict[str, str]] = {}
+    run_subscriber_in_api: bool = Field(
+        default=False,
+        description=(
+            "When true, the FastAPI app (api/main.py) ALSO runs the live AlertSubscriber "
+            "pull-loop in a background task via lifespan. This makes a single Cloud Run "
+            "service both serve $PORT (startup probe / health) AND consume PubSub "
+            "(lifecycle-events-sub etc.) — the always-on durable subscriber that replaces "
+            "the fragile batch-VM (stall-watchdog) deployment. Env: RUN_SUBSCRIBER_IN_API. "
+            "SSOT: plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md."
+        ),
+    )

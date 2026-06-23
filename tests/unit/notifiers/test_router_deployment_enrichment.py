@@ -48,16 +48,16 @@ def _run(event_name: str, details: dict[str, object], *, cfg: MagicMock):
         patch("alerting_service.notifiers.router._publish_kill_switch_event"),
         patch("alerting_service.notifiers.router.send_data_pipeline_alert", return_value=True) as mock_dp,
         patch("alerting_service.notifiers.router.pd_send_event", return_value=True) as mock_pd,
-        patch("alerting_service.notifiers.router.send_telegram", return_value=True) as mock_tg,
+        patch("alerting_service.notifiers.router.send_uts_live_alert") as mock_slack,
     ):
         # New event names every call → dedup never suppresses.
         route_event(event_name, details)
-        return mock_dp, mock_pd, mock_tg
+        return mock_dp, mock_pd, mock_slack
 
 
 class TestDeploymentLifecycleParity:
     def test_failed_pages_and_mirrors_with_deeplink(self) -> None:
-        mock_dp, mock_pd, mock_tg = _run(
+        mock_dp, mock_pd, _mock_slack = _run(
             DEPLOYMENT_FAILED,
             {"vm_name": "vm-defi-aave-1", "umbrella": "live-defi", "cloud": "gcp", "exit_code": 1},
             cfg=_make_cfg(),
@@ -67,24 +67,22 @@ class TestDeploymentLifecycleParity:
         assert mock_dp.call_args.args[1] == DEPLOYMENT_FAILED
         assert mock_dp.call_args.kwargs["deployment_ui_base_url"] == _BASE
         assert mock_dp.call_args.kwargs["log_bucket"] == "deployment-scripts-prd"
-        # CRITICAL → ALSO pages (PagerDuty + Telegram via the incident path).
+        # CRITICAL → ALSO pages via PagerDuty incident path.
         mock_pd.assert_called()
-        mock_tg.assert_called()
 
     def test_started_is_channel_only_no_page(self) -> None:
-        mock_dp, mock_pd, mock_tg = _run(
+        mock_dp, mock_pd, _mock_slack = _run(
             DEPLOYMENT_STARTED,
             {"vm_name": "vm-defi-aave-1", "umbrella": "live-defi"},
             cfg=_make_cfg(),
         )
         mock_dp.assert_called_once()
         mock_pd.assert_not_called()  # INFO never pages
-        mock_tg.assert_not_called()
 
 
 class TestDataPipelineDeepLinks:
     def test_dp_vm_exit_nonzero_threads_base_and_bucket(self) -> None:
-        mock_dp, _, _ = _run(
+        mock_dp, _mock_pd, _mock_slack = _run(
             "DP_VM_EXIT_NONZERO",
             {"vm_name": "vm-sports-bf-9", "asset_group": "sports", "exit_code": 137},
             cfg=_make_cfg(),
@@ -94,7 +92,7 @@ class TestDataPipelineDeepLinks:
         assert mock_dp.call_args.kwargs["log_bucket"] == "deployment-scripts-prd"
 
     def test_empty_base_url_omits_links(self) -> None:
-        mock_dp, _, _ = _run(
+        mock_dp, _mock_pd, _mock_slack = _run(
             "DP_VM_EXIT_NONZERO",
             {"vm_name": "vm-sports-bf-9", "asset_group": "sports"},
             cfg=_make_cfg(base_url="", log_bucket=""),

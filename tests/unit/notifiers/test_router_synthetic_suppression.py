@@ -26,8 +26,8 @@ def mock_pd_send_event():
 
 
 @pytest.fixture
-def mock_send_telegram():
-    with patch("alerting_service.notifiers.router.send_telegram", return_value=True) as mock:
+def mock_send_uts_live_alert():
+    with patch("alerting_service.notifiers.router.send_uts_live_alert") as mock:
         yield mock
 
 
@@ -87,7 +87,7 @@ class TestRouteEventSyntheticSuppression:
     def test_synthetic_true_suppresses_pagerduty_and_telegram(
         self,
         mock_pd_send_event,
-        mock_send_telegram,
+        mock_send_uts_live_alert,
         mock_log_event,
         mock_persist_delivery,
         mock_persist_config,
@@ -98,7 +98,7 @@ class TestRouteEventSyntheticSuppression:
             {"synthetic": True, "scenario_id": "cefi_funding_spike_10x"},
         )
         mock_pd_send_event.assert_not_called()
-        mock_send_telegram.assert_not_called()
+        mock_send_uts_live_alert.assert_not_called()
         # ALERT_SUPPRESSED_SYNTHETIC MUST appear in the log_event call set.
         suppressed_calls = [c for c in mock_log_event.call_args_list if c.args[0] == "ALERT_SUPPRESSED_SYNTHETIC"]
         assert len(suppressed_calls) == 1
@@ -111,7 +111,7 @@ class TestRouteEventSyntheticSuppression:
     def test_synthetic_false_does_not_log_suppressed_event(
         self,
         mock_pd_send_event,
-        mock_send_telegram,
+        mock_send_uts_live_alert,
         mock_log_event,
         mock_persist_delivery,
         mock_persist_config,
@@ -122,7 +122,7 @@ class TestRouteEventSyntheticSuppression:
         the load-bearing assertion is that ALERT_SUPPRESSED_SYNTHETIC was
         NEVER logged.
         """
-        del mock_pd_send_event, mock_send_telegram, mock_persist_delivery, mock_persist_config
+        del mock_pd_send_event, mock_send_uts_live_alert, mock_persist_delivery, mock_persist_config
 
         with (
             patch("alerting_service.notifiers.router._get_cloud_config") as cfg,
@@ -150,7 +150,7 @@ class TestRouteEventExplicitChannelsSyntheticSuppression:
     def test_synthetic_true_skips_explicit_channels(
         self,
         mock_pd_send_event,
-        mock_send_telegram,
+        mock_send_uts_live_alert,
         mock_log_event,
         mock_persist_delivery,
         mock_persist_config,
@@ -163,7 +163,7 @@ class TestRouteEventExplicitChannelsSyntheticSuppression:
             pd_severity="warning",
         )
         mock_pd_send_event.assert_not_called()
-        mock_send_telegram.assert_not_called()
+        mock_send_uts_live_alert.assert_not_called()
         suppressed_calls = [c for c in mock_log_event.call_args_list if c.args[0] == "ALERT_SUPPRESSED_SYNTHETIC"]
         assert len(suppressed_calls) == 1
         mock_persist_delivery.assert_called_once()

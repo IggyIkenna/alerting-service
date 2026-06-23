@@ -223,13 +223,18 @@ steps:
         echo "=== Operability probe: IMPORT ${_PKG_NAME} ==="
         docker run --rm --entrypoint python "$$IMG" \
           -c "import ${_PKG_NAME}; print('IMPORT OK')"
-        echo "=== Operability probe: RUN --help ==="
+        echo "=== Operability probe: RUN --help (best-effort) ==="
+        # ``--help`` is meaningful ONLY for a CLI-entrypoint image. alerting-service
+        # is a SERVICE image (uvicorn, launched by the Cloud Run command override) with
+        # no CLI entrypoint → ``<img> --help`` exec's "--help" as a command → exit 127,
+        # which wrongly blocked the push. The IMPORT probe above is the real gate for a
+        # service image; keep --help as a best-effort signal, never a hard fail.
         docker run --rm \
           -e CLOUD_PROVIDER=local \
           -e CLOUD_MOCK_MODE=true \
           -e GCP_PROJECT_ID=smoke \
           -e ENVIRONMENT=dev \
-          "$$IMG" --help
+          "$$IMG" --help || echo "  (--help not supported by a service-entrypoint image — IMPORT probe is the gate)"
         echo "=== Operability probe PASSED ==="
     waitFor: ["quality-gates"]
 

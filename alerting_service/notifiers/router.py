@@ -51,8 +51,6 @@ from .data_pipeline_slack import send_data_pipeline_alert
 from .incident_fallback import route_incident_envelope_to_fallbacks
 from .pagerduty import PagerDutySeverity
 from .pagerduty import send_event as pd_send_event
-from .slack import send_message as slack_send_message  # DEPRECATED: use Telegram
-from .telegram import send_telegram
 from .uts_live_alerts_slack import send_uts_live_alert
 
 logger = logging.getLogger(__name__)
@@ -182,88 +180,56 @@ def _match_routing_rules(
             channels = _parse_rule_channels(rule.get("channels", []))  # noqa: qg-empty-fallback
             return channels, _parse_rule_severity(rule.get("severity_filter"), pattern)
 
-    # No rule matched — fallback to telegram only
-    return {"telegram"}, None
+    # No rule matched — fall back to Slack (#uts-live-alerts) so nothing fires silently.
+    return {"slack"}, None
 
 
 def _is_runtime_alert(event_name: str) -> bool:
     """Return True when event_name matches a specific LIVE_ALERT_RULES entry (runtime ops alert).
 
-    Used by _deliver_message to route to telegram_chat_id_ops when configured.
-    Non-LIVE_ALERT_RULES events (CI/QG/internal) use the standard telegram_chat_id.
+    Used by ``_deliver_to_uts_live_alerts_slack`` to gate #uts-live-alerts delivery:
+    runtime/ops alerts are delivered; CI/QG/internal events are NOT (they have their
+    own Slack channel via notify-slack.yml).
 
     The catch-all "*" rule (T4 INFO) is excluded — it exists to ensure nothing fires silently,
-    not to mark all events as ops alerts. Only named patterns qualify for ops-channel routing.
+    not to mark all events as ops alerts. Only named patterns qualify for #uts-live-alerts.
     """
     return any(rule.event_pattern != "*" and fnmatch(event_name, rule.event_pattern) for rule in LIVE_ALERT_RULES)
 
 
-def _deliver_message(event_name: str, summary: str) -> bool:
-    """Deliver a message via Telegram (primary) or Slack (deprecated fallback).
-
-    Runtime alerts (matched by LIVE_ALERT_RULES) route to telegram_chat_id_ops when
-    configured; CI/QG/internal events use the standard telegram_chat_id.
-
-    SM credentials (hot-reloaded every 300 s by _PagingCredentialsReloader) take
-    precedence over env-var values from AlertingSystemConfig when non-empty.
-
-    Returns True if delivery succeeded, False otherwise.
-    """
-    config = _get_cloud_config()
-    sm_creds = get_paging_credentials()
-
-    # SM credentials take precedence over env-var values when non-empty
-    bot_token = sm_creds.get("bot_token") or config.telegram_bot_token
-    ops_chat_id = sm_creds.get("chat_id_ops") or config.telegram_chat_id_ops
-    if ops_chat_id and _is_runtime_alert(event_name):
-        chat_id = ops_chat_id
-    else:
-        chat_id = sm_creds.get("chat_id") or config.telegram_chat_id
-
-    if bot_token and chat_id:
-        ok = send_telegram(message=summary, bot_token=bot_token, chat_id=chat_id)
-        if not ok:
-            logger.error("Telegram delivery failed for event %s", event_name)
-        return ok
-
-    # DEPRECATED: Slack fallback when Telegram is not configured
-    logger.warning("Telegram not configured — falling back to Slack for %s", event_name)
-    ok = slack_send_message(text=summary, blocks=None)
-    if not ok:
-        logger.error("Slack delivery failed for event %s", event_name)
-    return ok
-
-
-def _mirror_to_uts_live_alerts_slack(
+def _deliver_to_uts_live_alerts_slack(
     event_name: str,
     summary: str,
     details: dict[str, object],
     config: AlertingSystemConfig,
-) -> None:
-    """Mirror a live-ops runtime alert to the #uts-live-alerts Slack channel.
+) -> bool:
+    """Deliver a live-ops runtime alert to the #uts-live-alerts Slack channel.
 
-    Live alerts (matched by LIVE_ALERT_RULES) are delivered to the Telegram
-    "UTS Live Alerts" group; this posts the same alert to the parallel Slack
-    channel so Slack-watching operators see it too. CI/QG events are NOT
-    mirrored — they already have their own Slack channel via notify-slack.yml.
+    Slack is the PRIMARY transport for generic/incident alerts (operator decision
+    2026-06-23 — Telegram is RETIRED). Only LIVE_ALERT_RULES-matched runtime/ops
+    alerts are delivered here; CI/QG/internal events are NOT (they have their own
+    Slack channel via notify-slack.yml) and are intentionally a no-op.
 
-    Best-effort: a Slack failure never affects the primary Telegram delivery.
-    No-op when no webhook is configured (mock / CI / not-yet-provisioned).
+    Returns True on success OR an intentional no-op (non-runtime event / no webhook
+    configured in mock/CI); returns False ONLY on a real send failure, so the
+    caller's delivery-failure accounting is accurate.
 
     SM-hot-reloaded webhook (alerting-uts-live-alerts-slack-webhook) takes
     precedence over the env-var value (UTS_LIVE_ALERTS_SLACK_WEBHOOK) when set.
     """
     if not _is_runtime_alert(event_name):
-        return
+        return True  # CI/QG/internal — not a #uts-live-alerts incident (no-op, not a failure)
     sm_creds = get_paging_credentials()
     webhook = sm_creds.get("uts_live_alerts_slack_webhook") or config.uts_live_alerts_slack_webhook
     if not webhook:
-        return
+        logger.warning("UTS-live-alerts Slack webhook not configured — cannot deliver %s", event_name)
+        return True  # unconfigured (mock/CI) — best-effort no-op, not counted as a failure
     try:
         send_uts_live_alert(webhook, event_name, summary, details)
+        return True
     except Exception as exc:
-        # Mirror is strictly best-effort — never break Telegram delivery.
-        logger.warning("UTS-live-alerts Slack mirror raised for %s: %s", event_name, exc)
+        logger.error("UTS-live-alerts Slack delivery failed for %s: %s", event_name, exc)
+        return False
 
 
 def _mirror_to_data_pipeline_slack(
@@ -713,23 +679,22 @@ def _deliver_to_channels(
             event_name,
         )
 
-    if "telegram" in channels or not channels:
-        ok = _deliver_message(event_name, summary)
-        channel_used = "telegram" if config.telegram_bot_token else "slack"
+    # Slack is the PRIMARY transport for generic/incident alerts (operator decision
+    # 2026-06-23; Telegram RETIRED). "telegram" channel names from existing routing
+    # rules + the no-match catch-all both map here so nothing fires silently.
+    if "slack" in channels or "telegram" in channels or not channels:
+        ok = _deliver_to_uts_live_alerts_slack(event_name, summary, details, config)
         if not ok:
             any_failed = True
         _persist_delivery_record(
             _build_delivery_record(
                 alert_id,
-                channel_used,
+                "slack",
                 "sent" if ok else "failed",
                 "accepted" if ok else "delivery_failed",
                 event_name,
             )
         )
-        # Parallel mirror of live-ops alerts to the #uts-live-alerts Slack channel.
-        # Best-effort; does not affect the Telegram delivery status above.
-        _mirror_to_uts_live_alerts_slack(event_name, summary, details, config)
 
     return any_failed
 
