@@ -130,6 +130,8 @@ steps:
           docker pull "$${BASE}@$${PIN}"
         fi
         docker pull "$${BASE}:latest" || true
+        # layer-cache seed: pull our own previous :latest so --cache-from reuses layers
+        docker pull "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest" || true
     waitFor: ["configure-docker"]
 
   # ── STEP 3.5: Stage sibling repos into the build context ──────────────────
@@ -169,8 +171,10 @@ steps:
       - "-c"
       - |
         VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
-        docker build -f Dockerfile \
+        DOCKER_BUILDKIT=1 docker build -f Dockerfile \
           --build-arg PROJECT_ID=$PROJECT_ID \
+          --build-arg BUILDKIT_INLINE_CACHE=1 \
+          --cache-from asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
