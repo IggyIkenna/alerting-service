@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Epic: observability_master
+# Lifecycle: permanent
+# Delete-when: NA
 #
 # setup-workspace.sh — alerting-service
 #

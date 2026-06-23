@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Epic: observability_master
+# Lifecycle: permanent
+# Delete-when: NA
 """Synthetic alert injector for Phase 8 live-rehearsal.
 
 Emits a DefiAlert with ``synthetic=True`` in details for each AlertCode (or a
