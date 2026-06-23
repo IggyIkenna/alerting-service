@@ -79,6 +79,16 @@ def _build_blocks(event_name: str, summary: str, details: dict[str, object]) -> 
         {"type": "section", "text": {"type": "mrkdwn", "text": summary}},
         {"type": "section", "fields": fields},
     ]
+    # PagerDuty SHADOW annotation (calibration, 2026-06-23): while PagerDuty is held
+    # off (PAGERDUTY_DISABLED), each Slack alert states how it WOULD escalate to PD so
+    # the operator can calibrate PD routing/severity before enabling it. The caller
+    # (router._deliver_to_channels) computes it from the matched channels + pd_severity
+    # and threads it through ``details["_pagerduty_shadow"]``.
+    shadow = details.get("_pagerduty_shadow")
+    if shadow:
+        blocks.append(
+            {"type": "context", "elements": [{"type": "mrkdwn", "text": f":pager: *PagerDuty escalation:* {shadow}"}]}
+        )
     return blocks
 
 
