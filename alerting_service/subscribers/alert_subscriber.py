@@ -350,6 +350,17 @@ class AlertSubscriber:
             event_name, enriched = self._process_message(data, attrs, subscription)
             self.dispatch_event(event_name, enriched)
             RECORDS_PROCESSED.labels(status="success").inc()
+            # Observability (P2 2026-06-23): the success path previously logged
+            # NOTHING — only failures warned — so routing was invisible in Cloud
+            # Logging. Emit one INFO per consumed+routed message so the
+            # consume→route trace is observable. SSOT:
+            # plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md.
+            logger.info(
+                "consumed+routed event=%s sub=%s severity=%s",
+                event_name,
+                subscription,
+                enriched.get("severity", "UNKNOWN"),
+            )
         except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
             raise  # shutdown signals must propagate
         except Exception as _msg_err:
