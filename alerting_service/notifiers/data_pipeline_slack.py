@@ -59,6 +59,68 @@ _SEVERITY_EMOJI: dict[str, str] = {
     "info": ":information_source:",
 }
 
+# Per-event human-readable "what happened + what to do" lines. Keyed on the
+# canonical DP_*/CONSOLIDATOR/DEPLOYMENT event name. The value is a (what, action)
+# pair rendered as a "*What:* … / *Action:* …" section so a non-author operator
+# can read + act without opening the code. Unknown events fall back to the
+# generic line (still names the event + says where to look). Codified
+# 2026-06-23 (operator: alerts must be human-readable + actionable).
+_EVENT_EXPLAIN: dict[str, tuple[str, str]] = {
+    "DP_VM_EXIT_NONZERO": (
+        "A data-pipeline / backfill VM terminated with a NON-ZERO exit code "
+        "(137 = OOM-killed; other = crash/error). Its captured rows did not "
+        "complete cleanly.",
+        "Open the run.log link below for the error/traceback. If the exit code is "
+        "137 (OOM) the OOM auto-recover may relaunch it (≤2/day per prefix) — "
+        "confirm a relaunch fired; otherwise relaunch with a larger machine type / "
+        "smaller shard. A non-OOM crash needs a code/config fix before relaunch.",
+    ),
+    "DP_VM_GONE_NO_CAPTURE": (
+        "A VM drained/self-deleted but its manifest captured count did NOT climb "
+        "— a self-delete masked a zero-row run (silent failure).",
+        "Open the run.log link for why it captured nothing (auth / 0-universe / "
+        "source error), fix the root cause, and re-run the backfill for that "
+        "asset_group / date range.",
+    ),
+    "DP_CRON_DID_NOT_FIRE": (
+        "A scheduled audit / consolidator / digest cron missed its expected "
+        "window (its durable heartbeat/output artifact is stale) — the cron "
+        "stopped firing.",
+        "Check the named cron's Cloud Scheduler / Cloud Run job execution history "
+        "(use the deep-link), confirm it is enabled + not erroring, and trigger a "
+        "manual run to catch up.",
+    ),
+    "DP_CATALOG_NOT_RUNNING": (
+        "The instrument catalogue artifact for this asset_group has not been "
+        "refreshed within its freshness budget — the enumerator/catalogue regen "
+        "stopped, so downstream capture has a stale could-exist universe.",
+        "Re-run the instruments-service catalogue/enumerator for the named "
+        "asset_group; verify the scheduled catalogue refresh job is healthy.",
+    ),
+    "CONSOLIDATOR_DOWN": (
+        "The manifest consolidator (Cloud Run Job) is not running / is stale — "
+        "the consolidated availability index is going stale while per-VM shards "
+        "accumulate.",
+        "Check the manifest_consolidator Cloud Run Job + its scheduler; re-run the "
+        "consolidation job to rebuild the index.",
+    ),
+}
+
+
+def _build_explain_block(event_name: str, details: dict[str, object]) -> dict[str, object] | None:
+    """Build a "*What:* … / *Action:* …" section explaining the alert in plain terms.
+
+    Returns None for an unknown event with no generic context to add (so a clean
+    event isn't padded). A known DP_* event always renders the curated
+    what/action pair — the core of "human-readable + actionable".
+    """
+    explain = _EVENT_EXPLAIN.get(event_name)
+    if explain is None:
+        return None
+    what, action = explain
+    text = f"*What happened:* {what}\n*Recommended action:* {action}"
+    return {"type": "section", "text": {"type": "mrkdwn", "text": text}}
+
 
 def _emoji_for(event_name: str, severity: str | None) -> str:
     """Pick a Slack emoji from severity, falling back to event-name heuristics."""
@@ -136,7 +198,15 @@ def _build_action_block(
     if base and vm_name:
         links.append(f"<{base}/ops/vms/{vm_name}|VM logs>")
         links.append(f"<{base}/deployments/{vm_name}|Deployment>")
-    if log_bucket and vm_name:
+
+    # An emitter-supplied explicit run.log deep-link (the GCS-console object URL
+    # the exit-code monitor attaches) takes precedence — it points straight at
+    # the durable run.log object, not the parent folder. Falls back to the
+    # bucket/vm-logs folder link when only ``log_bucket`` + ``vm_name`` are known.
+    log_url = details.get("log_url")
+    if isinstance(log_url, str) and log_url:
+        links.append(f"<{log_url}|run.log>")
+    elif log_bucket and vm_name:
         gcs_console = f"https://console.cloud.google.com/storage/browser/{log_bucket}/vm-logs/{vm_name}"
         links.append(f"<{gcs_console}|run.log>")
 
@@ -200,8 +270,13 @@ def _build_blocks(
     blocks: list[dict[str, object]] = [
         {"type": "header", "text": {"type": "plain_text", "text": f"{emoji} Data-Pipeline Alert"}},
         {"type": "section", "text": {"type": "mrkdwn", "text": summary}},
-        {"type": "section", "fields": fields},
     ]
+
+    explain_block = _build_explain_block(event_name, details)
+    if explain_block is not None:
+        blocks.append(explain_block)
+
+    blocks.append({"type": "section", "fields": fields})
 
     trace_block = _build_trace_block(details)
     if trace_block is not None:

@@ -79,6 +79,59 @@ class TestDeserializeMessage:
         event_name, _ = _deserialize_message(data)
         assert event_name == "UNKNOWN_EVENT"
 
+    def test_utl_envelope_flattened_to_top_level(self) -> None:
+        """REGRESSION (data_completion_to_100_all_ag_2026_06_21 — generic-alert bug):
+        the UTL ``log_event`` PubSub envelope nests the emitter's real payload at
+        ``metadata.details`` and severity at ``metadata.severity``. The subscriber
+        MUST flatten it so the router + data_pipeline_slack formatter read
+        vm_name / exit_code / error_message / severity / umbrella at the TOP level
+        — otherwise every DP_* alert renders generic (event name only).
+        """
+        data = json.dumps(
+            {
+                "event": "DP_VM_EXIT_NONZERO",
+                "service": "deployment-service",
+                "metadata": {
+                    "timestamp": "2026-06-23T16:48:00+00:00",
+                    "service_name": "exit-code-fleet-monitor",
+                    "severity": "CRITICAL",
+                    "correlation_id": "abc-123",
+                    "details": {
+                        "vm_name": "instr-backfill-sports-001",
+                        "exit_code": 137,
+                        "umbrella": "BATCH",
+                        "asset_group": "sports",
+                        "oom": True,
+                        "run_log_tail": "OOMKilled\nrc=137",
+                        "message": "VM instr-backfill-sports-001 terminated with exit_code=137 (OOM)",
+                    },
+                },
+            }
+        ).encode()
+        event_name, details = _deserialize_message(data)
+        assert event_name == "DP_VM_EXIT_NONZERO"
+        # The emitter's real payload is now TOP-LEVEL (what the formatter reads).
+        assert details["vm_name"] == "instr-backfill-sports-001"
+        assert details["exit_code"] == 137
+        assert details["umbrella"] == "BATCH"
+        assert details["asset_group"] == "sports"
+        assert details["run_log_tail"] == "OOMKilled\nrc=137"
+        assert details["message"].startswith("VM instr-backfill-sports-001 terminated")
+        # Envelope-level severity + correlation_id promoted to top level.
+        assert details["severity"] == "CRITICAL"
+        assert details["correlation_id"] == "abc-123"
+        # The nested envelope keys are NOT left at the top level.
+        assert "metadata" not in details
+
+    def test_flat_legacy_payload_passthrough_unchanged(self) -> None:
+        """A flat legacy payload (kill-switch / margin emitters, no ``metadata``
+        envelope) is returned UNCHANGED — the unwrap only fires on the UTL shape."""
+        data = json.dumps({"event_name": "KILL_SWITCH_ACTIVATED", "venue": "binance", "scope": "FIRM"}).encode()
+        event_name, details = _deserialize_message(data)
+        assert event_name == "KILL_SWITCH_ACTIVATED"
+        assert details["venue"] == "binance"
+        assert details["scope"] == "FIRM"
+
 
 class TestAlertSubscriber:
     def _make_subscriber(self, project_id: str = "test-project") -> AlertSubscriber:
