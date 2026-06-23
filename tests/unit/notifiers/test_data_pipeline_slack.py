@@ -137,6 +137,38 @@ class TestEnrichedBlocks:
         # header + summary + fields only.
         assert len(blocks) == 3
 
+    def test_explain_block_present_for_known_event(self) -> None:
+        """A known DP_* event renders the human-readable what/action explanation."""
+        blocks = _build_blocks(
+            "DP_VM_EXIT_NONZERO",
+            "[DP_VM_EXIT_NONZERO] crash",
+            {"severity": "CRITICAL", "vm_name": "vm-x"},
+        )
+        flat = str(blocks)
+        assert "What happened:" in flat
+        assert "Recommended action:" in flat
+
+    def test_explain_block_absent_for_unknown_event(self) -> None:
+        blocks = _build_blocks("DP_VM_STALL", "x", {"asset_group": "defi"})
+        assert "What happened:" not in str(blocks)
+
+    def test_meta_watcher_events_explained(self) -> None:
+        for ev in ("DP_CRON_DID_NOT_FIRE", "DP_CATALOG_NOT_RUNNING"):
+            blocks = _build_blocks(ev, f"[{ev}] x", {"severity": "CRITICAL"})
+            assert "Recommended action:" in str(blocks), ev
+
+    def test_explicit_log_url_rendered_as_runlog_link(self) -> None:
+        """An emitter-supplied ``log_url`` becomes the run.log deep-link even with
+        no deployment_ui_base_url / log_bucket."""
+        block = _build_action_block(
+            {"log_url": "https://console.cloud.google.com/storage/browser/_details/b/vm-logs/vm-x/run.log"},
+            "",
+            "",
+        )
+        assert block is not None
+        assert "run.log" in str(block)
+        assert "_details/b/vm-logs/vm-x/run.log" in str(block)
+
 
 class TestSendDataPipelineAlert:
     def test_noop_on_empty_webhook(self) -> None:
