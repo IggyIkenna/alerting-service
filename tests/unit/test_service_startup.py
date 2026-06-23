@@ -134,7 +134,6 @@ async def test_alert_subscriber_stream_processes_messages() -> None:
             return_value=mock_client,
         ),
         patch("alerting_service.subscribers.alert_subscriber.route_event"),
-        patch("alerting_service.subscribers.alert_subscriber.log_event"),
     ):
         subscriber = AlertSubscriber(
             project_id="test-project",

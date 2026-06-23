@@ -124,7 +124,6 @@ class TestAlertSubscriber:
                 return_value=mock_client,
             ),
             patch("alerting_service.subscribers.alert_subscriber.route_event") as mock_route,
-            patch("alerting_service.subscribers.alert_subscriber.log_event"),
         ):
             subscriber = AlertSubscriber(
                 project_id="test-project",
@@ -158,7 +157,6 @@ class TestAlertSubscriber:
                 return_value=mock_client,
             ),
             patch("alerting_service.subscribers.alert_subscriber.route_event") as mock_route,
-            patch("alerting_service.subscribers.alert_subscriber.log_event"),
         ):
             subscriber = AlertSubscriber(
                 project_id="test-project",
@@ -188,7 +186,6 @@ class TestAlertSubscriber:
                 return_value=mock_client,
             ),
             patch("alerting_service.subscribers.alert_subscriber.route_event"),
-            patch("alerting_service.subscribers.alert_subscriber.log_event"),
         ):
             import asyncio
 
