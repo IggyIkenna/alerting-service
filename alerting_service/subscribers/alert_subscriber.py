@@ -42,7 +42,7 @@ import uuid
 from collections.abc import AsyncIterator, Callable
 from typing import ClassVar, cast
 
-from unified_trading_library import QueueClient, get_queue_client, log_event
+from unified_trading_library import QueueClient, get_queue_client, run_lifecycle, setup_events
 
 from ..cefi_ml_event_handler import (
     CEFI_ML_EVENT_NAMES,
@@ -72,6 +72,31 @@ from ..rules.consolidator_rules import (
 from ..rules.margin_rules import route_margin_event_payload
 
 logger = logging.getLogger(__name__)
+
+_EVENTS_INITIALISED = False
+
+
+def _ensure_local_events() -> None:
+    """Initialise UTL event logging in LOCAL mode (idempotent, process-wide).
+
+    The router's telemetry calls (``log_event("ALERT_ROUTED"/"ALERT_SENT"/...)``)
+    REQUIRE event logging to be initialised — otherwise the FIRST routed message
+    raises ``RuntimeError("Event logging not initialized")``, which crashed
+    message processing and silently killed the background pull task (the
+    2026-06-22 "zero alerts": the Cloud Run subscriber died on its first DP_*
+    message). LOCAL (not LIVE) is MANDATORY here: this subscriber *consumes* the
+    ``lifecycle-events`` topic, so a LIVE sink would self-PUBLISH those telemetry
+    events back onto it → re-consume → feedback loop. Slack delivery happens via
+    the webhook (HTTP) in the router, independent of the event sink — so LOCAL
+    (stdout-only) loses nothing. ``sink=None`` is explicit (local mode publishes
+    nowhere). SSOT: plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md.
+    """
+    global _EVENTS_INITIALISED
+    if _EVENTS_INITIALISED:
+        return
+    setup_events(service_name="dp-alerting-subscriber", mode="local", sink=None)
+    _EVENTS_INITIALISED = True
+
 
 # PubSub subscriptions to pull from.
 # margin-events: canonical UAC topic, single producer = position-balance-monitor.
@@ -138,13 +163,25 @@ _MANIFEST_CONSOLIDATION_FAILED_EVENT: str = "MANIFEST_CONSOLIDATION_FAILED"
 def _extract_event_name(payload: dict[str, object]) -> str:
     """Extract the canonical event_name from a deserialized PubSub payload.
 
-    Looks for ``event_name``, ``event_type``, or ``type`` keys in that order.
-    Falls back to ``"UNKNOWN_EVENT"`` when none are present.
+    Looks for ``event``, ``event_name``, ``event_type``, ``type``, or ``kind``
+    keys in that order. Falls back to ``"UNKNOWN_EVENT"`` when none are present.
+
+    ``event`` is FIRST + REQUIRED: it is the canonical key the UTL
+    ``PubSubEventSink.write_event`` publishes the event name under
+    (``{"event": name, "service": ..., "metadata": {...}}`` — see
+    unified-trading-library/unified_trading_library/event_sink.py). Every UTL
+    ``log_event`` on the ``lifecycle-events`` topic (all ``DP_*`` data-pipeline
+    alerts + ``CONSOLIDATOR_DOWN``) serializes the name to ``event``. Omitting it
+    here mis-extracts every such event to ``UNKNOWN_EVENT`` → no rule match →
+    silently DROPPED before reaching ``#data-pipeline-alerts`` (root-caused
+    2026-06-22: the subscriber was attached to ``lifecycle-events-sub`` + pulling
+    messages but every ``DP_*`` fell through to ``UNKNOWN_EVENT``). SSOT:
+    plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md.
+    ``kind`` is the canonical field on subgraph_health_probe alerts
+    (defi_data_quality_alerts topic) so probe alerts route cleanly without each
+    probe having to pre-canonicalise to event_name.
     """
-    # ``kind`` is the canonical field on subgraph_health_probe alerts
-    # (defi_data_quality_alerts topic) — listed first so probe alerts route
-    # cleanly without each probe having to pre-canonicalise to event_name.
-    for key in ("event_name", "event_type", "type", "kind"):
+    for key in ("event", "event_name", "event_type", "type", "kind"):
         value = payload.get(key)
         if isinstance(value, str) and value:
             return value
@@ -241,13 +278,22 @@ class AlertSubscriber:
             "correlation_id": correlation_id,
             "source": attrs.get("source", subscription),
         }
-        log_event(
-            "ALERT_RECEIVED",
-            details={
-                "event_name": event_name,
-                "subscription": subscription,
-                "correlation_id": correlation_id,
-            },
+        # Observability breadcrumb only — a plain log line, NOT a published event.
+        # This was previously ``log_event("ALERT_RECEIVED", ...)``, which (a) RAISED
+        # ``RuntimeError("Event logging not initialized")`` because the subscriber
+        # never initialised event logging — crashing message processing on the FIRST
+        # message and silently killing the background pull task (the 2026-06-22 "zero
+        # alerts": the Cloud Run subscriber went dead on its first DP_* message); and
+        # (b) if "fixed" with a LIVE sink it would self-PUBLISH back to the
+        # ``lifecycle-events`` topic the subscriber itself consumes → ALERT_RECEIVED
+        # feedback loop. ALERT_RECEIVED is pure telemetry (nothing routes on it), so a
+        # logger line is the correct, loop-safe form. SSOT:
+        # plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md.
+        logger.info(
+            "ALERT_RECEIVED event_name=%s subscription=%s correlation_id=%s",
+            event_name,
+            subscription,
+            correlation_id,
         )
         return event_name, enriched
 
@@ -290,6 +336,41 @@ class AlertSubscriber:
             return
         route_event(event_name, enriched)
 
+    def _route_one(self, data: bytes, attrs: dict[str, str], subscription: str) -> tuple[str, dict[str, object]] | None:
+        """Process + route ONE pulled message.
+
+        Returns the ``(event_name, enriched)`` pair, or ``None`` when the message
+        was skipped. Per-message isolation: a single un-routable/malformed message
+        must NOT kill the loop (the silent-death class — one raise here previously
+        took the whole background pull task down → all alerting offline). Shutdown
+        signals still propagate.
+        """
+        _start = time.perf_counter()
+        try:
+            event_name, enriched = self._process_message(data, attrs, subscription)
+            self.dispatch_event(event_name, enriched)
+            RECORDS_PROCESSED.labels(status="success").inc()
+            # Observability (P2 2026-06-23): the success path previously logged
+            # NOTHING — only failures warned — so routing was invisible in Cloud
+            # Logging. Emit one INFO per consumed+routed message so the
+            # consume→route trace is observable. SSOT:
+            # plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md.
+            logger.info(
+                "consumed+routed event=%s sub=%s severity=%s",
+                event_name,
+                subscription,
+                enriched.get("severity", "UNKNOWN"),
+            )
+        except (asyncio.CancelledError, KeyboardInterrupt, SystemExit):
+            raise  # shutdown signals must propagate
+        except Exception as _msg_err:
+            RECORDS_PROCESSED.labels(status="error").inc()
+            PROCESSING_LATENCY.observe(time.perf_counter() - _start)
+            logger.warning("alert message processing failed on %s — skipping: %s", subscription, _msg_err)
+            return None
+        PROCESSING_LATENCY.observe(time.perf_counter() - _start)
+        return event_name, enriched
+
     async def stream(self) -> AsyncIterator[tuple[str, dict[str, object]]]:
         """Yield (event_name, details) pairs from all subscribed topics.
 
@@ -299,6 +380,7 @@ class AlertSubscriber:
         Skips malformed messages with a warning; never crashes the loop.
         """
         self._running = True
+        _ensure_local_events()  # router/telemetry log_event needs an initialised sink (LOCAL — no loop)
         logger.info("Starting alert subscriber stream: %s", self._subscriptions)
         loop = asyncio.get_event_loop()
         try:
@@ -322,17 +404,9 @@ class AlertSubscriber:
                         logger.warning("subscribe_once(%s) failed — skipping this round: %s", subscription, _sub_err)
                         continue
                     for data, attrs in batch:
-                        _start = time.perf_counter()
-                        try:
-                            event_name, enriched = self._process_message(data, attrs, subscription)
-                            self.dispatch_event(event_name, enriched)
-                            RECORDS_PROCESSED.labels(status="success").inc()
-                        except BaseException:  # cleanup: record metric before re-raise
-                            RECORDS_PROCESSED.labels(status="error").inc()
-                            raise
-                        finally:
-                            PROCESSING_LATENCY.observe(time.perf_counter() - _start)
-                        yield event_name, enriched
+                        routed = self._route_one(data, attrs, subscription)
+                        if routed is not None:
+                            yield routed
 
                 await asyncio.sleep(self._poll_interval)
         except asyncio.CancelledError:
@@ -342,7 +416,15 @@ class AlertSubscriber:
     async def run_until_stopped(self) -> None:
         """Drive the stream loop until stop() is called or the task is cancelled.
 
-        Consumes all yielded pairs; side-effects happen inside stream().
+        Wrapped in ``run_lifecycle`` (the canonical service-lifecycle pairing): the
+        subscriber emits ``DP_ALERTING_SUBSCRIBER_RUN_STARTED`` on boot and a
+        terminal ``_RUN_COMPLETED`` / ``_RUN_FAILED`` on exit. Event logging is
+        initialised LOCAL-first (``_ensure_local_events``) so both the lifecycle
+        events and the router telemetry ``log_event`` calls have an initialised
+        sink and never raise. Consumes all yielded pairs; side-effects happen
+        inside stream().
         """
-        async for _event_name, _details in self.stream():
-            pass
+        _ensure_local_events()
+        with run_lifecycle("dp-alerting-subscriber"):
+            async for _event_name, _details in self.stream():
+                pass

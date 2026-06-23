@@ -59,8 +59,11 @@ def mock_route_dependencies():
     with (
         patch("alerting_service.notifiers.router.AlertingSystemConfig", return_value=mock_cfg),
         patch("alerting_service.notifiers.router.pd_send_event", return_value=True) as mock_pd,
-        patch("alerting_service.notifiers.router.send_telegram", return_value=True) as mock_tg,
-        patch("alerting_service.notifiers.router.slack_send_message", return_value=True),
+        patch("alerting_service.notifiers.router.send_uts_live_alert") as mock_tg,
+        patch(
+            "alerting_service.notifiers.router.get_paging_credentials",
+            return_value={"uts_live_alerts_slack_webhook": "https://hooks.slack.com/services/T/B/test"},
+        ),
         patch("alerting_service.notifiers.router.log_event"),
         patch("alerting_service.notifiers.router._persist_delivery_record"),
         patch("alerting_service.notifiers.router._persist_config_snapshot"),

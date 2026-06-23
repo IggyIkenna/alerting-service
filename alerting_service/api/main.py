@@ -1,6 +1,11 @@
+import asyncio
+import contextlib
 import logging
+import sys
+from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, FastAPI
+from unified_trading_library import LogLevel
 
 from alerting_service.api.routes.alerts import router as alerts_router
 from alerting_service.api.routes.delivery_status import router as delivery_status_router
@@ -8,9 +13,93 @@ from alerting_service.api.routes.health import router as health_router
 from alerting_service.api.routes.safety_ops import router as safety_ops_router
 from alerting_service.api.routes.system_status import router as system_status_router
 from alerting_service.auth import auth_cfg, verify_api_key
+from alerting_service.config import AlertingSystemConfig
 from alerting_service.gateway.manual_action_endpoint import router as manual_action_router
+from alerting_service.subscribers.alert_subscriber import AlertSubscriber
+
+_LEVEL_MAP: dict[str, int] = {
+    "DEBUG": logging.DEBUG,
+    "INFO": logging.INFO,
+    "WARNING": logging.WARNING,
+    "ERROR": logging.ERROR,
+    "CRITICAL": logging.CRITICAL,
+}
+
+
+class _FlushingStreamHandler(logging.StreamHandler):  # type: ignore[type-arg]
+    """StreamHandler that flushes after EVERY emit.
+
+    Cloud Run runs uvicorn with a non-TTY stdout → Python block-buffers it, so
+    ``logger.info(...)`` records pile up in the buffer and NEVER reach Cloud Run's
+    log agent (the app appears silent in Cloud Logging while the subscriber is in
+    fact consuming + routing). Flushing per-record makes every route/webhook log
+    visible immediately. Mirrors UTL's ``UnbufferedStreamHandler``.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        super().emit(record)
+        self.flush()
+
+
+def _configure_stdout_logging() -> None:
+    """Route the root logger to STDOUT (flushed) so Cloud Run captures app + route logs.
+
+    The Cloud Run / uvicorn entrypoint (``uvicorn alerting_service.api.main:app``)
+    NEVER runs the CLI ``main.py`` ``logging.basicConfig`` — so without this call the
+    root logger has no handler and ``logger.info(...)`` records (the consume + route +
+    webhook-POST trace) are dropped (Python's lastResort handler only emits WARNING+).
+    A per-record-flushing StreamHandler→stdout is required (NOT a bare basicConfig):
+    Cloud Run's non-TTY stdout is block-buffered, so an unflushed handler keeps the
+    records invisible in Cloud Logging until the buffer fills.
+    SSOT: plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md.
+    """
+    try:
+        level_name = LogLevel(AlertingSystemConfig().log_level).value
+    except ValueError:
+        level_name = "INFO"
+    handler = _FlushingStreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    root = logging.getLogger()
+    for _existing in list(root.handlers):
+        root.removeHandler(_existing)
+    root.addHandler(handler)
+    root.setLevel(_LEVEL_MAP.get(level_name, logging.INFO))
+
+
+_configure_stdout_logging()
 
 logger = logging.getLogger(__name__)
+
+
+@contextlib.asynccontextmanager
+async def _lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """Run the live AlertSubscriber pull-loop alongside the HTTP server.
+
+    When ``run_subscriber_in_api`` is set (env ``RUN_SUBSCRIBER_IN_API=true``) the
+    FastAPI app launches ``AlertSubscriber(...).run_until_stopped()`` as a background
+    task — so a single Cloud Run service both serves ``$PORT`` (startup probe / health)
+    AND consumes PubSub (``lifecycle-events-sub`` → DP_* / CONSOLIDATOR_DOWN →
+    ``#data-pipeline-alerts``). This is the durable always-on subscriber that replaces
+    the fragile batch-VM (stall-watchdog self-delete) deployment.
+    SSOT: plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md.
+    """
+    config = AlertingSystemConfig()
+    subscriber: AlertSubscriber | None = None
+    task: asyncio.Task[None] | None = None
+    if config.run_subscriber_in_api and not config.is_mock_mode():
+        subscriber = AlertSubscriber(project_id=config.gcp_project_id)
+        task = asyncio.create_task(subscriber.run_until_stopped())
+        logger.info("alerting-service: live AlertSubscriber started in API lifespan")
+    try:
+        yield
+    finally:
+        if subscriber is not None:
+            subscriber.stop()
+        if task is not None:
+            task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await task
+
 
 _env = auth_cfg.environment
 app = FastAPI(
@@ -19,6 +108,7 @@ app = FastAPI(
     docs_url="/docs" if _env != "production" else None,
     redoc_url="/redoc" if _env != "production" else None,
     openapi_url="/openapi.json" if _env != "production" else None,
+    lifespan=_lifespan,
 )
 
 # --- Unauthenticated health endpoints ---
