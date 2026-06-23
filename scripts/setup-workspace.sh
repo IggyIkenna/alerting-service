@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Epic: observability_master
+# Epic: infrastructure_master
 # Lifecycle: permanent
 # Delete-when: NA
 #
