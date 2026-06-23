@@ -117,9 +117,7 @@ def mock_persist_and_log() -> Iterator[None]:
 
 @pytest.mark.usefixtures("_fresh_dedup", "mock_config", "mock_creds", "mock_persist_and_log")
 class TestRouteEventDataPipeline:
-    def test_critical_dp_event_mirrors_and_pages(
-        self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
-    ) -> None:
+    def test_critical_dp_event_mirrors_and_pages(self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock) -> None:
         route_event(
             "DP_UNPROVEN_HONEST_ABSENCE",
             {"message": "401 stamped as empty", "asset_group": "defi", "source": "thegraph"},
@@ -138,9 +136,7 @@ class TestRouteEventDataPipeline:
         assert mock_explicit_route.call_args.kwargs["channels"] == {"pagerduty", "telegram"}
         assert mock_explicit_route.call_args.kwargs["pd_severity"] == "critical"
 
-    def test_warn_dp_event_mirrors_only_no_page(
-        self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
-    ) -> None:
+    def test_warn_dp_event_mirrors_only_no_page(self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock) -> None:
         route_event("DP_VM_STALL", {"message": "vm idle", "vm": "vm-defi-1"})
 
         mock_send_dp.assert_called_once()
@@ -148,9 +144,7 @@ class TestRouteEventDataPipeline:
         # WARN does NOT page.
         mock_explicit_route.assert_not_called()
 
-    def test_warn_dp_event_deduped_within_window(
-        self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
-    ) -> None:
+    def test_warn_dp_event_deduped_within_window(self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock) -> None:
         details = {"message": "vm idle", "vm": "vm-defi-1"}
         route_event("DP_VM_STALL", details)
         route_event("DP_VM_STALL", details)  # identical → deduped by AlertDeduplicator
@@ -172,6 +166,6 @@ class TestRouteEventDataPipeline:
 
 @pytest.fixture
 def mock_send_telegram() -> Iterator[MagicMock]:
-    """Patch Telegram so the generic fallback path for non-DP events is inert."""
-    with patch("alerting_service.notifiers.router.send_telegram", return_value=True) as mock:
+    """Patch Slack delivery so the generic fallback path for non-DP events is inert."""
+    with patch("alerting_service.notifiers.router.send_uts_live_alert") as mock:
         yield mock

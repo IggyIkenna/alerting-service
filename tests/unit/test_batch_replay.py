@@ -229,11 +229,11 @@ class TestBatchDeliveryMode:
         with (
             patch("alerting_service.notifiers.router._persist_delivery_record"),
             patch("alerting_service.notifiers.router.pd_send_event") as mock_pd,
-            patch("alerting_service.notifiers.router.send_telegram") as mock_tg,
+            patch("alerting_service.notifiers.router.send_uts_live_alert") as mock_slack,
         ):
             route_event("KILL_SWITCH_ACTIVATED", {"message": "test"})
         mock_pd.assert_not_called()
-        mock_tg.assert_not_called()
+        mock_slack.assert_not_called()
 
     def test_batch_stats_accumulate(self) -> None:
         set_batch_mode(True)
@@ -256,7 +256,7 @@ class TestBatchDeliveryMode:
         set_batch_mode(False)
         with (
             patch("alerting_service.notifiers.router._persist_delivery_record"),
-            patch("alerting_service.notifiers.router._deliver_message", return_value=True),
+            patch("alerting_service.notifiers.router._deliver_to_uts_live_alerts_slack", return_value=True),
             patch("alerting_service.notifiers.router._persist_config_snapshot"),
         ):
             route_event("NORMAL_EVENT", {"message": "live"})

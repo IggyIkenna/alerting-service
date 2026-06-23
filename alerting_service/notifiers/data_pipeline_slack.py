@@ -265,6 +265,15 @@ def send_data_pipeline_alert(
             logger.warning("data-pipeline-alerts Slack mirror failed (attempt %d): %s", attempt + 1, exc)
             continue
         if response.status_code < 300:
+            # Observability (P2 2026-06-23): the success path emitted only an
+            # event-sink ``log_event`` (GCS/PubSub), nothing to STDOUT — so the
+            # webhook POST was invisible in Cloud Logging. Add an INFO so the
+            # consume→route→webhook-POST trace is observable end-to-end.
+            logger.info(
+                "data-pipeline-alerts Slack POST ok (status %d) event=%s",
+                response.status_code,
+                event_name,
+            )
             log_event(
                 "SLACK_MESSAGE_SENT",
                 details={"event_name": event_name, "channel": "data-pipeline-alerts"},
