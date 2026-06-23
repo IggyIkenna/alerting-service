@@ -26,27 +26,44 @@ _LEVEL_MAP: dict[str, int] = {
 }
 
 
+class _FlushingStreamHandler(logging.StreamHandler):  # type: ignore[type-arg]
+    """StreamHandler that flushes after EVERY emit.
+
+    Cloud Run runs uvicorn with a non-TTY stdout → Python block-buffers it, so
+    ``logger.info(...)`` records pile up in the buffer and NEVER reach Cloud Run's
+    log agent (the app appears silent in Cloud Logging while the subscriber is in
+    fact consuming + routing). Flushing per-record makes every route/webhook log
+    visible immediately. Mirrors UTL's ``UnbufferedStreamHandler``.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        super().emit(record)
+        self.flush()
+
+
 def _configure_stdout_logging() -> None:
-    """Route the root logger to STDOUT so Cloud Run captures app + route logs.
+    """Route the root logger to STDOUT (flushed) so Cloud Run captures app + route logs.
 
     The Cloud Run / uvicorn entrypoint (``uvicorn alerting_service.api.main:app``)
     NEVER runs the CLI ``main.py`` ``logging.basicConfig`` — so without this call the
     root logger has no handler and ``logger.info(...)`` records (the consume + route +
     webhook-POST trace) are dropped (Python's lastResort handler only emits WARNING+).
-    Cloud Run captures container STDOUT, so a StreamHandler→stdout makes routing
-    observable in Cloud Logging.
+    A per-record-flushing StreamHandler→stdout is required (NOT a bare basicConfig):
+    Cloud Run's non-TTY stdout is block-buffered, so an unflushed handler keeps the
+    records invisible in Cloud Logging until the buffer fills.
     SSOT: plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md.
     """
     try:
         level_name = LogLevel(AlertingSystemConfig().log_level).value
     except ValueError:
         level_name = "INFO"
-    logging.basicConfig(
-        level=_LEVEL_MAP.get(level_name, logging.INFO),
-        stream=sys.stdout,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-        force=True,
-    )
+    handler = _FlushingStreamHandler(sys.stdout)
+    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
+    root = logging.getLogger()
+    for _existing in list(root.handlers):
+        root.removeHandler(_existing)
+    root.addHandler(handler)
+    root.setLevel(_LEVEL_MAP.get(level_name, logging.INFO))
 
 
 _configure_stdout_logging()
