@@ -237,6 +237,55 @@ def _deliver_to_uts_live_alerts_slack(
         return False
 
 
+def _is_live_umbrella(details: dict[str, object]) -> bool:
+    """Return True when this DP_*/DEPLOYMENT_* alert belongs to a LIVE-umbrella target.
+
+    The umbrella (``LIVE`` / ``BATCH`` / ``PAPER`` / ``EXPERIMENT``) is stamped on the
+    event payload by the emitter (deployment-service heartbeat + exit-code fleet
+    monitor) via ``classify_deployment_target`` / ``umbrella_for_vm_name``. The
+    routing split is umbrella-driven (operator 2026-06-23): **LIVE compute →
+    ``#uts-live-alerts``**, **BATCH/PAPER/EXPERIMENT (or no umbrella) →
+    ``#data-pipeline-alerts``**.
+
+    Matching is case-insensitive on the LEADING ``live`` token so it accepts both the
+    canonical StrEnum value ``LIVE`` and a legacy/derived ``live-<asset_group>`` token
+    (e.g. ``live-defi``) without coupling to the exact emitter spelling. A missing /
+    blank umbrella is BATCH-by-default (the data-pipeline channel) — the fail-safe
+    direction (a batch alert in the live channel is louder noise than the reverse, and
+    the live channel is the operator's smaller, higher-signal surface).
+    """
+    umbrella = details.get("umbrella")
+    return isinstance(umbrella, str) and umbrella.strip().lower().startswith("live")
+
+
+def _mirror_to_uts_live_alerts_slack_dp(
+    event_name: str,
+    summary: str,
+    details: dict[str, object],
+    config: AlertingSystemConfig,
+) -> None:
+    """Mirror a LIVE-umbrella data-pipeline / deployment alert to ``#uts-live-alerts``.
+
+    The LIVE-umbrella counterpart of ``_mirror_to_data_pipeline_slack`` — a LIVE
+    compute unit's failure/crash/hang/warning lands in the live-ops channel, never the
+    batch one (operator 2026-06-23 routing contract). Best-effort, never raises (a
+    Slack failure must not break the CRITICAL incident path, which fires separately).
+    No-op when no webhook is configured (mock / CI / not-yet-provisioned).
+
+    SM-hot-reloaded webhook (``alerting-uts-live-alerts-slack-webhook``) takes
+    precedence over the env-var value (``UTS_LIVE_ALERTS_SLACK_WEBHOOK``) when set.
+    """
+    sm_creds = get_paging_credentials()
+    webhook = sm_creds.get("uts_live_alerts_slack_webhook") or config.uts_live_alerts_slack_webhook
+    if not webhook:
+        return
+    try:
+        send_uts_live_alert(webhook, event_name, summary, details)
+    except Exception as exc:
+        # Mirror is strictly best-effort — never break the CRITICAL incident path.
+        logger.warning("uts-live-alerts Slack mirror raised for %s: %s", event_name, exc)
+
+
 def _mirror_to_data_pipeline_slack(
     event_name: str,
     summary: str,
@@ -289,17 +338,32 @@ def _route_data_pipeline_event(
     severity: AlertSeverity,
     config: AlertingSystemConfig,
 ) -> None:
-    """Route a matched data-pipeline alert: channel mirror + CRITICAL incident path.
+    """Route a matched data-pipeline / deployment alert: channel mirror + CRITICAL page.
 
-    Always mirrors to ``#data-pipeline-alerts``. For ``severity == CRITICAL``,
-    ALSO routes through the existing incident plumbing
-    (``route_event_with_explicit_channels`` → PagerDuty + Telegram) — the SAME
-    path consolidator-rules CRITICAL events use; dedup / ack / persistence are
-    reused, never forked. INFO/WARN stay channel-only (the WARN dedup was
-    already applied by ``route_event`` before this is called).
+    **Umbrella-driven channel split (operator 2026-06-23)** — the channel mirror
+    follows the deployment umbrella stamped on the payload:
+
+      * ``umbrella == LIVE``  → mirror to ``#uts-live-alerts`` (live-ops surface);
+      * everything else (``BATCH`` / ``PAPER`` / ``EXPERIMENT`` / no umbrella)
+        → mirror to ``#data-pipeline-alerts`` (the batch surface, unchanged default).
+
+    So EVERY VM / Cloud-Run-job issue (failure / crash exit-137 OOM / hang / WARN /
+    ERROR) propagates to the RIGHT channel: BATCH compute → #data-pipeline-alerts,
+    LIVE compute → #uts-live-alerts. A DP_* alert with no umbrella stays on the batch
+    channel exactly as before (no behaviour change for the existing DP_* family).
+
+    For ``severity == CRITICAL``, ALSO routes through the existing incident plumbing
+    (``route_event_with_explicit_channels`` → PagerDuty + Telegram) — the SAME path
+    consolidator-rules CRITICAL events use; dedup / ack / persistence are reused, never
+    forked. INFO/WARN stay channel-only (the WARN dedup was already applied by
+    ``route_event`` before this is called). The CRITICAL page fires for BOTH umbrellas
+    (a live OR batch CRITICAL pages) — only the Slack CHANNEL differs by umbrella.
     """
     details_with_sev: dict[str, object] = {**details, "severity": severity.value}
-    _mirror_to_data_pipeline_slack(event_name, summary, details_with_sev, config)
+    if _is_live_umbrella(details_with_sev):
+        _mirror_to_uts_live_alerts_slack_dp(event_name, summary, details_with_sev, config)
+    else:
+        _mirror_to_data_pipeline_slack(event_name, summary, details_with_sev, config)
 
     if severity is AlertSeverity.CRITICAL:
         route_event_with_explicit_channels(
