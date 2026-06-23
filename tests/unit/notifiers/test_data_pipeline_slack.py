@@ -153,9 +153,36 @@ class TestEnrichedBlocks:
         assert "What happened:" not in str(blocks)
 
     def test_meta_watcher_events_explained(self) -> None:
-        for ev in ("DP_CRON_DID_NOT_FIRE", "DP_CATALOG_NOT_RUNNING"):
+        for ev in ("DP_CRON_DID_NOT_FIRE", "DP_CATALOG_NOT_RUNNING", "DP_SOURCE_RATE_LIMITED"):
             blocks = _build_blocks(ev, f"[{ev}] x", {"severity": "CRITICAL"})
             assert "Recommended action:" in str(blocks), ev
+
+    def test_catalogue_probed_path_fields_rendered(self) -> None:
+        """KEY #3: the catalogue alert surfaces the probed path + budget as fields."""
+        blocks = _build_blocks(
+            "DP_CATALOG_NOT_RUNNING",
+            "instrument catalogue for sports is stale — probed "
+            "gs://instruments-store-sports-prd-pid/prod/catalog.parquet, artifact ABSENT, budget=24h",
+            {
+                "severity": "CRITICAL",
+                "asset_group": "sports",
+                "probed_path": "gs://instruments-store-sports-prd-pid/prod/catalog.parquet",
+                "artifact_present": False,
+                "budget_hours": 24.0,
+            },
+        )
+        flat = str(blocks)
+        assert "Probed path:" in flat
+        assert "gs://instruments-store-sports-prd-pid/prod/catalog.parquet" in flat
+        assert "Budget (h):" in flat
+
+    def test_no_capture_reason_field_rendered(self) -> None:
+        blocks = _build_blocks(
+            "DP_VM_GONE_NO_CAPTURE",
+            "[DP_VM_GONE_NO_CAPTURE] silent zero",
+            {"severity": "CRITICAL", "vm_name": "vm-x", "no_capture_reason": "silent"},
+        )
+        assert "No-capture reason:" in str(blocks)
 
     def test_explicit_log_url_rendered_as_runlog_link(self) -> None:
         """An emitter-supplied ``log_url`` becomes the run.log deep-link even with
