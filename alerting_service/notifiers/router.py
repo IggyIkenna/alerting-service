@@ -5,12 +5,17 @@ Routing is config-driven via ``AlertingSystemConfig.routing_rules``.
 Each rule specifies an ``event_pattern`` (fnmatch glob), a list of
 ``channels``, and an optional ``severity_filter``.
 
+Transport (2026-06-23): Slack (#uts-live-alerts) is the PRIMARY delivery for
+generic/incident alerts — Telegram is RETIRED. PagerDuty stays code-wired but is
+held off via PAGERDUTY_DISABLED; each Slack alert carries a "PagerDuty escalation"
+SHADOW annotation (how it WOULD page) for calibration before PD is re-enabled.
+
 Default rules (when no custom config is provided):
-- KILL_SWITCH_*          -> PagerDuty (critical) AND Telegram
-- CIRCUIT_BREAKER_OPEN   -> PagerDuty (critical) AND Telegram
-- PREFLIGHT_FAILED       -> Telegram
-- SERVICE_DEGRADED       -> Telegram
-- All other events       -> Telegram (operational fallback)
+- KILL_SWITCH_*          -> PagerDuty (critical, shadow) + Slack #uts-live-alerts
+- CIRCUIT_BREAKER_OPEN   -> PagerDuty (critical, shadow) + Slack #uts-live-alerts
+- PREFLIGHT_FAILED       -> Slack #uts-live-alerts
+- SERVICE_DEGRADED       -> Slack #uts-live-alerts
+- All other runtime events -> Slack #uts-live-alerts (no-match catch-all)
 
 Service event taxonomy (for observability and test compliance):
   SERVICE_EVENT: ALERT_SENT
@@ -683,7 +688,15 @@ def _deliver_to_channels(
     # 2026-06-23; Telegram RETIRED). "telegram" channel names from existing routing
     # rules + the no-match catch-all both map here so nothing fires silently.
     if "slack" in channels or "telegram" in channels or not channels:
-        ok = _deliver_to_uts_live_alerts_slack(event_name, summary, details, config)
+        # PagerDuty SHADOW annotation (calibration): state how this alert WOULD escalate
+        # to PagerDuty so the operator can tune PD routing/severity before enabling it.
+        if "pagerduty" in channels:
+            _pd_sev = pd_severity or "critical"
+            _pd_state = "currently DISABLED — calibration" if pd_suppressed else "ENABLED"
+            pd_shadow = f"WOULD PAGE → severity=`{_pd_sev}` ({_pd_state})"
+        else:
+            pd_shadow = "no PagerDuty escalation (Slack-only event)"
+        ok = _deliver_to_uts_live_alerts_slack(event_name, summary, {**details, "_pagerduty_shadow": pd_shadow}, config)
         if not ok:
             any_failed = True
         _persist_delivery_record(
