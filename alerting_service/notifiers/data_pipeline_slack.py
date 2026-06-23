@@ -104,6 +104,14 @@ _EVENT_EXPLAIN: dict[str, tuple[str, str]] = {
         "Check the manifest_consolidator Cloud Run Job + its scheduler; re-run the "
         "consolidation job to rebuild the index.",
     ),
+    "DP_SOURCE_RATE_LIMITED": (
+        "A source (e.g. API-Football / a subgraph) returned an HTTP-429 / rate-limit "
+        "throttle, so the run captured a partial or empty result — this is a "
+        "real-transient, NOT a silent failure.",
+        "Back off and retry on a longer interval (do NOT relaunch immediately — a "
+        "relaunch re-hits the same per-minute/day limit). Verify the source's quota / "
+        "key-pool rotation; if it persists, raise the tier or stagger the schedule.",
+    ),
 }
 
 
@@ -262,6 +270,14 @@ def _build_blocks(
         ("HTTP status", "http_status"),
         ("Endpoint", "endpoint"),
         ("Category", "category"),
+        # DP-CATALOG-001: show exactly what was probed + the freshness budget so
+        # "(missing)" reads as a diagnosable "probed gs://… ABSENT, budget=Nh"
+        # (operator 2026-06-23 — the alert must SHOW what it checked).
+        ("Probed path", "probed_path"),
+        ("Artifact present", "artifact_present"),
+        ("Budget (h)", "budget_hours"),
+        # DP-VM-002 / rate-limit: WHY a flat-captured run was flat (run.log-derived).
+        ("No-capture reason", "no_capture_reason"),
     ):
         value = details.get(key)
         if value not in (None, ""):
