@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Epic: observability_master
+# Lifecycle: permanent
+# Delete-when: NA
 """Generate mock alert data for local dev / CI mock mode.
 
 alerting-service is Layer 7 (monitoring/alerting) of the mock data dependency
