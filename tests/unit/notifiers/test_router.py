@@ -600,3 +600,21 @@ class TestUtsLiveAlertsSlack:
         slack_records = [r for r in records if r.get("channel") == "slack"]
         assert len(slack_records) == 1
         assert slack_records[0]["status"] == "failed"
+
+
+# ── 2026-06-24: recurring-WARN dedup cooldown window ─────────────────────────
+class TestRecurringWarnDedupWindow:
+    def test_recurring_warn_events_get_30min_cooldown(self) -> None:
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        assert _dedup_window_for("DP_VM_STALL") == 1800.0
+        assert _dedup_window_for("DP_EVENT_LOOP_STARVED") == 1800.0
+
+    def test_non_recurring_events_use_default_window(self) -> None:
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        # CRITICAL / one-shot events keep the short default (None → 60s) so their
+        # page is not over-suppressed.
+        assert _dedup_window_for("DP_VM_GONE_NO_CAPTURE") is None
+        assert _dedup_window_for("CONSOLIDATOR_DOWN") is None
+        assert _dedup_window_for("KILL_SWITCH_ACTIVATED") is None
