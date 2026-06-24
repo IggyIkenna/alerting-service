@@ -46,3 +46,14 @@ def main_service_cli() -> None:  # pragma: no cover
 def _run_mock() -> int:  # pragma: no cover
     """Mock pipeline — delegates to engine mock provider."""
     return run_mock_pipeline()
+
+
+if __name__ == "__main__":  # pragma: no cover
+    # Runnable entry point for the alerting-paging Cloud Run JOB:
+    #   python -m alerting_service.cli.main --operation alerts --mode live
+    # The image CMD is `uvicorn ...` (the API SERVICE); the paging JOB overrides the
+    # command to this module so ServiceBootstrap drives the multi-topic PubSub
+    # subscriber. Without this guard the job had no way to invoke main_service_cli
+    # (the prior args-only config exec-failed at startup — see
+    # deployment-service/terraform/gcp/audit03_cron_provisioning.tf).
+    main_service_cli()
