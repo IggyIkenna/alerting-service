@@ -65,6 +65,29 @@ _VALID_SEVERITIES: frozenset[str] = frozenset(get_args(PagerDutySeverity))
 # Module-level deduplicator (shared across all route_event calls).
 _deduplicator = AlertDeduplicator(ttl_seconds=60.0)
 
+# Recurring lifecycle WARN alerts: the data-pipeline monitor sweeps re-detect the
+# SAME ongoing condition every poll (~5 min), so without a cooldown a single
+# stalled VM floods the channel every sweep. These get a dedup window >= the
+# sweep interval — with the volatile-field-excluding dedup key, the same vm+event
+# collapses to ONE key, held for this cooldown, so an ongoing stall pings once per
+# window and re-alerts only when it resolves and recurs. CRITICAL events
+# (DP_VM_GONE_NO_CAPTURE / CONSOLIDATOR_DOWN) are intentionally NOT here — they keep
+# the short default so their incident page is not over-suppressed.
+_RECURRING_WARN_COOLDOWN_SEC: float = 1800.0  # 30 min
+_RECURRING_WARN_EVENTS: frozenset[str] = frozenset(
+    {
+        "DP_VM_STALL",
+        "DP_EVENT_LOOP_STARVED",
+    }
+)
+
+
+def _dedup_window_for(event_name: str) -> float | None:
+    """Per-event dedup window: a 30-min cooldown for the recurring WARN floods,
+    else ``None`` (the deduplicator's 60s default)."""
+    return _RECURRING_WARN_COOLDOWN_SEC if event_name in _RECURRING_WARN_EVENTS else None
+
+
 # Coalesce-window + synthetic-event suppression live in ``coalesce.py``
 # (split 2026-06-12, codex ratchet plan Phase 1.5 — file-size <900).
 # Re-bound here under the original private names so the test surface
@@ -526,7 +549,7 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
     """
     global _batch_deduplicated, _batch_matched
 
-    if _deduplicator.is_duplicate(event_name, details):
+    if _deduplicator.is_duplicate(event_name, details, ttl_override=_dedup_window_for(event_name)):
         logger.debug("Duplicate alert suppressed: %s", event_name)
         if _batch_mode:
             _batch_deduplicated += 1
