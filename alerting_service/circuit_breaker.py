@@ -109,7 +109,7 @@ class CircuitBreaker:
         self._prune_old_errors(key, now)
 
         # Check threshold for CLOSED -> OPEN
-        if current_state == STATE_CLOSED and len(self._errors[key]) >= self._threshold:
+        if current_state == STATE_CLOSED and len(self._errors[key]) > self._threshold:
             self._states[key] = STATE_OPEN
             self._open_since[key] = now
             logger.warning(
