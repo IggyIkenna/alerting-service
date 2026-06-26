@@ -8,10 +8,13 @@ RECORDS_PROCESSED = Counter(
     ["status"],  # labels: success / error
 )
 
+# Latency histogram buckets (seconds) — named for reuse + clarity.
+_LATENCY_BUCKETS = [0.1, 0.5, 1.0, 2.5, 5.0, 10.0]
+
 PROCESSING_LATENCY = Histogram(
     "alerting_service_processing_latency_seconds",
     "Alert event processing latency in seconds",
-    buckets=[0.1, 0.5, 1.0, 2.5, 5.0, 10.0],
+    buckets=_LATENCY_BUCKETS,
 )
 
 SERVICE_ERRORS_TOTAL = Counter(
