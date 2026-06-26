@@ -78,4 +78,5 @@ bash scripts/quickmerge.sh "commit message"
 
 ## Codex Reference
 
-See unified-trading-codex for all standards and patterns.
+See the `codex/` directory in `unified-trading-pm` for all standards and patterns
+(the standalone `unified-trading-codex` repo is archived; PM's `codex/` is the live SSOT).
