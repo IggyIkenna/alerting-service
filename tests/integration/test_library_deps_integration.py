@@ -166,10 +166,24 @@ class TestUnifiedCloudInterface:
     """Functional tests for unified-cloud-interface usage in alerting-service."""
 
     def test_get_storage_client_returns_client(self) -> None:
-        """get_storage_client() returns an object with the StorageClient interface."""
-        from unified_trading_library import get_storage_client
+        """get_storage_client() returns an object with the StorageClient interface.
 
-        client = get_storage_client()
+        Mocked to avoid real GCS network calls (and the 403/atexit noise that
+        surfaces when the test SA lacks storage.objects.create on test-bucket).
+        """
+        from unittest.mock import MagicMock, patch
+
+        mock_client = MagicMock()
+        mock_client.upload_bytes = MagicMock()
+        mock_client.download_bytes = MagicMock()
+        mock_client.blob_exists = MagicMock()
+        mock_client.list_blobs = MagicMock()
+
+        with patch("unified_trading_library.get_storage_client", return_value=mock_client):
+            from unified_trading_library import get_storage_client
+
+            client = get_storage_client()
+
         # StorageClient protocol: upload_bytes, download_bytes, blob_exists, list_blobs
         assert hasattr(client, "upload_bytes")
         assert hasattr(client, "download_bytes")
