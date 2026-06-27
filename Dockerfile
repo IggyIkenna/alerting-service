@@ -24,6 +24,8 @@ ENV UV_SYSTEM_PYTHON=1
 # Local path deps from uv.lock: ../unified-api-contracts → /app/unified-api-contracts (from WORKDIR /app/alerting-service)
 COPY unified-api-contracts/ /app/unified-api-contracts/
 COPY unified-trading-library/ /app/unified-trading-library/
+ARG SETUPTOOLS_SCM_PRETEND_VERSION_FOR_ALERTING_SERVICE
+ENV SETUPTOOLS_SCM_PRETEND_VERSION_FOR_ALERTING_SERVICE=${SETUPTOOLS_SCM_PRETEND_VERSION_FOR_ALERTING_SERVICE:-}
 RUN uv sync --frozen --no-dev
 # uv sync creates .venv/ — add to PATH so uvicorn CMD resolves correctly
 ENV PATH="/app/alerting-service/.venv/bin:${PATH}"
