@@ -151,3 +151,7 @@ exclude_lines = [
 # ── bandit (security SAST — every repo) ──────────────────────────────────────────
 [tool.bandit]
 skips = []
+
+# ── quality-gates ratchet ceilings ───────────────────────────────────────────────
+[tool.quality-gates]
+basedpyright_max_errors = 21
