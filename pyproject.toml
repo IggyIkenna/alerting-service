@@ -1,12 +1,12 @@
 [build-system]
 requires = [
     "hatchling",
-]
+"hatch-vcs"]
 build-backend = "hatchling.build"
 
 [project]
 name = "alerting-service"
-version = "0.57.0"
+dynamic = ["version"]
 description = "Multi-channel alerting (Slack, email, PagerDuty) for system health and trading events"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
@@ -155,3 +155,6 @@ skips = []
 # ── quality-gates ratchet ceilings ───────────────────────────────────────────────
 [tool.quality-gates]
 basedpyright_max_errors = 21
+
+[tool.hatch.version]
+source = "vcs"
