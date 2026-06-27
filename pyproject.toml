@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "alerting-service"
-version = "0.54.0"
+version = "0.56.0"
 description = "Multi-channel alerting (Slack, email, PagerDuty) for system health and trading events"
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
@@ -151,3 +151,7 @@ exclude_lines = [
 # ── bandit (security SAST — every repo) ──────────────────────────────────────────
 [tool.bandit]
 skips = []
+
+# ── quality-gates ratchet ceilings ───────────────────────────────────────────────
+[tool.quality-gates]
+basedpyright_max_errors = 21
