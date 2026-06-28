@@ -15,33 +15,33 @@ WORKDIR /app/alerting-service
 # Stage 2: Application
 FROM --platform=linux/amd64 base AS app
 
-# Copy application code
-COPY alerting_service/ ./alerting_service/
-COPY pyproject.toml uv.lock README.md ./
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# uv >= 0.11 removed --system from uv sync; UV_SYSTEM_PYTHON=1 is the cross-version equivalent.
-ENV UV_SYSTEM_PYTHON=1
-# hatch-vcs (source = "vcs"): .git is .dockerignore'd, so `uv sync` (which builds this
-# dynamic-version project) cannot run `git describe`. Cloud Build resolves the real tag in
-# extract-version and passes it here via --build-arg; setuptools-scm/hatch-vcs honour the
-# SETUPTOOLS_SCM_PRETEND_VERSION env. Default keeps a local `docker build` (no --build-arg) working.
+# Install uv (bootstrap with pip — acceptable QG exception, bootstraps uv before uv is available)
+RUN pip install --no-cache-dir uv  # uv bootstrap
+# keyring FIRST (before pip.conf) so Artifact Registry auth works without an auth loop
+RUN uv pip install --system --no-cache-dir keyrings.google-artifactregistry-auth
+# NOW copy pip.conf — keyring is ready to resolve the unified-libraries AR index
+COPY pip.conf /etc/pip.conf
+
+# Copy the WHOLE single-repo build context (tests/scripts/cloudbuild needed by the QG step).
+# Sibling source repos are NOT in Cloud Build's context — UTL+UAC are PRE-INSTALLED in the base
+# image, and --no-sources below ignores the [tool.uv.sources] local path deps and resolves any
+# version bumps from the AR index instead of COPYing ../unified-* (which fails in single-repo CI).
+COPY . .
+
+# hatch-vcs (source = "vcs"): .git is .dockerignore'd + COPY . . excludes it, so `uv pip install -e .`
+# cannot run `git describe`. Cloud Build resolves the real tag in extract-version and passes it via
+# --build-arg SETUPTOOLS_SCM_PRETEND_VERSION; export it BEFORE the install else setuptools-scm fails
+# with "unable to detect version for /workspace". Default keeps a local `docker build` working.
 ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0.dev0
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=${SETUPTOOLS_SCM_PRETEND_VERSION}
-# Local path deps from uv.lock: ../unified-api-contracts → /app/unified-api-contracts (from WORKDIR /app/alerting-service)
-COPY unified-api-contracts/ /app/unified-api-contracts/
-COPY unified-trading-library/ /app/unified-trading-library/
-RUN uv sync --frozen --no-dev
-# uv sync creates .venv/ — add to PATH so uvicorn CMD resolves correctly
-ENV PATH="/app/alerting-service/.venv/bin:${PATH}"
 
-# Copy tests
-COPY tests/ ./tests/
-
-# Copy scripts
-COPY scripts/ ./scripts/
-
-# Copy cloudbuild for quality-gates manifest alignment check
-COPY cloudbuild.yaml ./
+# Install this service (UTL + UAC pre-installed in the base image; --no-sources skips local path deps)
+RUN uv pip install --system --no-sources -e .
 
 # Create non-root user; pre-create mock-mode cache dir needed by delivery_status tests
 RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
