@@ -40,8 +40,40 @@ substitutions:
   _SERVICE_NAME: "alerting-service"
   _REGISTRY_REPO: "unified-trading-system"
   _PKG_NAME: "alerting_service"
+  # In-image QG toggle — re-running quality-gates.sh INSIDE the built image needs the PM harness
+  # (unified-trading-pm/scripts/quality-gates-base) + git, neither of which is in a single-repo image
+  # (exit 127: log_section / base-service.sh not found). QG is already enforced at quickmerge + the
+  # promotion v2 gate, and the operability-probe below is the real in-image gate. Same fix as
+  # deployment-api 2026-06-15 / instruments-service.
+  _RUN_INIMAGE_QG: "false"
 
 steps:
+  # ── fetch-tags: make hatch-vcs (source = "vcs") resolvable in the wheel-build step ──────────
+  # Cloud Build's FETCHSOURCE is a SHALLOW, tag-less /workspace/.git → setuptools-scm cannot detect
+  # the version in the later python:3.13-slim wheel step. This step authenticates with GH_PAT and
+  # fetches tags + full history into the SHARED /workspace/.git so the wheel step resolves it.
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:alpine"
+    id: "fetch-tags"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -e
+        if [ ! -d /workspace/.git ]; then
+          echo "fetch-tags: /workspace/.git absent (non-trigger build) — skipping (wheel step reports any real error)"
+          exit 0
+        fi
+        GH_PAT=$$(gcloud secrets versions access latest --secret=GH_PAT --project=$PROJECT_ID 2>/dev/null || echo "")
+        REMOTE="https://github.com/IggyIkenna/$REPO_NAME.git"
+        [ -n "$$GH_PAT" ] && REMOTE="https://$$GH_PAT@github.com/IggyIkenna/$REPO_NAME.git"
+        # Unshallow so tagged commits are reachable for setuptools-scm (a plain tag-ref fetch on a
+        # shallow clone leaves git describe unable to compute the version). Fall back to a tags-only
+        # fetch when the repo is already complete (--unshallow errors on a non-shallow repo).
+        git -C /workspace fetch --unshallow --tags --force "$$REMOTE" "+refs/tags/*:refs/tags/*" 2>/dev/null \
+          || git -C /workspace fetch --tags --force "$$REMOTE" "+refs/tags/*:refs/tags/*"
+        echo "fetch-tags: $$(git -C /workspace tag --list 'v*' | wc -l | tr -d ' ') v* tags present"
+    waitFor: ["-"]
+
   # ── Auth pre-check: fail fast if SA lacks AR access (before expensive build) ─
   - name: "gcr.io/google.com/cloudsdktool/cloud-sdk:alpine"
     id: "auth-precheck"
@@ -75,10 +107,17 @@ steps:
   - name: "gcr.io/cloud-builders/git"
     id: "extract-version"
     entrypoint: "bash"
+    secretEnv: ["GH_PAT"]
     args:
       - "-c"
       - |
-        git fetch --tags --force --quiet 2>/dev/null || true
+        # Cloud Build's FETCHSOURCE is shallow + tag-less, so `git describe` fails for hatch-vcs
+        # (source = "vcs"). Authenticate with GH_PAT and unshallow + fetch tags so the real v-tag
+        # (reachable from LDR HEAD) resolves. Fall back to a tags-only fetch on an already-complete
+        # repo (--unshallow errors there), then plain unauth fetch.
+        git fetch "https://$$GH_PAT@github.com/IggyIkenna/$REPO_NAME.git" --unshallow --tags --force 2>/dev/null \
+          || git fetch "https://$$GH_PAT@github.com/IggyIkenna/$REPO_NAME.git" --tags --force 2>/dev/null \
+          || git fetch --tags --force --quiet 2>/dev/null || true
         VERSION=$(git describe --tags --abbrev=0 --match 'v*' 2>/dev/null | sed 's/^v//')
         if [ -z "$$VERSION" ]; then
           VERSION=$(git tag --list 'v[0-9]*' --sort=-v:refname 2>/dev/null | head -1 | sed 's/^v//')
@@ -87,10 +126,12 @@ steps:
           VERSION=$(grep '^version' pyproject.toml 2>/dev/null | head -1 | sed 's/version = "//;s/"//')
         fi
         if [ -z "$$VERSION" ]; then
-          VERSION="$SHORT_SHA"
+          # PEP440- AND docker-tag-safe fallback (VERSION is also a docker -t tag): never a bare SHA,
+          # never a +local form.
+          VERSION="0.0.0.dev0"
         fi
         echo "$$VERSION" > /workspace/VERSION
-        echo "Building version $$VERSION (source: git-tag > pyproject > short-sha)"
+        echo "Building version $$VERSION (source: git-tag > pyproject > 0.0.0.dev0)"
     waitFor: ["-"]
 
   # ── STEP 1: Configure Docker authentication ───────────────────────────────
@@ -156,9 +197,10 @@ steps:
     args:
       - "-c"
       - |
-        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "0.0.0.dev0")
         DOCKER_BUILDKIT=1 docker build -f Dockerfile \
           --build-arg PROJECT_ID=$PROJECT_ID \
+          --build-arg SETUPTOOLS_SCM_PRETEND_VERSION=$$VERSION \
           --build-arg BUILDKIT_INLINE_CACHE=1 \
           --cache-from asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA \
@@ -178,7 +220,11 @@ steps:
       - "-c"
       - |
         set -e
-        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
+        if [ "${_RUN_INIMAGE_QG}" != "true" ]; then
+          echo "quality-gates: skipped (_RUN_INIMAGE_QG=${_RUN_INIMAGE_QG}) — QG already enforced at quickmerge + promotion v2; operability-probe is the in-image gate"
+          exit 0
+        fi
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "0.0.0.dev0")
         echo "Running quality gates inside ${_SERVICE_NAME} image..."
         docker run --rm \
           --entrypoint "" \
@@ -189,11 +235,36 @@ steps:
           /bin/bash -c "scripts/quality-gates.sh --no-fix --quick"
     waitFor: ["build"]
 
+  # ── STEP 5.5: REQUIRED — Operability smoke (in-image IMPORT gate) ─────────
+  # Validates the freshly-built image IMPORTS cleanly under a credential-free env (catches
+  # --no-sources / dropped-dep installs that let docker build succeed but break runtime). MUST run
+  # BEFORE push. alerting-service is a uvicorn SERVICE image with no CLI entrypoint, so a `--help`
+  # probe exits 127 (commit a70b208) — IMPORT is the real gate here.
+  - name: "gcr.io/cloud-builders/docker"
+    id: "operability-probe"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -e
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "0.0.0.dev0")
+        IMG="asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION"
+        echo "=== Operability probe: IMPORT ${_PKG_NAME} + api.main ==="
+        docker run --rm --entrypoint python \
+          -e CLOUD_PROVIDER=local \
+          -e CLOUD_MOCK_MODE=true \
+          -e GCP_PROJECT_ID=smoke \
+          -e ENVIRONMENT=dev \
+          "$$IMG" \
+          -c "import ${_PKG_NAME}; import ${_PKG_NAME}.api.main; print('IMPORT OK')"
+        echo "=== Operability probe PASSED ==="
+    waitFor: ["build"]
+
   # ── STEP 6: REQUIRED — Push image ONLY if quality gates passed ────────────
   - name: "gcr.io/cloud-builders/docker"
     id: "push"
     args: ["push", "--all-tags", "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}"]
-    waitFor: ["quality-gates"]
+    waitFor: ["operability-probe"]
 
   # ── STEP 7: REQUIRED — Vulnerability scan (CRITICAL CVE gate) ────────────
   # Container Analysis scans asynchronously after push; poll up to 3 minutes.
@@ -269,11 +340,23 @@ steps:
         echo "[global]
         extra-index-url = https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/simple/" \
           > /root/.config/pip/pip.conf
+        # fetch-tags-fix: git for setuptools-scm
+        command -v git >/dev/null 2>&1 || { apt-get update -qq && apt-get install -y --no-install-recommends git; }
+        git config --global --add safe.directory /workspace || true
+        # hatch-vcs (source = "vcs"): pin the version that extract-version resolved so the wheel build
+        # never depends on git describe inside this slim image.
+        export SETUPTOOLS_SCM_PRETEND_VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "0.0.0.dev0")
+        echo "publish-wheel: SETUPTOOLS_SCM_PRETEND_VERSION=$$SETUPTOOLS_SCM_PRETEND_VERSION"
         python -m build --wheel --outdir dist/
         python -m twine upload \
           --repository-url https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/ \
           --non-interactive dist/*.whl || true
-    waitFor: ["quality-gates"]
+    waitFor: ["quality-gates", "fetch-tags", "extract-version"]
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/GH_PAT/versions/latest
+      env: GH_PAT
 
 images:
   - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA"
