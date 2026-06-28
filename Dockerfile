@@ -21,6 +21,12 @@ COPY pyproject.toml uv.lock README.md ./
 
 # uv >= 0.11 removed --system from uv sync; UV_SYSTEM_PYTHON=1 is the cross-version equivalent.
 ENV UV_SYSTEM_PYTHON=1
+# hatch-vcs (source = "vcs"): .git is .dockerignore'd, so `uv sync` (which builds this
+# dynamic-version project) cannot run `git describe`. Cloud Build resolves the real tag in
+# extract-version and passes it here via --build-arg; setuptools-scm/hatch-vcs honour the
+# SETUPTOOLS_SCM_PRETEND_VERSION env. Default keeps a local `docker build` (no --build-arg) working.
+ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0.dev0
+ENV SETUPTOOLS_SCM_PRETEND_VERSION=${SETUPTOOLS_SCM_PRETEND_VERSION}
 # Local path deps from uv.lock: ../unified-api-contracts → /app/unified-api-contracts (from WORKDIR /app/alerting-service)
 COPY unified-api-contracts/ /app/unified-api-contracts/
 COPY unified-trading-library/ /app/unified-trading-library/
