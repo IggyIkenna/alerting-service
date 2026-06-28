@@ -40,6 +40,12 @@ substitutions:
   _SERVICE_NAME: "alerting-service"
   _REGISTRY_REPO: "unified-trading-system"
   _PKG_NAME: "alerting_service"
+  # In-image QG toggle — re-running quality-gates.sh INSIDE the built image needs the PM harness
+  # (unified-trading-pm/scripts/quality-gates-base) + git, neither of which is in a single-repo image
+  # (exit 127: log_section / base-service.sh not found). QG is already enforced at quickmerge + the
+  # promotion v2 gate, and the operability-probe below is the real in-image gate. Same fix as
+  # deployment-api 2026-06-15 / instruments-service.
+  _RUN_INIMAGE_QG: "false"
 
 steps:
   # ── fetch-tags: make hatch-vcs (source = "vcs") resolvable in the wheel-build step ──────────
@@ -214,7 +220,11 @@ steps:
       - "-c"
       - |
         set -e
-        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
+        if [ "${_RUN_INIMAGE_QG}" != "true" ]; then
+          echo "quality-gates: skipped (_RUN_INIMAGE_QG=${_RUN_INIMAGE_QG}) — QG already enforced at quickmerge + promotion v2; operability-probe is the in-image gate"
+          exit 0
+        fi
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "0.0.0.dev0")
         echo "Running quality gates inside ${_SERVICE_NAME} image..."
         docker run --rm \
           --entrypoint "" \
@@ -225,11 +235,36 @@ steps:
           /bin/bash -c "scripts/quality-gates.sh --no-fix --quick"
     waitFor: ["build"]
 
+  # ── STEP 5.5: REQUIRED — Operability smoke (in-image IMPORT gate) ─────────
+  # Validates the freshly-built image IMPORTS cleanly under a credential-free env (catches
+  # --no-sources / dropped-dep installs that let docker build succeed but break runtime). MUST run
+  # BEFORE push. alerting-service is a uvicorn SERVICE image with no CLI entrypoint, so a `--help`
+  # probe exits 127 (commit a70b208) — IMPORT is the real gate here.
+  - name: "gcr.io/cloud-builders/docker"
+    id: "operability-probe"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -e
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "0.0.0.dev0")
+        IMG="asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION"
+        echo "=== Operability probe: IMPORT ${_PKG_NAME} + api.main ==="
+        docker run --rm --entrypoint python \
+          -e CLOUD_PROVIDER=local \
+          -e CLOUD_MOCK_MODE=true \
+          -e GCP_PROJECT_ID=smoke \
+          -e ENVIRONMENT=dev \
+          "$$IMG" \
+          -c "import ${_PKG_NAME}; import ${_PKG_NAME}.api.main; print('IMPORT OK')"
+        echo "=== Operability probe PASSED ==="
+    waitFor: ["build"]
+
   # ── STEP 6: REQUIRED — Push image ONLY if quality gates passed ────────────
   - name: "gcr.io/cloud-builders/docker"
     id: "push"
     args: ["push", "--all-tags", "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}"]
-    waitFor: ["quality-gates"]
+    waitFor: ["operability-probe"]
 
   # ── STEP 7: REQUIRED — Vulnerability scan (CRITICAL CVE gate) ────────────
   # Container Analysis scans asynchronously after push; poll up to 3 minutes.
