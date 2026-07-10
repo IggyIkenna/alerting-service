@@ -97,6 +97,17 @@ _EVENT_EXPLAIN: dict[str, tuple[str, str]] = {
         "Re-run the instruments-service catalogue/enumerator for the named "
         "asset_group; verify the scheduled catalogue refresh job is healthy.",
     ),
+    "CATALOGUE_SHRINK_BLOCKED": (
+        "The catalogue monotonic-guard rejected a promotion whose row count "
+        "shrank vs. the current canonical catalogue — a bad regeneration "
+        "(e.g. a truncated walk, a merge-key regression) would otherwise "
+        "mass-false-delist instruments. The previous good catalogue was kept.",
+        "Compare new_count vs. current_count below to gauge the regression size, "
+        "diagnose the regenerator (build_instrument_catalogue.py) run that "
+        "produced the shrunken row count, and re-run a complete regeneration; "
+        "only pass --allow-catalogue-shrink if this is a genuine corrective "
+        "shrink (e.g. a real delisting purge), not a capture-pipeline bug.",
+    ),
     "CONSOLIDATOR_DOWN": (
         "The manifest consolidator (Cloud Run Job) is not running / is stale — "
         "the consolidated availability index is going stale while per-VM shards "
@@ -278,6 +289,11 @@ def _build_blocks(
         ("Budget (h)", "budget_hours"),
         # DP-VM-002 / rate-limit: WHY a flat-captured run was flat (run.log-derived).
         ("No-capture reason", "no_capture_reason"),
+        # DP-CATALOG-002: shrink-block magnitude, so the alert shows the regression
+        # size (new vs. current row count) without opening a log.
+        ("New count", "new_count"),
+        ("Current count", "current_count"),
+        ("Hint", "hint"),
     ):
         value = details.get(key)
         if value not in (None, ""):
