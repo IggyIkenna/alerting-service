@@ -31,6 +31,25 @@ gs://alerting-service-my-project-id/alerting/configs/routing_rules.yaml
 gs://alerting-service-my-project-id/alerting/state/cooldowns.json
 ```
 
+### Retention / Lifecycle
+
+`alerting/history/` has a prefix-scoped lifecycle policy applied directly to the bucket (bucket is not
+Terraform-tracked, so this is set via `gcloud storage buckets update --lifecycle-file=...` / `gsutil lifecycle set`,
+not IaC — check `gsutil lifecycle get gs://alerting-service-{project_id}` for the live policy before changing it):
+
+| Age (days) | Action                       |
+| ---------- | ---------------------------- |
+| 30         | `SetStorageClass` → NEARLINE |
+| 90         | `SetStorageClass` → ARCHIVE  |
+| 365        | `Delete`                     |
+
+This replaces the dedicated `alerting-history-{env}-{project_id}` / `alerting-state-{env}-{project_id}` buckets from
+the original 2026-03-16 retention design (see
+`unified-trading-pm/plans/archive/ui_api_alerting_observability_2026_03_14.plan.md`, `p5-14-retention`) — those were
+provisioned in Terraform but alert history/state was always written to this shared bucket instead, so the dedicated
+buckets sat empty and were deleted 2026-07-10. `alerting/configs/` and `alerting/state/cooldowns.json` are current,
+low-volume, continually-overwritten data and are intentionally excluded from this lifecycle rule.
+
 ## Secret Manager (Not GCS)
 
 The alerting-service reads credentials from Secret Manager, not GCS:
