@@ -20,9 +20,9 @@ from unified_api_contracts.incident import (
     RecoveryAuditSignoff,
     SignoffVerdict,
 )
+from unified_trading_library import AuthContext
 
-from alerting_service.api.main import app
-from alerting_service.auth import verify_api_key
+from alerting_service.api.main import _api_auth, app
 from alerting_service.gateway import manual_action_endpoint as mae
 from alerting_service.gateway.audit_ack_queue import AuditAckQueue
 from alerting_service.gateway.gateway_state import GatewayState
@@ -55,9 +55,13 @@ def _envelope(incident_key: str, **overrides: object) -> IncidentEnvelope:
 # ── Manual-action endpoint validation ───────────────────────────────────────
 
 
+def _fake_auth() -> AuthContext:
+    return AuthContext(org_id="internal", user_id="test", role="admin", is_internal=True, is_api_key=True)
+
+
 @pytest.fixture
 def client() -> TestClient:
-    app.dependency_overrides[verify_api_key] = lambda: "test"
+    app.dependency_overrides[_api_auth] = _fake_auth
     mae._LAST_ACTION_AT.clear()
     try:
         yield TestClient(app)
