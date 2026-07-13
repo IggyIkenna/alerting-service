@@ -14,16 +14,23 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from unified_trading_library import AuthContext
 
 
 @pytest.fixture
 def api_client():
     """TestClient with API key bypass."""
-    with patch("alerting_service.auth.verify_api_key", return_value="test-key"):
-        from alerting_service.api.main import app
+    from alerting_service.api.main import _api_auth, app
 
+    def _fake_auth() -> AuthContext:
+        return AuthContext(org_id="internal", user_id="test-key", role="admin", is_internal=True, is_api_key=True)
+
+    app.dependency_overrides[_api_auth] = _fake_auth
+    try:
         with TestClient(app) as tc:
             yield tc
+    finally:
+        app.dependency_overrides.clear()
 
 
 @pytest.mark.unit

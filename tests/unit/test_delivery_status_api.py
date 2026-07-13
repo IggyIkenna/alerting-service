@@ -7,13 +7,17 @@ from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
+from unified_trading_library import AuthContext
 
 from alerting_service.api.routes import delivery_status as ds_module
 from alerting_service.api.routes.delivery_status import get_delivery_store
-from alerting_service.auth import verify_api_key
 
 # Suppress cloud_mock_mode deprecation warnings from monkeypatch.setattr
 pytestmark = pytest.mark.filterwarnings("ignore::DeprecationWarning")
+
+
+def _fake_auth() -> AuthContext:
+    return AuthContext(org_id="internal", user_id="test-key", role="admin", is_internal=True, is_api_key=True)
 
 
 @pytest.fixture
@@ -25,15 +29,12 @@ def mock_storage_store() -> MagicMock:
 @pytest.fixture
 def client_non_mock(mock_storage_store: MagicMock, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     """Create a FastAPI test client with mock mode disabled (tests real code path)."""
-    from alerting_service.api.main import app
+    from alerting_service.api.main import _api_auth, app
 
     monkeypatch.setattr(ds_module._cfg, "data_mode", "real")
     monkeypatch.setattr(ds_module._cfg, "cloud_mock_mode", False)
 
-    async def _bypass_auth() -> str:
-        return "test-key"
-
-    app.dependency_overrides[verify_api_key] = _bypass_auth
+    app.dependency_overrides[_api_auth] = _fake_auth
     app.dependency_overrides[get_delivery_store] = lambda: mock_storage_store
 
     yield TestClient(app)
@@ -44,14 +45,11 @@ def client_non_mock(mock_storage_store: MagicMock, monkeypatch: pytest.MonkeyPat
 @pytest.fixture
 def client_mock_mode(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     """Create a FastAPI test client with mock mode enabled (tests mock code path)."""
-    from alerting_service.api.main import app
+    from alerting_service.api.main import _api_auth, app
 
     monkeypatch.setattr(ds_module._cfg, "data_mode", "mock")
 
-    async def _bypass_auth() -> str:
-        return "test-key"
-
-    app.dependency_overrides[verify_api_key] = _bypass_auth
+    app.dependency_overrides[_api_auth] = _fake_auth
     # Override the store dependency to avoid GCS credential resolution
     app.dependency_overrides[get_delivery_store] = lambda: MagicMock()
 

@@ -20,10 +20,10 @@ from unified_api_contracts.incident import (
     RecoveryAuditSignoff,
     SignoffVerdict,
 )
+from unified_trading_library import AuthContext
 
-from alerting_service.api.main import app
+from alerting_service.api.main import _api_auth, app
 from alerting_service.api.routes import safety_ops
-from alerting_service.auth import verify_api_key
 from alerting_service.gateway.gateway_state import (
     get_gateway_state,
     reset_gateway_state_for_testing,
@@ -38,10 +38,14 @@ class _LiveCfg:
         return False
 
 
+def _fake_auth() -> AuthContext:
+    return AuthContext(org_id="internal", user_id="test", role="admin", is_internal=True, is_api_key=True)
+
+
 @pytest.fixture
 def client() -> TestClient:
     # Bypass API-key auth for the route under test.
-    app.dependency_overrides[verify_api_key] = lambda: "test"
+    app.dependency_overrides[_api_auth] = _fake_auth
     reset_gateway_state_for_testing()
     try:
         yield TestClient(app)

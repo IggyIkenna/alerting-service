@@ -10,7 +10,7 @@ from unified_trading_library import MockEventSink, setup_events
 def _init_event_logging() -> None:
     """Initialize event logging once per test session using MockEventSink.
 
-    Tests that call log_event() (e.g. auth failure paths in verify_api_key)
+    Tests that call log_event() (e.g. auth failure paths in create_api_auth)
     require setup_events() to have been called first.
     """
     setup_events(service_name="alerting-service", mode="test", sink=MockEventSink())
