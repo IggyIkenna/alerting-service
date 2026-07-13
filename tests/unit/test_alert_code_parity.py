@@ -53,8 +53,6 @@ _KNOWN_CATCH_ALL_ONLY: frozenset[AlertCode] = frozenset(
         AlertCode.RECON_DEGRADED,  # RECON_DEGRADED_CLOSE has an explicit rule via RECON_DEGRADED_*
         AlertCode.DAILY_LEDGER_DIGEST,  # Always INFO informational digest (never a paged alert);
         # catch-all INFO routing is correct — explicit AlertRule deferred per UAC docstring
-        AlertCode.DEPLOYMENT_DIGEST,  # Always INFO deployment-estate digest (parity #5); same
-        # posture as DAILY_LEDGER_DIGEST — catch-all INFO routing is correct, no explicit rule.
     }
 )
 

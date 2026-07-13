@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from unified_api_contracts import AlertSeverity
 from unified_trading_library import (
     DEPLOYMENT_COMPLETED,
+    DEPLOYMENT_DIGEST,
     DEPLOYMENT_FAILED,
     DEPLOYMENT_STARTED,
 )
@@ -52,6 +53,10 @@ _RULES_BY_EVENT: dict[str, DeploymentAlertRule] = {
     DEPLOYMENT_STARTED: DeploymentAlertRule(DEPLOYMENT_STARTED, AlertSeverity.INFO),
     DEPLOYMENT_COMPLETED: DeploymentAlertRule(DEPLOYMENT_COMPLETED, AlertSeverity.INFO),
     DEPLOYMENT_FAILED: DeploymentAlertRule(DEPLOYMENT_FAILED, AlertSeverity.CRITICAL),
+    # Daily per-umbrella deployment-estate digest (parity #5) — INFO channel mirror
+    # to #data-pipeline-alerts (no umbrella stamped → stays on the batch channel),
+    # never pages. The digest text rides in details["message"].
+    DEPLOYMENT_DIGEST: DeploymentAlertRule(DEPLOYMENT_DIGEST, AlertSeverity.INFO),
 }
 
 
