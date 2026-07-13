@@ -137,7 +137,8 @@ steps:
   # ── STEP 1: Configure Docker authentication ───────────────────────────────
   - name: "gcr.io/cloud-builders/gcloud"
     id: "configure-docker"
-    args: ["auth", "configure-docker", "asia-northeast1-docker.pkg.dev", "--quiet"]
+    args:
+      ["auth", "configure-docker", "asia-northeast1-docker.pkg.dev", "--quiet"]
     waitFor: ["-"]
 
   # ── STEP 2: Ensure Artifact Registry repository exists ───────────────────
@@ -260,11 +261,48 @@ steps:
         echo "=== Operability probe PASSED ==="
     waitFor: ["build"]
 
+  # ── Immutable sha-tag guard (first push wins) ──────────────────────────────
+  # Rebuilds of the same commit are NOT bit-reproducible (:latest cache seed,
+  # base-image drift), so re-pushing :$SHORT_SHA re-points the git-sha tag at a
+  # different digest — silent drift for anything resolving the sha tag
+  # (mutable-tag incident: deployment-api 7da9baf, 2026-07-13). First push wins:
+  # if AR already has :$SHORT_SHA, keep it; push only :latest + :$VERSION.
+  # :latest stays mutable by design (AR immutable-tags would break it).
+  - name: "gcr.io/cloud-builders/gcloud"
+    id: "sha-tag-guard"
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -e
+        IMG="asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA"
+        EXISTING="$$(gcloud artifacts docker images describe "$$IMG" --format='value(image_summary.digest)' 2>/dev/null || true)"
+        if [ -n "$$EXISTING" ]; then
+          printf '%s' "$$EXISTING" > /workspace/.sha_tag_preexists
+          echo "sha-tag-guard: $$IMG already exists ($$EXISTING) — push will NOT re-stamp it"
+        else
+          echo "sha-tag-guard: $$IMG absent — this build's push creates it"
+        fi
+    waitFor: ["configure-docker"]
+
   # ── STEP 6: REQUIRED — Push image ONLY if quality gates passed ────────────
   - name: "gcr.io/cloud-builders/docker"
     id: "push"
-    args: ["push", "--all-tags", "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}"]
-    waitFor: ["operability-probe"]
+    entrypoint: "bash"
+    args:
+      - "-c"
+      - |
+        set -e
+        REPO_IMG="asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}"
+        VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "$SHORT_SHA")
+        if [ -f /workspace/.sha_tag_preexists ]; then
+          echo "push: :$SHORT_SHA pre-exists (digest $$(cat /workspace/.sha_tag_preexists)) — immutable, pushing :latest + :$$VERSION only"
+          docker push "$$REPO_IMG:latest"
+          if [ "$$VERSION" != "$SHORT_SHA" ]; then docker push "$$REPO_IMG:$$VERSION"; fi
+        else
+          docker push --all-tags "$$REPO_IMG"
+        fi
+    waitFor: ["operability-probe", "sha-tag-guard"]
 
   # ── STEP 7: REQUIRED — Vulnerability scan (CRITICAL CVE gate) ────────────
   # Container Analysis scans asynchronously after push; poll up to 3 minutes.
@@ -358,8 +396,10 @@ availableSecrets:
     - versionName: projects/$PROJECT_ID/secrets/GH_PAT/versions/latest
       env: GH_PAT
 
+# NOTE: the :$SHORT_SHA tag is intentionally NOT listed here — the images: list
+# is pushed unconditionally after all steps, which would re-stamp a pre-existing
+# sha tag and defeat the sha-tag-guard (first push wins). The push step owns it.
 images:
-  - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA"
   - "asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest"
 
 options:
