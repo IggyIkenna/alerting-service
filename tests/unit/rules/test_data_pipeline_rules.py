@@ -152,6 +152,42 @@ class TestRouteEventDataPipeline:
         # Only the first fire reaches the mirror.
         mock_send_dp.assert_called_once()
 
+    def test_dp_run_mostly_empty_collapses_across_meta_sweep_cadence(
+        self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
+    ) -> None:
+        """2026-07-15 regression — DP_RUN_MOSTLY_EMPTY (CRITICAL) is a static,
+        re-scanned-every-tick manifest-cell signal that opted into the recurring
+        cooldown (``_RECURRING_ALERT_COOLDOWNS``). Two byte-identical fires 900s
+        apart (the observed ``*/15`` meta-sweep gap) MUST collapse to ONE delivered
+        alert; a third fire past the 1800s cooldown boundary IS delivered again
+        (CRITICAL still re-nags while unresolved — it just stops literally
+        duplicating every tick)."""
+        details = {
+            "asset_group": "sports",
+            "data_type": "trades",
+            "attempted_failed": 112277,
+            "attempted": 522276,
+            "ratio": 0.215,
+        }
+
+        with patch("alerting_service.core.dedup.time.monotonic", return_value=0.0):
+            route_event("DP_RUN_MOSTLY_EMPTY", details)
+
+        # Identical fire 900s later (the real-world 12:03 / 12:17 duplicate) →
+        # suppressed as a duplicate, not delivered again.
+        with patch("alerting_service.core.dedup.time.monotonic", return_value=900.0):
+            route_event("DP_RUN_MOSTLY_EMPTY", details)
+
+        mock_send_dp.assert_called_once()
+        mock_explicit_route.assert_called_once()
+
+        # Past the 1800s cooldown the still-unresolved condition re-nags.
+        with patch("alerting_service.core.dedup.time.monotonic", return_value=1801.0):
+            route_event("DP_RUN_MOSTLY_EMPTY", details)
+
+        assert mock_send_dp.call_count == 2
+        assert mock_explicit_route.call_count == 2
+
     def test_unmatched_event_does_not_mirror_to_data_pipeline_slack(
         self,
         mock_send_dp: MagicMock,

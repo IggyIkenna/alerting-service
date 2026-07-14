@@ -65,27 +65,33 @@ _VALID_SEVERITIES: frozenset[str] = frozenset(get_args(PagerDutySeverity))
 # Module-level deduplicator (shared across all route_event calls).
 _deduplicator = AlertDeduplicator(ttl_seconds=60.0)
 
-# Recurring lifecycle WARN alerts: the data-pipeline monitor sweeps re-detect the
-# SAME ongoing condition every poll (~5 min), so without a cooldown a single
-# stalled VM floods the channel every sweep. These get a dedup window >= the
-# sweep interval — with the volatile-field-excluding dedup key, the same vm+event
-# collapses to ONE key, held for this cooldown, so an ongoing stall pings once per
-# window and re-alerts only when it resolves and recurs. CRITICAL events
-# (DP_VM_GONE_NO_CAPTURE / CONSOLIDATOR_DOWN) are intentionally NOT here — they keep
-# the short default so their incident page is not over-suppressed.
-_RECURRING_WARN_COOLDOWN_SEC: float = 1800.0  # 30 min
-_RECURRING_WARN_EVENTS: frozenset[str] = frozenset(
-    {
-        "DP_VM_STALL",
-        "DP_EVENT_LOOP_STARVED",
-    }
-)
+# Recurring-alert cooldowns: the data-pipeline monitor sweeps re-detect the SAME
+# ongoing condition every poll, so without a cooldown a single stalled VM (or a
+# still-failing manifest cell) floods the channel every sweep. Each entry gets a
+# dedup window >= its detector's sweep interval — with the volatile-field-excluding
+# dedup key, the same identity+event collapses to ONE key, held for this cooldown,
+# so an ongoing condition pings once per window and re-alerts only when it resolves
+# and recurs (or the window elapses, for the still-firing CRITICAL case).
+#
+# Most CRITICAL events (DP_VM_GONE_NO_CAPTURE / CONSOLIDATOR_DOWN) are intentionally
+# NOT here — they are one-shot/flappy signals where the short default keeps the
+# incident page from being over-suppressed. A CRITICAL event opts in ONLY when its
+# underlying condition is a *static, re-scanned-every-tick* signal (e.g. a manifest
+# cell that stays failed until a human re-runs the backfill) with a cooldown >= its
+# detector's measured cadence — this still pages (re-nags every cooldown window
+# while unresolved), it just stops literally duplicating every single tick.
+_RECURRING_ALERT_COOLDOWNS: dict[str, float] = {
+    "DP_VM_STALL": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
+    "DP_EVENT_LOOP_STARVED": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
+    "DP_RUN_MOSTLY_EMPTY": 1800.0,  # 30 min; CRITICAL, static manifest-cell signal, >= 900s meta-sweep cadence
+}
 
 
 def _dedup_window_for(event_name: str) -> float | None:
-    """Per-event dedup window: a 30-min cooldown for the recurring WARN floods,
-    else ``None`` (the deduplicator's 60s default)."""
-    return _RECURRING_WARN_COOLDOWN_SEC if event_name in _RECURRING_WARN_EVENTS else None
+    """Per-event dedup window: a cooldown for recurring alerts (WARN floods and
+    opted-in static/CRITICAL conditions), else ``None`` (the deduplicator's 60s
+    default)."""
+    return _RECURRING_ALERT_COOLDOWNS.get(event_name)
 
 
 # Coalesce-window + synthetic-event suppression live in ``coalesce.py``

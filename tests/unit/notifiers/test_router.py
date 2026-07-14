@@ -603,6 +603,7 @@ class TestUtsLiveAlertsSlack:
 
 
 # ── 2026-06-24: recurring-WARN dedup cooldown window ─────────────────────────
+# ── 2026-07-15: generalized to cover opted-in static/CRITICAL conditions too ─
 class TestRecurringWarnDedupWindow:
     def test_recurring_warn_events_get_30min_cooldown(self) -> None:
         from alerting_service.notifiers.router import _dedup_window_for
@@ -610,11 +611,20 @@ class TestRecurringWarnDedupWindow:
         assert _dedup_window_for("DP_VM_STALL") == 1800.0
         assert _dedup_window_for("DP_EVENT_LOOP_STARVED") == 1800.0
 
+    def test_recurring_critical_event_gets_30min_cooldown(self) -> None:
+        """DP_RUN_MOSTLY_EMPTY (CRITICAL) is a static, re-scanned-every-tick
+        manifest-cell signal — it opts into the recurring cooldown so the ~15-min
+        meta-sweep cadence collapses to one delivered alert per window, while still
+        re-nagging (paging) every 30 min while the condition remains unresolved."""
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        assert _dedup_window_for("DP_RUN_MOSTLY_EMPTY") == 1800.0
+
     def test_non_recurring_events_use_default_window(self) -> None:
         from alerting_service.notifiers.router import _dedup_window_for
 
-        # CRITICAL / one-shot events keep the short default (None → 60s) so their
-        # page is not over-suppressed.
+        # CRITICAL one-shot/flappy events keep the short default (None → 60s) so
+        # their page is not over-suppressed.
         assert _dedup_window_for("DP_VM_GONE_NO_CAPTURE") is None
         assert _dedup_window_for("CONSOLIDATOR_DOWN") is None
         assert _dedup_window_for("KILL_SWITCH_ACTIVATED") is None
