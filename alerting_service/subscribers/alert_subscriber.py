@@ -40,6 +40,7 @@ import logging
 import time
 import uuid
 from collections.abc import AsyncIterator, Callable
+from functools import lru_cache
 from typing import ClassVar, cast
 
 from unified_trading_library import QueueClient, get_queue_client, run_lifecycle, setup_events
@@ -48,6 +49,8 @@ from ..cefi_ml_event_handler import (
     CEFI_ML_EVENT_NAMES,
     handle_cefi_ml_event,
 )
+from ..config import AlertingSystemConfig
+from ..config_reloaders import get_paging_credentials
 from ..defi_feature_event_handler import (
     DEFI_FEATURE_EVENT_NAMES,
     handle_defi_feature_event,
@@ -60,6 +63,7 @@ from ..dr_event_handler import (
 from ..error_event_handler import handle_service_error
 from ..metrics import PROCESSING_LATENCY, RECORDS_PROCESSED
 from ..notifiers.router import route_event
+from ..notifiers.uts_live_alerts_slack import send_uts_live_alert
 from ..recon_drift_event_handler import (
     handle_batch_live_recon_drift_payload,
     handle_batch_vs_live_recon_drifted_payload,
@@ -243,6 +247,65 @@ def _unwrap_utl_envelope(payload: dict[str, object]) -> dict[str, object]:
     return flat
 
 
+@lru_cache(maxsize=1)
+def _get_subscriber_alerting_config() -> AlertingSystemConfig:
+    """Return singleton AlertingSystemConfig instance (mirrors router._get_cloud_config)."""
+    return AlertingSystemConfig()
+
+
+def _page_own_dispatch_failure(subscription: str, event_name: str | None, error: Exception) -> None:
+    """Best-effort direct page when ``_route_one`` fails to dispatch an alert.
+
+    Mirrors the ``notify_daily_summary_failed`` "a dead digest must not be
+    silent" pattern (``codex/04-architecture/agent-orchestrator-alerting.md``):
+    a broken alert route must be loud about ITS OWN failure, not just
+    ``logger.warning``-and-skip — otherwise a downstream fault (missing
+    PagerDuty/Telegram secret, a misconfigured rule, an unhandled payload
+    shape) silently eats a page with no escalation of that failure itself.
+    Found while investigating why the 2026-07-15
+    consolidator-liveness-watchdog exit(1) failures never paged; see
+    plans/active/issues/defi_consolidator_cron_left_paused_2026_07_15.md.
+
+    Deliberately bypasses ``dispatch_event``/``route_event`` — the very path
+    that just failed — and posts directly via the ``#uts-live-alerts``
+    webhook, which needs no routing rules, dedup state, or typed-handler
+    success. Never raises: an unconfigured webhook or a Slack-side failure
+    here must not take down the subscriber loop that is already recovering
+    from the original error.
+    """
+    try:
+        config = _get_subscriber_alerting_config()
+        sm_creds = get_paging_credentials()
+        webhook = sm_creds.get("uts_live_alerts_slack_webhook") or config.uts_live_alerts_slack_webhook
+        if not webhook:
+            logger.error(
+                "alert dispatch FAILED on subscription=%s event=%s and could NOT be paged "
+                "(no uts-live-alerts webhook configured): %s",
+                subscription,
+                event_name or "UNKNOWN",
+                error,
+            )
+            return
+        send_uts_live_alert(
+            webhook,
+            "ALERT_DISPATCH_FAILED",
+            f"Alert dispatch failed on subscription `{subscription}` (event={event_name or 'UNKNOWN'}): {error}",
+            {
+                "subscription": subscription,
+                "failed_event_name": event_name or "UNKNOWN",
+                "error": str(error),
+                "severity": "critical",
+            },
+        )
+    except Exception as _page_err:
+        logger.exception(
+            "_route_one: failed to page its own dispatch failure (subscription=%s, event=%s): %s",
+            subscription,
+            event_name or "UNKNOWN",
+            _page_err,
+        )
+
+
 def _deserialize_message(data: bytes) -> tuple[str, dict[str, object]]:
     """Deserialize raw PubSub bytes into (event_name, details).
 
@@ -404,9 +467,12 @@ class AlertSubscriber:
         was skipped. Per-message isolation: a single un-routable/malformed message
         must NOT kill the loop (the silent-death class — one raise here previously
         took the whole background pull task down → all alerting offline). Shutdown
-        signals still propagate.
+        signals still propagate. A dispatch failure is escalated via
+        ``_page_own_dispatch_failure`` (not just ``logger.warning``) so a broken
+        alert route is itself loud — see that function's docstring.
         """
         _start = time.perf_counter()
+        event_name: str | None = None
         try:
             event_name, enriched = self._process_message(data, attrs, subscription)
             self.dispatch_event(event_name, enriched)
@@ -428,6 +494,7 @@ class AlertSubscriber:
             RECORDS_PROCESSED.labels(status="error").inc()
             PROCESSING_LATENCY.observe(time.perf_counter() - _start)
             logger.warning("alert message processing failed on %s — skipping: %s", subscription, _msg_err)
+            _page_own_dispatch_failure(subscription, event_name, _msg_err)
             return None
         PROCESSING_LATENCY.observe(time.perf_counter() - _start)
         return event_name, enriched

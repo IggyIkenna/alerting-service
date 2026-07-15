@@ -10,6 +10,7 @@ from alerting_service.subscribers.alert_subscriber import (
     AlertSubscriber,
     _deserialize_message,
     _extract_event_name,
+    _page_own_dispatch_failure,
 )
 
 
@@ -256,3 +257,94 @@ class TestAlertSubscriber:
                 subscriber.run_until_stopped(),
                 _stop_after_one_tick(),
             )
+
+    def test_dispatch_failure_is_paged_not_just_logged(self) -> None:
+        """REGRESSION (defi_consolidator_cron_left_paused_2026_07_15): a
+        ``dispatch_event`` failure inside ``_route_one`` must page via
+        ``_page_own_dispatch_failure`` in addition to the existing
+        ``logger.warning`` — a broken alert route must be loud about its OWN
+        failure ("a dead digest must not be silent"), not silently skip.
+
+        Calls ``_route_one`` directly (it is synchronous) rather than driving
+        the full ``stream()`` async generator: a failed message is never
+        yielded, so an ``async for`` loop that only calls ``stop()`` in its
+        body would never terminate.
+        """
+        payload = json.dumps({"event_name": "PREFLIGHT_FAILED", "session": "2026-01-01"}).encode()
+        subscriber = self._make_subscriber()
+
+        with (
+            patch(
+                "alerting_service.subscribers.alert_subscriber.route_event",
+                side_effect=RuntimeError("PagerDuty misconfigured"),
+            ),
+            patch("alerting_service.subscribers.alert_subscriber._page_own_dispatch_failure") as mock_page,
+        ):
+            result = subscriber._route_one(payload, {"source": "test"}, "risk_alerts_circuit_breaker_triggers")
+
+        # The failed message is skipped (not routed) — same as before this fix.
+        assert result is None
+        mock_page.assert_called_once()
+        call_args = mock_page.call_args.args
+        assert call_args[0] == "risk_alerts_circuit_breaker_triggers"
+        assert call_args[1] == "PREFLIGHT_FAILED"
+        assert isinstance(call_args[2], RuntimeError)
+
+
+class TestPageOwnDispatchFailure:
+    def test_pages_via_uts_live_alerts_webhook_when_configured(self) -> None:
+        """When a webhook is configured, the failure is posted directly to
+        #uts-live-alerts — bypassing dispatch_event/route_event, the path that
+        just failed."""
+        mock_config = MagicMock()
+        mock_config.uts_live_alerts_slack_webhook = "https://hooks.example/webhook"
+
+        with (
+            patch(
+                "alerting_service.subscribers.alert_subscriber._get_subscriber_alerting_config",
+                return_value=mock_config,
+            ),
+            patch(
+                "alerting_service.subscribers.alert_subscriber.get_paging_credentials",
+                return_value={},
+            ),
+            patch("alerting_service.subscribers.alert_subscriber.send_uts_live_alert") as mock_send,
+        ):
+            _page_own_dispatch_failure("lifecycle-events-sub", "CONSOLIDATOR_DOWN", RuntimeError("boom"))
+
+        mock_send.assert_called_once()
+        args = mock_send.call_args.args
+        assert args[0] == "https://hooks.example/webhook"
+        assert args[1] == "ALERT_DISPATCH_FAILED"
+        assert "lifecycle-events-sub" in args[2]
+        assert "CONSOLIDATOR_DOWN" in args[2]
+
+    def test_never_raises_when_no_webhook_configured(self) -> None:
+        """No webhook configured → loud logger.error, never a raise (mock/CI safe)."""
+        mock_config = MagicMock()
+        mock_config.uts_live_alerts_slack_webhook = ""
+
+        with (
+            patch(
+                "alerting_service.subscribers.alert_subscriber._get_subscriber_alerting_config",
+                return_value=mock_config,
+            ),
+            patch(
+                "alerting_service.subscribers.alert_subscriber.get_paging_credentials",
+                return_value={},
+            ),
+            patch("alerting_service.subscribers.alert_subscriber.send_uts_live_alert") as mock_send,
+        ):
+            _page_own_dispatch_failure("some_sub", None, RuntimeError("boom"))
+
+        mock_send.assert_not_called()
+
+    def test_never_raises_when_paging_itself_fails(self) -> None:
+        """Defence-in-depth: a broken paging path must not crash the caller
+        (the subscriber loop that is already recovering from the original
+        dispatch error)."""
+        with patch(
+            "alerting_service.subscribers.alert_subscriber._get_subscriber_alerting_config",
+            side_effect=RuntimeError("config store unreachable"),
+        ):
+            _page_own_dispatch_failure("some_sub", "SOME_EVENT", RuntimeError("boom"))  # must not raise
