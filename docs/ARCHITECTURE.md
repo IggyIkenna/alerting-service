@@ -25,7 +25,6 @@ alerting_service/
 ├── core/
 │   ├── alert_store.py       In-memory AlertStore: cooldown tracking, recent history, SSE pub/sub
 │   ├── slack_dispatcher.py  build_slack_blocks(): Block Kit payload builder; send_slack_alert()
-│   ├── claude_slack_agent.py  AI triage via Claude claude-3-5-haiku (Anthropic SDK)
 │   └── default_rules.yaml   10 default alerting rules (thresholds, channels, cooldowns)
 └── api/
     ├── main.py              FastAPI app setup
@@ -68,10 +67,6 @@ Delivery failures are logged via `log_event("ALERT_FAILED")` and never crash the
 ## Default Alerting Rules (`default_rules.yaml`)
 
 Ten rules covering: reconciliation drift, circuit breaker state, feature staleness, DLQ depth, GCS write latency, order fill rate, execution latency, PnL drawdown, IB Gateway connectivity, and position notional breach. Each rule specifies `metric_name`, `condition` (gt/lt/eq), `threshold`, `severity` (WARNING/CRITICAL/FATAL), notification `channels`, and `cooldown_seconds`.
-
-## AI Triage (claude_slack_agent.py)
-
-When `anthropic_api_key` is configured, `post_ai_triage()` calls Claude claude-3-5-haiku-20241022 with alert context (rule_id, metric_value, threshold, strategy, venue, time) and generates a root-cause hypothesis, immediate action steps, and which service/log to check first. Output is intended to be threaded under the original Slack alert.
 
 ## Modes
 
