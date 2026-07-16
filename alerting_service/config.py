@@ -135,7 +135,6 @@ class AlertingSystemConfig(UnifiedCloudConfig):
     email_smtp_port: int = 587
     email_to: ClassVar[list[str]] = []
     google_oauth_domain: str = ""
-    anthropic_api_key: str | None = None
     poll_interval_seconds: int = 10
     metrics_endpoints: ClassVar[dict[str, str]] = {}
     run_subscriber_in_api: bool = Field(
