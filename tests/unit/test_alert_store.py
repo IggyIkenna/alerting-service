@@ -7,12 +7,13 @@ from datetime import UTC, datetime
 from unittest.mock import MagicMock
 
 import pytest
+from unified_api_contracts.canonical.crosscutting.alerting.codes import AlertCode
 from unified_api_contracts.internal import AlertEvent
 
 from alerting_service.core.alert_store import AlertStore
 
 
-def _make_event(rule_id: str = "rule-1", alert_id: str = "alert-1") -> AlertEvent:
+def _make_event(rule_id: str = "rule-1", alert_id: str = "alert-1", code: AlertCode | None = None) -> AlertEvent:
     return AlertEvent(
         alert_id=alert_id,
         rule_id=rule_id,
@@ -21,6 +22,7 @@ def _make_event(rule_id: str = "rule-1", alert_id: str = "alert-1") -> AlertEven
         message="Test alert",
         metric_value=0.95,
         threshold=0.90,
+        code=code,
     )
 
 
@@ -101,6 +103,28 @@ class TestAlertStoreGCSDualWrite:
         store.record_fired(event)
         # Event should still be recorded in memory
         assert event in store.get_recent_events()
+
+    def test_alert_class_is_the_alert_code_value_when_present(self) -> None:
+        # deployment_alerts_ingestion_completeness_2026_07_20.md todo 2 — alert_class must be the
+        # PagerDuty-normalised AlertCode when the event carries one, not the (often-generic) rule_id.
+        mock_storage = MagicMock()
+        store = AlertStore(storage_store=mock_storage)
+        event = _make_event(rule_id="generic-rule-1", code=AlertCode.KILL_SWITCH_VENUE_DISCONNECT)
+        store.record_fired(event)
+
+        call_args = mock_storage.write_alert_history.call_args[0][0]
+        assert call_args["alert_class"] == "KILL_SWITCH_VENUE_DISCONNECT"
+
+    def test_alert_class_falls_back_to_rule_id_when_no_code(self) -> None:
+        # No AlertCode assigned (an ad-hoc/uncatalogued rule) -> alert_class falls back to rule_id
+        # so the row is still classifiable downstream, never blank.
+        mock_storage = MagicMock()
+        store = AlertStore(storage_store=mock_storage)
+        event = _make_event(rule_id="custom-uncatalogued-rule", code=None)
+        store.record_fired(event)
+
+        call_args = mock_storage.write_alert_history.call_args[0][0]
+        assert call_args["alert_class"] == "custom-uncatalogued-rule"
 
 
 class TestAlertStoreSubscriptions:
