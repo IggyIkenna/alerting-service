@@ -5,7 +5,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from alerting_service.notifiers.router import (
+    _build_delivery_record,
+    _extract_deployment_target,
     _match_routing_rules,
+    _persisted_severity,
     route_event,
 )
 
@@ -392,6 +395,83 @@ class TestDeliveryRecordPersistence:
 
         record = mock_persist_delivery.call_args[0][0]
         assert record["status"] == "failed"
+
+
+class TestDeliveryRecordEnrichedFields:
+    """deployment_alerts_ingestion_completeness_2026_07_20.md todo 2 — a delivery record must not
+    be detail-poorer than the decision record: alert_class/severity/message/service/
+    deployment_target ride alongside channel/status/response_detail."""
+
+    def test_build_delivery_record_carries_alert_class_and_enriched_fields(self) -> None:
+        record = _build_delivery_record(
+            "alert-1",
+            "slack",
+            "sent",
+            "ok",
+            "PREFLIGHT_FAILED",
+            severity="warning",
+            message="preflight check failed",
+            service="market-tick-data-service",
+            deployment_target="cefi-backfill-20260620",
+        )
+        assert record["alert_class"] == "PREFLIGHT_FAILED"  # alert_class == event_name
+        assert record["severity"] == "warning"
+        assert record["message"] == "preflight check failed"
+        assert record["service"] == "market-tick-data-service"
+        assert record["deployment_target"] == "cefi-backfill-20260620"
+        # Delivery-status fields unchanged.
+        assert record["channel"] == "slack"
+        assert record["status"] == "sent"
+
+    def test_build_delivery_record_enriched_fields_default_none(self) -> None:
+        # An emit site that provides none of the optional fields -> honest None, never fabricated.
+        record = _build_delivery_record("alert-1", "slack", "sent", "ok", "PREFLIGHT_FAILED")
+        assert record["severity"] is None
+        assert record["message"] is None
+        assert record["service"] is None
+        assert record["deployment_target"] is None
+
+    def test_persisted_severity_prefers_pagerduty_normalised_tier(self) -> None:
+        assert _persisted_severity("critical", {"severity": "WARNING"}) == "critical"
+
+    def test_persisted_severity_falls_back_to_details_severity(self) -> None:
+        assert _persisted_severity(None, {"severity": "WARNING"}) == "WARNING"
+
+    def test_persisted_severity_none_when_neither_present(self) -> None:
+        assert _persisted_severity(None, {}) is None
+
+    def test_extract_deployment_target_reads_vm_name(self) -> None:
+        assert _extract_deployment_target({"vm_name": "cefi-backfill-20260620"}) == "cefi-backfill-20260620"
+
+    def test_extract_deployment_target_reads_vm_fallback(self) -> None:
+        assert _extract_deployment_target({"vm": "cefi-backfill-20260620"}) == "cefi-backfill-20260620"
+
+    def test_extract_deployment_target_reads_deployment_id_fallback(self) -> None:
+        assert _extract_deployment_target({"deployment_id": "dep-123"}) == "dep-123"
+
+    def test_extract_deployment_target_none_when_absent(self) -> None:
+        assert _extract_deployment_target({"session": "s1"}) is None
+
+    def test_route_event_end_to_end_populates_enriched_fields_on_the_persisted_record(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_uts_live_alert: MagicMock,
+        mock_log_event: MagicMock,
+        mock_config_slack_only: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        empty_paging_creds: MagicMock,
+    ) -> None:
+        # Emit site provides vm_name + source in details -> both land on the persisted record,
+        # proving the enrichment is wired end-to-end, not just testable in isolation. (details'
+        # "source" key feeds the delivery record's "service" field — see _record_batch_audit /
+        # _deliver_to_channels: source = str(details.get("source", "alerting-service")).)
+        route_event("PREFLIGHT_FAILED", {"vm_name": "cefi-backfill-20260620", "source": "market-tick-data-service"})
+
+        record = mock_persist_delivery.call_args[0][0]
+        assert record["alert_class"] == "PREFLIGHT_FAILED"
+        assert record["deployment_target"] == "cefi-backfill-20260620"
+        assert record["service"] == "market-tick-data-service"
 
 
 class TestConfigSnapshotPersistence:
