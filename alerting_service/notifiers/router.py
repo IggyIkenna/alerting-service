@@ -403,20 +403,58 @@ def _route_data_pipeline_event(
         )
 
 
+def _persisted_severity(pd_severity: PagerDutySeverity | None, details: dict[str, object]) -> str | None:
+    """Resolve the severity to persist: the PagerDuty-normalised tier when known,
+    else whatever the emit site stamped on ``details['severity']``."""
+    if pd_severity is not None:
+        return pd_severity
+    raw = details.get("severity")
+    return str(raw) if raw is not None else None
+
+
+def _extract_deployment_target(details: dict[str, object]) -> str | None:
+    """Extract the VM/deployment target an alert concerns, if any.
+
+    Mirrors the ``vm_name``/``deployment_id`` convention deployment-api's reader
+    already parses from ``details`` (``_repo_ci_alerts.py``) so downstream
+    ingestion needs no per-source translation.
+    """
+    target = details.get("vm_name") or details.get("vm") or details.get("deployment_id")
+    return str(target) if target else None
+
+
 def _build_delivery_record(
     alert_id: str,
     channel: str,
     status: str,
     response_detail: str,
     event_name: str,
+    *,
+    severity: str | None = None,
+    message: str | None = None,
+    service: str | None = None,
+    deployment_target: str | None = None,
 ) -> dict[str, object]:
-    """Build an AlertDeliveryRecord dict."""
+    """Build an AlertDeliveryRecord dict.
+
+    Beyond delivery status (``channel``/``status``/``response_detail``), also carries
+    the normalised-schema fields (decision 2,
+    ``deployment_alerts_ingestion_completeness_2026_07_20.md``) so a delivery record
+    isn't detail-poorer than the decision record: ``alert_class`` (the event_name),
+    plus ``severity``/``message``/``service``/``deployment_target`` when the emit site
+    provides them.
+    """
     return {
         "alert_id": alert_id,
         "channel": channel,
         "status": status,
         "response_detail": response_detail,
         "event_name": event_name,
+        "alert_class": event_name,
+        "severity": severity,
+        "message": message,
+        "service": service,
+        "deployment_target": deployment_target,
         "timestamp": datetime.now(UTC).isoformat(),
     }
 
@@ -466,6 +504,10 @@ def _route_synthetic_log_only(
         status="suppressed_synthetic",
         response_detail="paging suppressed — synthetic=True",
         event_name=event_name,
+        severity=_persisted_severity(None, details),
+        message=str(details.get("message", event_name)),
+        service=source,
+        deployment_target=_extract_deployment_target(details),
     )
     _persist_delivery_record(record)
 
@@ -514,8 +556,12 @@ def _record_batch_audit(
         {
             "alert_id": alert_id,
             "event_name": event_name,
+            "alert_class": event_name,
             "channels": sorted(channels),
-            "severity": str(pd_severity) if pd_severity else None,
+            "severity": _persisted_severity(pd_severity, details),
+            "message": str(details.get("message", event_name)),
+            "service": source,
+            "deployment_target": _extract_deployment_target(details),
             "status": "batch_audit",
             "response_detail": "delivery_suppressed_batch_mode",
             "source": source,
@@ -769,6 +815,10 @@ def _deliver_to_channels(
                 "sent" if ok else "failed",
                 "accepted" if ok else "delivery_failed",
                 event_name,
+                severity=severity,
+                message=summary,
+                service=source,
+                deployment_target=_extract_deployment_target(details),
             )
         )
     elif "pagerduty" in channels and pd_suppressed:
@@ -799,6 +849,10 @@ def _deliver_to_channels(
                 "sent" if ok else "failed",
                 "accepted" if ok else "delivery_failed",
                 event_name,
+                severity=_persisted_severity(pd_severity, details),
+                message=summary,
+                service=source,
+                deployment_target=_extract_deployment_target(details),
             )
         )
 

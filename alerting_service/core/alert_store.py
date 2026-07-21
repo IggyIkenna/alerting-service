@@ -38,6 +38,7 @@ class AlertStore:
                     "rule_id": event.rule_id,
                     "triggered_at": event.triggered_at.isoformat(),
                     "severity": event.severity,
+                    "alert_class": event.code.value if event.code else event.rule_id,
                     "message": event.message,
                     "metric_value": event.metric_value,
                     "threshold": event.threshold,
