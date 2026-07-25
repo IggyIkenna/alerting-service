@@ -266,7 +266,7 @@ steps:
   # base-image drift), so re-pushing :$SHORT_SHA re-points the git-sha tag at a
   # different digest — silent drift for anything resolving the sha tag
   # (mutable-tag incident: deployment-api 7da9baf, 2026-07-13). First push wins:
-  # if AR already has :$SHORT_SHA, keep it; push only :latest + :$VERSION.
+  # if AR already has :$SHORT_SHA, keep it; push only :latest + :$$VERSION.
   # :latest stays mutable by design (AR immutable-tags would break it).
   - name: "gcr.io/cloud-builders/gcloud"
     id: "sha-tag-guard"
