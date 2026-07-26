@@ -700,11 +700,53 @@ class TestRecurringWarnDedupWindow:
 
         assert _dedup_window_for("DP_RUN_MOSTLY_EMPTY") == 1800.0
 
+    def test_dp_vm_gone_no_capture_gets_30min_cooldown(self) -> None:
+        """DP_VM_GONE_NO_CAPTURE (CRITICAL) is a static, re-scanned-every-tick
+        exit-code-sweep signal (>= 300s detector cadence) — it opts into the
+        recurring cooldown the same way DP_RUN_MOSTLY_EMPTY does, so it re-nags
+        every 30 min while unresolved instead of paging on every sweep."""
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        assert _dedup_window_for("DP_VM_GONE_NO_CAPTURE") == 1800.0
+
+    def test_dp_vm_gone_no_capture_collapses_within_window(self) -> None:
+        """Repeated route_event calls for the SAME identity within the 30-min
+        cooldown collapse to ONE delivered alert (mirrors TestTtlOverride's
+        collapse/re-nag pattern in test_dedup.py, exercised via the router's
+        actual _dedup_window_for lookup instead of a hardcoded override)."""
+        from alerting_service.core.dedup import AlertDeduplicator
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        cooldown = _dedup_window_for("DP_VM_GONE_NO_CAPTURE")
+        assert cooldown is not None
+        dedup = AlertDeduplicator(ttl_seconds=60.0)
+        det = {"vm_name": "vm-dp-vm-gone-1"}
+        with patch("alerting_service.core.dedup.time.monotonic", return_value=0.0):
+            assert dedup.is_duplicate("DP_VM_GONE_NO_CAPTURE", det, ttl_override=cooldown) is False
+        # at t=300s (one detector sweep later) the SAME condition is still within
+        # the 1800s cooldown window -> collapses, no second alert delivered.
+        with patch("alerting_service.core.dedup.time.monotonic", return_value=300.0):
+            assert dedup.is_duplicate("DP_VM_GONE_NO_CAPTURE", det, ttl_override=cooldown) is True
+
+    def test_dp_vm_gone_no_capture_re_nags_past_boundary(self) -> None:
+        """Past the 30-min cooldown window, an unresolved DP_VM_GONE_NO_CAPTURE
+        re-fires (re-nags) rather than staying silently suppressed forever."""
+        from alerting_service.core.dedup import AlertDeduplicator
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        cooldown = _dedup_window_for("DP_VM_GONE_NO_CAPTURE")
+        assert cooldown is not None
+        dedup = AlertDeduplicator(ttl_seconds=60.0)
+        det = {"vm_name": "vm-dp-vm-gone-2"}
+        with patch("alerting_service.core.dedup.time.monotonic", return_value=0.0):
+            assert dedup.is_duplicate("DP_VM_GONE_NO_CAPTURE", det, ttl_override=cooldown) is False
+        with patch("alerting_service.core.dedup.time.monotonic", return_value=cooldown + 1.0):
+            assert dedup.is_duplicate("DP_VM_GONE_NO_CAPTURE", det, ttl_override=cooldown) is False
+
     def test_non_recurring_events_use_default_window(self) -> None:
         from alerting_service.notifiers.router import _dedup_window_for
 
         # CRITICAL one-shot/flappy events keep the short default (None → 60s) so
         # their page is not over-suppressed.
-        assert _dedup_window_for("DP_VM_GONE_NO_CAPTURE") is None
         assert _dedup_window_for("CONSOLIDATOR_DOWN") is None
         assert _dedup_window_for("KILL_SWITCH_ACTIVATED") is None

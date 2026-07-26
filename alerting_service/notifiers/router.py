@@ -73,17 +73,18 @@ _deduplicator = AlertDeduplicator(ttl_seconds=60.0)
 # so an ongoing condition pings once per window and re-alerts only when it resolves
 # and recurs (or the window elapses, for the still-firing CRITICAL case).
 #
-# Most CRITICAL events (DP_VM_GONE_NO_CAPTURE / CONSOLIDATOR_DOWN) are intentionally
-# NOT here — they are one-shot/flappy signals where the short default keeps the
-# incident page from being over-suppressed. A CRITICAL event opts in ONLY when its
-# underlying condition is a *static, re-scanned-every-tick* signal (e.g. a manifest
-# cell that stays failed until a human re-runs the backfill) with a cooldown >= its
+# Most CRITICAL events (CONSOLIDATOR_DOWN) are intentionally NOT here — they are
+# one-shot/flappy signals where the short default keeps the incident page from
+# being over-suppressed. A CRITICAL event opts in ONLY when its underlying
+# condition is a *static, re-scanned-every-tick* signal (e.g. a manifest cell that
+# stays failed until a human re-runs the backfill) with a cooldown >= its
 # detector's measured cadence — this still pages (re-nags every cooldown window
 # while unresolved), it just stops literally duplicating every single tick.
 _RECURRING_ALERT_COOLDOWNS: dict[str, float] = {
     "DP_VM_STALL": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
     "DP_EVENT_LOOP_STARVED": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
     "DP_RUN_MOSTLY_EMPTY": 1800.0,  # 30 min; CRITICAL, static manifest-cell signal, >= 900s meta-sweep cadence
+    "DP_VM_GONE_NO_CAPTURE": 1800.0,  # 30 min; CRITICAL, static exit-code-sweep signal, >= 300s detector cadence
 }
 
 
