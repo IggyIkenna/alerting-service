@@ -54,6 +54,17 @@ class TestDataPipelineRuleFor:
         assert data_pipeline_rule_for("KILL_SWITCH_ACTIVATED") is None
         assert not is_data_pipeline_event("KILL_SWITCH_ACTIVATED")
 
+    def test_dp_fleet_monitor_lifecycle_events_are_registered(self) -> None:
+        """2026-07-27 regression — dp-fleet-monitor's run_lifecycle() events must be
+        exact-match registered so they short-circuit before the generic catch-all."""
+        started = data_pipeline_rule_for("DP_FLEET_MONITOR_RUN_STARTED")
+        completed = data_pipeline_rule_for("DP_FLEET_MONITOR_RUN_COMPLETED")
+        failed = data_pipeline_rule_for("DP_FLEET_MONITOR_RUN_FAILED")
+
+        assert started is not None and started.severity.value == "INFO"
+        assert completed is not None and completed.severity.value == "INFO"
+        assert failed is not None and failed.severity.value == "CRITICAL"
+
 
 # ---------------------------------------------------------------------------
 # Router integration
@@ -187,6 +198,41 @@ class TestRouteEventDataPipeline:
 
         assert mock_send_dp.call_count == 2
         assert mock_explicit_route.call_count == 2
+
+    def test_dp_fleet_monitor_run_started_mirrors_only_no_page(
+        self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
+    ) -> None:
+        """2026-07-27 regression — routine dp-fleet-monitor telemetry must mirror to
+        #data-pipeline-alerts (not the generic incident catch-all) and never page."""
+        route_event("DP_FLEET_MONITOR_RUN_STARTED", {"message": "sweep starting", "run_id": "20260727T000000Z-abc"})
+
+        mock_send_dp.assert_called_once()
+        assert mock_send_dp.call_args.args[3]["severity"] == "INFO"
+        mock_explicit_route.assert_not_called()
+
+    def test_dp_fleet_monitor_run_completed_mirrors_only_no_page(
+        self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
+    ) -> None:
+        route_event("DP_FLEET_MONITOR_RUN_COMPLETED", {"message": "sweep done", "elapsed_s": 12.3})
+
+        mock_send_dp.assert_called_once()
+        assert mock_send_dp.call_args.args[3]["severity"] == "INFO"
+        mock_explicit_route.assert_not_called()
+
+    def test_dp_fleet_monitor_run_failed_mirrors_and_pages(
+        self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
+    ) -> None:
+        """A crash of the monitor itself is meta-incident-worthy — unlike STARTED/
+        COMPLETED, _FAILED must page (same tier as DP_ZOMBIE_WATCHDOG_DOWN)."""
+        route_event(
+            "DP_FLEET_MONITOR_RUN_FAILED",
+            {"message": "sweep crashed", "exception_type": "RuntimeError"},
+        )
+
+        mock_send_dp.assert_called_once()
+        assert mock_send_dp.call_args.args[3]["severity"] == "CRITICAL"
+        mock_explicit_route.assert_called_once()
+        assert mock_explicit_route.call_args.kwargs["channels"] == {"pagerduty", "telegram"}
 
     def test_unmatched_event_does_not_mirror_to_data_pipeline_slack(
         self,

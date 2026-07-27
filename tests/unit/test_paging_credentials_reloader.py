@@ -368,6 +368,48 @@ class TestTwilioCredentials:
 # ---------------------------------------------------------------------------
 
 
+class TestRealSecretManagerClientMissingSecretIsolation:
+    """Regression test (2026-07-27, data_pipeline_alert_substrate_residual_2026_07_24.md
+    'get_paging_credentials batch-fetch is fragile' item): drives the REAL
+    ``unified_trading_library.SecretManagerClient.get_secrets()`` (not a full mock like the
+    tests above) to confirm a missing/absent secret is isolated per-key, not raised as a
+    batch failure that would wipe every other paging credential. Traced end-to-end:
+    ``GCPSecretClient.get_secret`` catches ``NotFound``/``GoogleAPIError`` and returns
+    ``None``; ``SecretManagerClient.get_secret`` wraps that in its own try/except; ``get_secrets``
+    is a per-name loop over ``get_secret`` -- so a missing individual secret has never (since the
+    module's creation) been able to raise out of ``get_secrets`` and empty the whole batch.
+    """
+
+    def test_missing_individual_secret_does_not_wipe_present_ones(self) -> None:
+        from unified_trading_library import SecretManagerClient
+
+        present = {_SM_BOT_TOKEN: "tok-real", _SM_CHAT_ID: "chat-real"}
+
+        # Mimic what GCPSecretClient.get_secret already does for an absent/failed
+        # secret (catches NotFound/GoogleAPIError internally, returns None) --
+        # everything requested but not in `present` reads as a genuine miss.
+        fake_gcp_client = MagicMock()
+        fake_gcp_client.get_secret.side_effect = lambda name, version="latest": present.get(name)
+
+        client = SecretManagerClient.__new__(SecretManagerClient)
+        client.project_id = "test-project"
+        client.client = fake_gcp_client
+
+        r = _PagingCredentialsReloader(refresh_interval=9999)
+        with patch("alerting_service.config_reloaders.SecretManagerClient", return_value=client):
+            r.start(project_id="test-project")
+        try:
+            # 11 of the 13 requested paging keys are absent from SM -- present ones
+            # must still come through, not read blank due to a wiped batch.
+            assert r.get_bot_token() == "tok-real"
+            assert r.get_chat_id() == "chat-real"
+            # Absent keys read blank (never an exception, never a wiped batch).
+            assert r.get_twilio_account_sid() == ""
+            assert r.get_deployment_scripts_log_bucket() == ""
+        finally:
+            r.stop()
+
+
 class TestThreadSafety:
     def test_concurrent_reads_do_not_raise(self) -> None:
         r = _PagingCredentialsReloader(refresh_interval=9999)
