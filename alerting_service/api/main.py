@@ -1,11 +1,15 @@
 import asyncio
 import contextlib
 import logging
-import sys
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, FastAPI
-from unified_trading_library import LogLevel, UnifiedCloudConfig, create_api_auth
+from unified_trading_library import (
+    LogLevel,
+    UnifiedCloudConfig,
+    create_api_auth,
+    setup_cloud_logging,
+)
 
 from alerting_service.api.routes.alerts import router as alerts_router
 from alerting_service.api.routes.delivery_status import router as delivery_status_router
@@ -16,53 +20,43 @@ from alerting_service.config import AlertingSystemConfig
 from alerting_service.gateway.manual_action_endpoint import router as manual_action_router
 from alerting_service.subscribers.alert_subscriber import AlertSubscriber
 
-_LEVEL_MAP: dict[str, int] = {
-    "DEBUG": logging.DEBUG,
-    "INFO": logging.INFO,
-    "WARNING": logging.WARNING,
-    "ERROR": logging.ERROR,
-    "CRITICAL": logging.CRITICAL,
-}
-
-
-class _FlushingStreamHandler(logging.StreamHandler):  # type: ignore[type-arg]
-    """StreamHandler that flushes after EVERY emit.
-
-    Cloud Run runs uvicorn with a non-TTY stdout → Python block-buffers it, so
-    ``logger.info(...)`` records pile up in the buffer and NEVER reach Cloud Run's
-    log agent (the app appears silent in Cloud Logging while the subscriber is in
-    fact consuming + routing). Flushing per-record makes every route/webhook log
-    visible immediately. Mirrors UTL's ``UnbufferedStreamHandler``.
-    """
-
-    def emit(self, record: logging.LogRecord) -> None:
-        super().emit(record)
-        self.flush()
-
 
 def _configure_stdout_logging() -> None:
-    """Route the root logger to STDOUT (flushed) so Cloud Run captures app + route logs.
+    """Route the root logger to Cloud-Logging-structured JSON (flushed) so Cloud Run
+    captures + correctly severity-tags app + route logs.
 
     The Cloud Run / uvicorn entrypoint (``uvicorn alerting_service.api.main:app``)
-    NEVER runs the CLI ``main.py`` ``logging.basicConfig`` — so without this call the
-    root logger has no handler and ``logger.info(...)`` records (the consume + route +
-    webhook-POST trace) are dropped (Python's lastResort handler only emits WARNING+).
-    A per-record-flushing StreamHandler→stdout is required (NOT a bare basicConfig):
-    Cloud Run's non-TTY stdout is block-buffered, so an unflushed handler keeps the
-    records invisible in Cloud Logging until the buffer fills.
+    NEVER runs the CLI ``main.py`` ``ServiceBootstrap`` logging setup — so without this
+    call the root logger has no handler and ``logger.info(...)`` records (the consume +
+    route + webhook-POST trace) are dropped (Python's lastResort handler only emits
+    WARNING+).
+
+    Root cause of the persisted "ZERO app logs in Cloud Logging" gap (2026-07-28,
+    superseding the 2026-06-23 P2 fix): a per-record-flushing handler alone is
+    necessary but NOT sufficient. Cloud Run's log agent assigns **plain-text**
+    (non-JSON) stdout/stderr lines Cloud Logging severity ``DEFAULT`` (0) regardless of
+    the Python log level — it does not parse ``%(levelname)s`` out of free text. The
+    project's ``_Default`` log sink carries a ``debug-filter`` exclusion
+    (``severity <= "DEBUG" AND NOT resource.type="cloud_run_job"``) that therefore drops
+    EVERY plain-text line from a Cloud Run **service** (the exclusion only carves out
+    **jobs**) before it ever reaches Cloud Logging — confirmed via
+    ``gcloud logging read`` returning zero ``run.googleapis.com/stdout`` or ``/stderr``
+    entries for ``dp-alerting-subscriber`` at ANY severity across 30 days, while a
+    sibling Cloud Run JOB's plain-text DEFAULT-severity lines were present and
+    unfiltered. Reusing UTL's ``CloudRunJSONFormatter`` (``severity`` set from
+    ``record.levelname``) makes Cloud Run's agent honour the real Python level instead
+    of defaulting to DEFAULT/0, so INFO+ lines now clear the exclusion without touching
+    the project-wide sink policy (a shared, cost-sensitive resource — see
+    ``prd-gcs-data-access-exclusion`` on the same sink). Mirrors UTL's
+    ``setup_cloud_logging`` (identical helper already used by
+    ``client-reporting-api``'s CLI entrypoint); reused here instead of re-derived.
     SSOT: plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md.
     """
     try:
         level_name = LogLevel(AlertingSystemConfig().log_level).value
     except ValueError:
         level_name = "INFO"
-    handler = _FlushingStreamHandler(sys.stdout)
-    handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s"))
-    root = logging.getLogger()
-    for _existing in list(root.handlers):
-        root.removeHandler(_existing)
-    root.addHandler(handler)
-    root.setLevel(_LEVEL_MAP.get(level_name, logging.INFO))
+    setup_cloud_logging(log_level=level_name, json_format=True)
 
 
 _configure_stdout_logging()
