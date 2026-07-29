@@ -129,6 +129,15 @@ _ALERT_SUBSCRIPTIONS: tuple[str, ...] = (
     # consumed → never reach Slack (the delivery gap closed 2026-06-22; see
     # plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md).
     "lifecycle-events-sub",
+    # service-lifecycle-events: the OTHER, UAC-canonical lifecycle topic
+    # (InternalPubSubTopic.SERVICE_EVENTS, unified-api-contracts/internal/
+    # pubsub.py) — live-mode STARTED/STOPPED/FAILED events publish here since
+    # unified-trading-library@9bdcf7a2, but had zero subscribers until this
+    # entry (operator ruling 2026-07-29). Kept alongside lifecycle-events-sub
+    # rather than replacing it — the two topics carry different event
+    # populations today; reconciling to one topic is a separate follow-up.
+    # See plans/active/issues/live_mode_event_sink_topic_missing_2026_06_21.md.
+    "service-lifecycle-events-sub",
 )
 
 # Topics with NO publisher in the codebase as of 2026-05-29 audit

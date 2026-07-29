@@ -145,6 +145,15 @@ class TestAlertSubscriber:
         subscriber = self._make_subscriber()
         assert subscriber._subscriptions == _ALERT_SUBSCRIPTIONS
 
+    def test_default_subscriptions_include_service_lifecycle_events(self) -> None:
+        # Operator ruling 2026-07-29: subscribe alerting-service to the
+        # UAC-canonical service-lifecycle-events topic too, alongside the
+        # legacy lifecycle-events-sub — see
+        # plans/active/issues/live_mode_event_sink_topic_missing_2026_06_21.md.
+        subscriber = self._make_subscriber()
+        assert "service-lifecycle-events-sub" in subscriber._subscriptions
+        assert "lifecycle-events-sub" in subscriber._subscriptions
+
     def test_custom_subscriptions(self) -> None:
         with patch("alerting_service.subscribers.alert_subscriber.get_queue_client"):
             subscriber = AlertSubscriber(
