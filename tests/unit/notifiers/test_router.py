@@ -750,3 +750,79 @@ class TestRecurringWarnDedupWindow:
         # their page is not over-suppressed.
         assert _dedup_window_for("CONSOLIDATOR_DOWN") is None
         assert _dedup_window_for("KILL_SWITCH_ACTIVATED") is None
+
+
+# ── 2026-07-28: STATIC BACKLOG DP_RUN_MOSTLY_EMPTY paging-cadence downgrade ──
+# cefi_high_attempted_failed_batch_cluster_2026_07_23.md [BACKEND] P2 ruling.
+class TestStaticBacklogDpRunMostlyEmptyCooldown:
+    def test_static_backlog_cell_gets_daily_cooldown(self) -> None:
+        from alerting_service.notifiers.dp_run_mostly_empty_static_backlog import (
+            STATIC_BACKLOG_COOLDOWN_SECONDS,
+        )
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        assert STATIC_BACKLOG_COOLDOWN_SECONDS == 86400.0
+        assert _dedup_window_for("DP_RUN_MOSTLY_EMPTY", {"is_static_backlog": True}) == STATIC_BACKLOG_COOLDOWN_SECONDS
+
+    def test_fresh_cell_keeps_30min_cooldown(self) -> None:
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        assert _dedup_window_for("DP_RUN_MOSTLY_EMPTY", {"is_static_backlog": False}) == 1800.0
+        assert _dedup_window_for("DP_RUN_MOSTLY_EMPTY", {}) == 1800.0
+
+    def test_no_details_arg_stays_back_compat(self) -> None:
+        """Callers that only know the event name (existing call sites, tests)
+        still get the normal 30-min cooldown — the downgrade requires details."""
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        assert _dedup_window_for("DP_RUN_MOSTLY_EMPTY") == 1800.0
+
+    def test_other_events_unaffected_by_is_static_backlog(self) -> None:
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        assert _dedup_window_for("DP_VM_GONE_NO_CAPTURE", {"is_static_backlog": True}) == 1800.0
+
+
+class TestEffectiveDpSeverity:
+    def test_static_backlog_downgrades_critical_to_warn(self) -> None:
+        from unified_api_contracts import AlertSeverity
+
+        from alerting_service.notifiers.router import _effective_dp_severity
+
+        result = _effective_dp_severity(
+            "DP_RUN_MOSTLY_EMPTY",
+            {"is_static_backlog": True},
+            AlertSeverity.CRITICAL,
+        )
+        assert result is AlertSeverity.WARN
+
+    def test_fresh_cell_stays_critical(self) -> None:
+        from unified_api_contracts import AlertSeverity
+
+        from alerting_service.notifiers.router import _effective_dp_severity
+
+        assert (
+            _effective_dp_severity("DP_RUN_MOSTLY_EMPTY", {"is_static_backlog": False}, AlertSeverity.CRITICAL)
+            is AlertSeverity.CRITICAL
+        )
+        assert _effective_dp_severity("DP_RUN_MOSTLY_EMPTY", {}, AlertSeverity.CRITICAL) is AlertSeverity.CRITICAL
+
+    def test_other_events_never_downgraded(self) -> None:
+        from unified_api_contracts import AlertSeverity
+
+        from alerting_service.notifiers.router import _effective_dp_severity
+
+        assert (
+            _effective_dp_severity("DP_VM_GONE_NO_CAPTURE", {"is_static_backlog": True}, AlertSeverity.CRITICAL)
+            is AlertSeverity.CRITICAL
+        )
+
+    def test_non_critical_severity_passthrough(self) -> None:
+        from unified_api_contracts import AlertSeverity
+
+        from alerting_service.notifiers.router import _effective_dp_severity
+
+        assert (
+            _effective_dp_severity("DP_RUN_MOSTLY_EMPTY", {"is_static_backlog": True}, AlertSeverity.INFO)
+            is AlertSeverity.INFO
+        )

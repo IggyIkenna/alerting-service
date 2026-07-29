@@ -87,12 +87,26 @@ _RECURRING_ALERT_COOLDOWNS: dict[str, float] = {
     "DP_VM_GONE_NO_CAPTURE": 1800.0,  # 30 min; CRITICAL, static exit-code-sweep signal, >= 300s detector cadence
 }
 
+# DP_RUN_MOSTLY_EMPTY STATIC BACKLOG paging-cadence downgrade lives in
+# ``dp_run_mostly_empty_static_backlog.py`` (split out rather than grown here —
+# router.py is already at its 1100-line file-size cap; mirrors why
+# ``coalesce.py`` / ``kill_switch_rules.py`` exist as siblings below). Re-bound
+# under the original private names so the test surface
+# (router._dedup_window_for / router._effective_dp_severity) is unchanged.
+from alerting_service.notifiers.dp_run_mostly_empty_static_backlog import (
+    dedup_window_override as _dp_run_mostly_empty_dedup_window_override,
+)
+from alerting_service.notifiers.dp_run_mostly_empty_static_backlog import (
+    effective_severity as _effective_dp_severity,
+)
 
-def _dedup_window_for(event_name: str) -> float | None:
+
+def _dedup_window_for(event_name: str, details: dict[str, object] | None = None) -> float | None:
     """Per-event dedup window: a cooldown for recurring alerts (WARN floods and
     opted-in static/CRITICAL conditions), else ``None`` (the deduplicator's 60s
-    default)."""
-    return _RECURRING_ALERT_COOLDOWNS.get(event_name)
+    default). DP_RUN_MOSTLY_EMPTY widens to a daily cooldown once STATIC
+    BACKLOG fires — see ``dp_run_mostly_empty_static_backlog.py``."""
+    return _dp_run_mostly_empty_dedup_window_override(event_name, details, _RECURRING_ALERT_COOLDOWNS.get(event_name))
 
 
 # Coalesce-window + synthetic-event suppression live in ``coalesce.py``
@@ -388,7 +402,12 @@ def _route_data_pipeline_event(
     forked. INFO/WARN stay channel-only (the WARN dedup was already applied by
     ``route_event`` before this is called). The CRITICAL page fires for BOTH umbrellas
     (a live OR batch CRITICAL pages) — only the Slack CHANNEL differs by umbrella.
+
+    A STATIC BACKLOG DP_RUN_MOSTLY_EMPTY cell is downgraded to WARN here first
+    (see ``dp_run_mostly_empty_static_backlog.effective_severity``), taking the
+    INFO/WARN channel-only path instead of paging.
     """
+    severity = _effective_dp_severity(event_name, details, severity)
     details_with_sev: dict[str, object] = {**details, "severity": severity.value}
     if _is_live_umbrella(details_with_sev):
         _mirror_to_uts_live_alerts_slack_dp(event_name, summary, details_with_sev, config)
@@ -602,7 +621,7 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
     """
     global _batch_deduplicated, _batch_matched
 
-    if _deduplicator.is_duplicate(event_name, details, ttl_override=_dedup_window_for(event_name)):
+    if _deduplicator.is_duplicate(event_name, details, ttl_override=_dedup_window_for(event_name, details)):
         logger.debug("Duplicate alert suppressed: %s", event_name)
         if _batch_mode:
             _batch_deduplicated += 1
@@ -662,8 +681,12 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
     dp_rule = data_pipeline_rule_for(event_name)
     if dp_rule is not None:
         if _batch_mode:
+            # Apply the same STATIC BACKLOG downgrade as the live path (see
+            # _effective_dp_severity) so batch-replay audit stats don't count a
+            # suppressed page as paged.
+            dp_severity = _effective_dp_severity(event_name, details, dp_rule.severity)
             dp_channels = {ch.value for ch in dp_rule.channels} or {AlertChannel.LOG_ONLY.value}
-            dp_pd = "critical" if dp_rule.severity is AlertSeverity.CRITICAL else None
+            dp_pd = "critical" if dp_severity is AlertSeverity.CRITICAL else None
             _record_batch_audit(alert_id, event_name, dp_channels, dp_pd, source, details)
             return
         _route_data_pipeline_event(event_name, summary, details, dp_rule.severity, config)
