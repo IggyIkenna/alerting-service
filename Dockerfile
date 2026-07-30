@@ -7,7 +7,7 @@ ARG PROJECT_ID
 # Digest-pinned UTL base image (QG STEP 5.79 -- reproducible builds + UTL/UAC provenance).
 # Refreshed by the dependency-update fan-out (update-dependency-version.yml) on base-image
 # republish; cloudbuild may override at build time: --build-arg BASE_IMAGE_DIGEST=sha256:...
-ARG BASE_IMAGE_DIGEST=sha256:c13c1e2104657be9e1e78bd05b74a150fb54f11a6b47491f51ff371925009b48
+ARG BASE_IMAGE_DIGEST=sha256:f446acf3bdcb9a5cd9817ebec70d2c0075bf6658e85d5b6454b804af5737053d
 FROM --platform=linux/amd64 asia-northeast1-docker.pkg.dev/${PROJECT_ID}/unified-trading-library/unified-trading-library@${BASE_IMAGE_DIGEST} AS base
 
 WORKDIR /app/alerting-service
@@ -40,8 +40,17 @@ COPY . .
 ARG SETUPTOOLS_SCM_PRETEND_VERSION=0.0.0.dev0
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=${SETUPTOOLS_SCM_PRETEND_VERSION}
 
-# Install this service (UTL + UAC pre-installed in the base image; --no-sources skips local path deps)
-RUN uv pip install --system --no-sources -e .
+# Install this service (UTL + UAC pre-installed in the base image; --no-sources skips local path deps).
+# uv does NOT read pip.conf's extra-index-url (pip-only convention) and its
+# keyring-subprocess integration 401s against GAR in this container (unlike pip's
+# in-process keyring import, which works) — see
+# cloud_build_unified_api_contracts_publish_ordering_race_2026_07_29.md. Fix: mount a
+# freshly-minted access token (same auth-precheck mechanism already proven against this
+# exact index) as a BuildKit secret, scoped to only this RUN layer — never baked into an
+# image layer or history.
+RUN --mount=type=secret,id=gar_token \
+    UV_EXTRA_INDEX_URL="https://oauth2accesstoken:$(cat /run/secrets/gar_token)@asia-northeast1-python.pkg.dev/central-element-323112/unified-libraries/simple/" \
+    uv pip install --system --no-sources -e .
 
 # Create non-root user; pre-create mock-mode cache dir needed by delivery_status tests
 RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
