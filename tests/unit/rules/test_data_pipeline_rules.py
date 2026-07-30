@@ -65,6 +65,23 @@ class TestDataPipelineRuleFor:
         assert completed is not None and completed.severity.value == "INFO"
         assert failed is not None and failed.severity.value == "CRITICAL"
 
+    def test_source_rate_limit_events_are_registered(self) -> None:
+        """2026-07-30 finalize verification — the per-source rate-limit/health events
+        emitted by ThegraphKeyPoolRotator + DatabentoIPRateLimiter
+        (market-tick-data-service@7f42c557) must be exact-match registered under
+        DP-RATE-001/DP-RATE-002 so a 429-storm short-circuits to #data-pipeline-alerts
+        instead of falling through to the generic catch-all."""
+        rate_limited = data_pipeline_rule_for("DP_SOURCE_RATE_LIMITED")
+        pool_exhausted = data_pipeline_rule_for("DP_KEY_POOL_EXHAUSTED")
+
+        assert rate_limited is not None
+        assert rate_limited.registry_id == "DP-RATE-001"
+        assert rate_limited.severity.value == "WARN"
+
+        assert pool_exhausted is not None
+        assert pool_exhausted.registry_id == "DP-RATE-002"
+        assert pool_exhausted.severity.value == "CRITICAL"
+
 
 # ---------------------------------------------------------------------------
 # Router integration
@@ -233,6 +250,43 @@ class TestRouteEventDataPipeline:
         assert mock_send_dp.call_args.args[3]["severity"] == "CRITICAL"
         mock_explicit_route.assert_called_once()
         assert mock_explicit_route.call_args.kwargs["channels"] == {"pagerduty", "telegram"}
+
+    def test_dp_source_rate_limited_injected_429_storm_routes_to_mirror_not_page(
+        self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
+    ) -> None:
+        """2026-07-30 finalize verification (DP-RATE-001) — an injected 429-storm from
+        ThegraphKeyPoolRotator/DatabentoIPRateLimiter (the shape
+        market-tick-data-service@7f42c557 emits) must mirror to
+        #data-pipeline-alerts and NOT fall through to the generic incident catch-all.
+        WARN severity — auto-recover, no page."""
+        route_event(
+            "DP_SOURCE_RATE_LIMITED",
+            {"message": "429 budget exceeded", "source": "databento", "venue": "sync", "http_429_count": 7},
+        )
+
+        mock_send_dp.assert_called_once()
+        assert mock_send_dp.call_args.args[1] == "DP_SOURCE_RATE_LIMITED"
+        assert mock_send_dp.call_args.args[3]["severity"] == "WARN"
+        mock_explicit_route.assert_not_called()
+
+    def test_dp_key_pool_exhausted_injected_storm_routes_to_mirror_and_pages(
+        self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
+    ) -> None:
+        """2026-07-30 finalize verification (DP-RATE-002) — TheGraph's 9-key pool fully
+        exhausted must mirror to #data-pipeline-alerts AND page (CRITICAL), same as any
+        other DP_* CRITICAL event — proves the exact defect class already fixed for
+        DP_FLEET_MONITOR_RUN_* (unified-api-contracts@92e068ea) does not recur here."""
+        route_event(
+            "DP_KEY_POOL_EXHAUSTED",
+            {"message": "all 9 keys rate-limited", "source": "thegraph", "venue": "dex_pools"},
+        )
+
+        mock_send_dp.assert_called_once()
+        assert mock_send_dp.call_args.args[1] == "DP_KEY_POOL_EXHAUSTED"
+        assert mock_send_dp.call_args.args[3]["severity"] == "CRITICAL"
+        mock_explicit_route.assert_called_once()
+        assert mock_explicit_route.call_args.kwargs["channels"] == {"pagerduty", "telegram"}
+        assert mock_explicit_route.call_args.kwargs["pd_severity"] == "critical"
 
     def test_unmatched_event_does_not_mirror_to_data_pipeline_slack(
         self,
