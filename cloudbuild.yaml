@@ -85,6 +85,9 @@ steps:
         echo "=== Auth pre-check ==="
         TOKEN=$$(gcloud auth print-access-token) || { echo "FAIL: No GCP token"; exit 1; }
         echo "GCP token OK"
+        # Persisted for the "build" step's gar_token BuildKit secret (that step's own image,
+        # gcr.io/cloud-builders/docker, has no gcloud CLI to mint its own token).
+        echo "$$TOKEN" > /workspace/.gar_token
         STATUS=$$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer $$TOKEN" "https://asia-northeast1-python.pkg.dev/$PROJECT_ID/unified-libraries/simple/" || echo "000")
         if [ "$$STATUS" != "200" ] && [ "$$STATUS" != "404" ]; then
           echo "FAIL: Python AR HTTP $$STATUS"; exit 1
@@ -198,17 +201,22 @@ steps:
     args:
       - "-c"
       - |
+        set -e
         VERSION=$(cat /workspace/VERSION 2>/dev/null || echo "0.0.0.dev0")
+        # gar_token: minted by the auth-precheck step (this step's own image,
+        # gcr.io/cloud-builders/docker, has no gcloud CLI to mint its own) and written to
+        # /workspace/.gar_token — mounted below as a BuildKit secret, never baked into a layer.
         DOCKER_BUILDKIT=1 docker build -f Dockerfile \
           --build-arg PROJECT_ID=$PROJECT_ID \
           --build-arg SETUPTOOLS_SCM_PRETEND_VERSION=$$VERSION \
           --build-arg BUILDKIT_INLINE_CACHE=1 \
+          --secret id=gar_token,src=/workspace/.gar_token \
           --cache-from asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$SHORT_SHA \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:$$VERSION \
           -t asia-northeast1-docker.pkg.dev/$PROJECT_ID/${_REGISTRY_REPO}/${_SERVICE_NAME}:latest \
           .
-    waitFor: ["pull-base-image", "ensure-repo", "extract-version"]
+    waitFor: ["auth-precheck", "pull-base-image", "ensure-repo", "extract-version"]
 
   # ── STEP 5: REQUIRED — Run quality gates INSIDE the image ─────────────────
   # CRITICAL: Use --entrypoint "" to clear the image's default ENTRYPOINT.
