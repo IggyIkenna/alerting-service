@@ -34,7 +34,7 @@ dependencies = [
     "pip-audit>=2.7.0,<3.0.0",
     "pip>=26.1.2",  # PYSEC-2026-196 (pip transitive via pip-audit/pip-api; fix=26.1.2)
     "bandit>=1.7.0,<2.0.0",
-    "prek>=0.3.0,<1.0.0",
+    "prek>=0.4.4,<1.0.0",  # floor: j178/prek#2142 stash-restore intent-to-add fix
     # Pinned to safe versions (CVE-2026-45409, CVE-2026-4539)
     "idna<4.0.0,>=3.15",
     "pygments<3.0.0,>=2.20.0",
