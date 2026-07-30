@@ -48,9 +48,11 @@ ENV SETUPTOOLS_SCM_PRETEND_VERSION=${SETUPTOOLS_SCM_PRETEND_VERSION}
 # freshly-minted access token (same auth-precheck mechanism already proven against this
 # exact index) as a BuildKit secret, scoped to only this RUN layer — never baked into an
 # image layer or history.
+# Retry-with-backoff (3 attempts, ~45s total budget): hardens against the exact
+# publish-ordering-race window this doc tracks recurring on the next cross-repo floor-bump.
 RUN --mount=type=secret,id=gar_token \
     UV_EXTRA_INDEX_URL="https://oauth2accesstoken:$(cat /run/secrets/gar_token)@asia-northeast1-python.pkg.dev/central-element-323112/unified-libraries/simple/" \
-    uv pip install --system --no-sources -e .
+    sh -c 'i=1; until uv pip install --system --no-sources -e .; do [ "$i" -ge 3 ] && { echo "uv pip install failed after 3 attempts" >&2; exit 1; }; w=$((15 * i)); echo "uv pip install failed (attempt $i/3) -- retrying in ${w}s"; sleep "$w"; i=$((i + 1)); done'
 
 # Create non-root user; pre-create mock-mode cache dir needed by delivery_status tests
 RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
