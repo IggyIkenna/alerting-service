@@ -36,8 +36,8 @@ dependencies = [
     "bandit>=1.7.0,<2.0.0",
     "prek>=0.3.0,<1.0.0",
     # Pinned to safe versions (CVE-2026-45409, CVE-2026-4539)
-    "idna>=3.15",
-    "pygments>=2.20.0",
+    "idna<4.0.0,>=3.15",
+    "pygments<3.0.0,>=2.20.0",
 ]
 
 [tool.uv.sources.unified-trading-library]
