@@ -28,10 +28,6 @@ BE_EXCLUDE_GLOBS=(
     "alerting_service/notifiers/incident_fallback.py"
     "alerting_service/notifiers/physical_pager.py"
 )
-# 2026-07-16: two freshly-published transitive CVEs — temporary suppression to unblock QG; the real fix (dep bump)
-# is owned by the CVE-remediation agent, not this change. PYSEC-2026-2132 = click 8.3.1 (already ignored by
-# market-tick-data-service); GHSA-537c-gmf6-5ccf = cryptography 48.0.0 (statically-linked OpenSSL in wheels).
-PIP_AUDIT_EXTRA_ARGS="--ignore-vuln CVE-2026-34073 --ignore-vuln CVE-2026-25645 --ignore-vuln CVE-2026-39892 --ignore-vuln CVE-2026-28684 --ignore-vuln CVE-2026-3219 --ignore-vuln CVE-2026-6357 --ignore-vuln CVE-2026-44431 --ignore-vuln CVE-2026-44432 --ignore-vuln PYSEC-2024-277 --ignore-vuln PYSEC-2025-183 --ignore-vuln PYSEC-2026-161 --ignore-vuln PYSEC-2026-120 --ignore-vuln PYSEC-2026-2132 --ignore-vuln GHSA-537c-gmf6-5ccf"
 if [ "${CLOUD_BUILD:-}" = "true" ] && [ -d "/workspace/unified-trading-pm" ]; then
     WORKSPACE_ROOT="/workspace"
 else
