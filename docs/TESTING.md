@@ -2,21 +2,17 @@
 
 ## Quick Start
 
+Run the repo quality gate — it drives the full test suite (unit + integration) through the correct `.venv` and enforces
+the coding-standard checks. **Never run `pytest` directly** (wrong venv, and it bypasses the enforced gates).
+
 ```bash
-# Run all tests (unit + integration) with coverage
-pytest tests/ -v
-
-# Run unit tests only
-pytest tests/unit/ -v
-
-# Run integration tests only
-pytest tests/integration/ -v -m integration
-
-# Run with coverage report
-pytest tests/ --cov=alerting_service --cov-report=term-missing --cov-report=html
+cd alerting-service
+bash scripts/quality-gates.sh            # ship mode (autofix + check)
+bash scripts/quality-gates.sh --no-fix   # diagnostic / check only
 ```
 
-Coverage threshold is enforced at **70%** (`fail_under = 70` in `pyproject.toml`). The build fails if coverage drops below this.
+Coverage threshold is enforced at **70%** (`fail_under = 70` in `pyproject.toml`); the gate fails if coverage drops
+below this. SSOT: `/codex/06-coding-standards/quality-gates.md`.
 
 ## Test Structure
 
@@ -70,33 +66,12 @@ with patch("alerting_service.notifiers.router.pd_send_event", return_value=True)
 
 ## Integration Tests
 
-Integration tests are marked `@pytest.mark.integration`. They do not make real network calls — all HTTP is mocked with `unittest.mock`. They test the full router-to-notifier wiring end-to-end.
-
-```bash
-pytest tests/integration/ -v -m integration
-```
+Integration tests are marked `@pytest.mark.integration`. They do not make real network calls — all HTTP is mocked with `unittest.mock`. They test the full router-to-notifier wiring end-to-end. The quality gate runs them as part of the full suite.
 
 ## Running Without GCP Credentials
 
-All unit tests mock GCP/PubSub dependencies. The full suite runs offline with:
+All unit tests mock GCP/PubSub dependencies and the suite runs offline (HTTP is mocked). No `GCP_PROJECT_ID` is required for unit tests; tests that call `UnifiedCloudConfig()` directly should mock the config or set `GCP_PROJECT_ID=test-project` as an env var.
 
-```bash
-pytest tests/unit/ -v
-```
+## Type Checking & Linting
 
-Integration tests also run offline (HTTP is mocked). No `GCP_PROJECT_ID` is required for unit tests; tests that call `UnifiedCloudConfig()` directly should mock the config or set `GCP_PROJECT_ID=test-project` as an env var.
-
-## Type Checking
-
-```bash
-basedpyright alerting_service/
-```
-
-Uses strict mode (`reportAny`, `reportUnknownMemberType`, `reportUnknownVariableType`, `reportUnknownArgumentType`, `reportUnknownParameterType` all set to `error`).
-
-## Linting
-
-```bash
-ruff check alerting_service/ tests/
-ruff format --check alerting_service/ tests/
-```
+`basedpyright` (strict mode — `reportAny`, `reportUnknownMemberType`, `reportUnknownVariableType`, `reportUnknownArgumentType`, `reportUnknownParameterType` all `error`) and `ruff` (check + format) run as part of the quality gate. Invoke them via `bash scripts/quality-gates.sh` rather than calling the checkers standalone — the gate wires the correct `.venv` and config.
