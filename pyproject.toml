@@ -107,11 +107,8 @@ root = "."
 pythonVersion = "3.13"
 pythonPlatform = "All"
 extraPaths = [
-    "../unified-config-interface",
-    "../unified-internal-contracts",
-    "../unified-cloud-interface",
     "../unified-trading-library",
-    "../unified-events-interface",
+    "../unified-api-contracts",
 ]
 
 # ── pytest ──────────────────────────────────────────────────────────────────────
