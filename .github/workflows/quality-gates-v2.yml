@@ -44,11 +44,15 @@ on:
     branches: [main, staging]
   workflow_dispatch:
 
-# Concurrency: cancel in-progress runs for the same ref on new push (saves Action minutes during
-# rapid push cadence). PR runs serialize per-PR.
+# Concurrency: cancel in-progress runs for the same ref on a new push OR a new commit to an open PR
+# (saves Action minutes). PR runs used to only serialize (queue), which meant a standing promote PR
+# with a moving head (e.g. PM's own LDR->main PR) billed a full run for every superseded intermediate
+# commit instead of collapsing to the latest — the group is already scoped per-ref (a PR's ref is
+# refs/pull/<n>/merge, unique per PR), so cancelling in-progress here can never cross-cancel a
+# different PR or a push to main.
 concurrency:
   group: quality-gates-v2-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'push' }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
