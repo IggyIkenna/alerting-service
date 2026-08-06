@@ -5,7 +5,18 @@ from unittest.mock import MagicMock, patch
 import httpx
 import pytest
 
-from alerting_service.notifiers.pagerduty import _PAGERDUTY_ENQUEUE_URL, send_event
+from alerting_service.notifiers.pagerduty import _PAGERDUTY_ENQUEUE_URL, _probe_routing_key, is_available, send_event
+
+
+@pytest.fixture(autouse=True)
+def _clear_routing_key_probe_cache():
+    """Clear the process-lifetime probe cache between tests (it is an
+    ``lru_cache``, so without this every test after the first would reuse
+    whatever the FIRST test's mocked Secret Manager returned for the same
+    project_id, regardless of that test's own fixtures)."""
+    _probe_routing_key.cache_clear()
+    yield
+    _probe_routing_key.cache_clear()
 
 
 @pytest.fixture
@@ -145,3 +156,67 @@ class TestSendEvent:
     ) -> None:
         with patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)):
             assert send_event(summary="test", severity="info", source="alerting-service", details={}) is True
+
+
+# ── 2026-08-06: capability-probe pattern — missing secret degrades, never raises ──
+class TestCapabilityProbe:
+    """PagerDuty was never provisioned (``alerting-pagerduty-routing-key`` does
+    not exist in Secret Manager) — the routing-key lookup used to RAISE
+    ``RuntimeError`` unguarded inside ``send_event``, crashing every caller.
+    These tests pin the fix: a missing/failing secret degrades to
+    ``send_event() -> False`` / ``is_available() -> False``, never raises."""
+
+    def test_missing_secret_send_event_returns_false_not_raises(self, mock_config: MagicMock) -> None:
+        mock_client = MagicMock()
+        mock_client.get_secret.return_value = None
+        with patch("alerting_service.notifiers.pagerduty.get_secret_client", return_value=mock_client):
+            result = send_event(summary="x", severity="critical", source="s", details={})
+        assert result is False
+
+    def test_secret_manager_exception_send_event_returns_false_not_raises(self, mock_config: MagicMock) -> None:
+        with patch(
+            "alerting_service.notifiers.pagerduty.get_secret_client",
+            side_effect=RuntimeError("permission denied"),
+        ):
+            result = send_event(summary="x", severity="critical", source="s", details={})
+        assert result is False
+
+    def test_missing_secret_never_posts_to_pagerduty(self, mock_config: MagicMock) -> None:
+        mock_client = MagicMock()
+        mock_client.get_secret.return_value = None
+        with (
+            patch("alerting_service.notifiers.pagerduty.get_secret_client", return_value=mock_client),
+            patch("alerting_service.notifiers.pagerduty.httpx.post") as mock_post,
+        ):
+            send_event(summary="x", severity="critical", source="s", details={})
+        mock_post.assert_not_called()
+
+    def test_is_available_false_when_secret_missing(self, mock_config: MagicMock) -> None:
+        mock_client = MagicMock()
+        mock_client.get_secret.return_value = None
+        with patch("alerting_service.notifiers.pagerduty.get_secret_client", return_value=mock_client):
+            assert is_available("test-project") is False
+
+    def test_is_available_true_when_secret_present(self, mock_secret_client: MagicMock, mock_config: MagicMock) -> None:
+        assert is_available("test-project") is True
+
+    def test_secret_manager_probed_only_once_across_repeated_calls(self, mock_config: MagicMock) -> None:
+        """The probe is cached (lru_cache) — a missing secret is only logged/
+        probed ONCE per process, not once per alert fire (the original bug:
+        every recurring alert independently re-hit the crash)."""
+        mock_client = MagicMock()
+        mock_client.get_secret.return_value = None
+        with patch(
+            "alerting_service.notifiers.pagerduty.get_secret_client", return_value=mock_client
+        ) as mock_get_client:
+            send_event(summary="a", severity="critical", source="s", details={})
+            send_event(summary="b", severity="critical", source="s", details={})
+            send_event(summary="c", severity="critical", source="s", details={})
+        mock_get_client.assert_called_once()
+
+    def test_present_secret_still_used_for_the_post(
+        self, mock_secret_client: MagicMock, mock_config: MagicMock, mock_log_event: MagicMock
+    ) -> None:
+        with patch("alerting_service.notifiers.pagerduty.httpx.post", return_value=_make_response(202)) as mock_post:
+            send_event(summary="x", severity="critical", source="s", details={})
+        assert mock_post.call_args.kwargs["json"]["routing_key"] == "test-routing-key-abc123"

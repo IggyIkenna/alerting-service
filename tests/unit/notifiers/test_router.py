@@ -339,6 +339,79 @@ class TestRouteEventFailureHandling:
         route_event("PREFLIGHT_FAILED", {})
 
 
+# ── 2026-08-06: CRITICAL email fallback when PagerDuty is unavailable/fails ──
+class TestCriticalEmailFallback:
+    def test_email_fallback_fires_on_pagerduty_failure_for_critical(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_uts_live_alert: MagicMock,
+        mock_log_event: MagicMock,
+        mock_config_slack_only: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        empty_paging_creds: MagicMock,
+    ) -> None:
+        mock_pd_send_event.return_value = False
+        with patch("alerting_service.notifiers.router.send_critical_fallback", return_value=True) as mock_email:
+            route_event("CIRCUIT_BREAKER_OPEN", {})
+        mock_email.assert_called_once()
+
+    def test_email_fallback_not_called_when_pagerduty_succeeds(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_uts_live_alert: MagicMock,
+        mock_log_event: MagicMock,
+        mock_config_slack_only: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        empty_paging_creds: MagicMock,
+    ) -> None:
+        mock_pd_send_event.return_value = True
+        with patch("alerting_service.notifiers.router.send_critical_fallback") as mock_email:
+            route_event("CIRCUIT_BREAKER_OPEN", {})
+        mock_email.assert_not_called()
+
+    def test_email_fallback_failure_does_not_raise(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_uts_live_alert: MagicMock,
+        mock_log_event: MagicMock,
+        mock_config_slack_only: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        empty_paging_creds: MagicMock,
+    ) -> None:
+        mock_pd_send_event.return_value = False
+        with patch("alerting_service.notifiers.router.send_critical_fallback", return_value=False):
+            # Must not raise even when BOTH PagerDuty and the email fallback fail.
+            route_event("CIRCUIT_BREAKER_OPEN", {})
+
+    def test_email_fallback_not_called_for_non_critical_severity(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_uts_live_alert: MagicMock,
+        mock_log_event: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        empty_paging_creds: MagicMock,
+    ) -> None:
+        mock_pd_send_event.return_value = False
+        mock_cfg = MagicMock()
+        mock_cfg.uts_live_alerts_slack_webhook = ""
+        mock_cfg.gcp_project_id = "test-project"
+        mock_cfg.pagerduty_disabled = False
+        mock_cfg.quietness_baseline_mode = False
+        mock_cfg.routing_rules = [
+            {"event_pattern": "CUSTOM_*", "channels": ["pagerduty"], "severity_filter": "warning"},
+        ]
+        with (
+            patch("alerting_service.notifiers.router.AlertingSystemConfig", return_value=mock_cfg),
+            patch("alerting_service.notifiers.router.send_critical_fallback") as mock_email,
+        ):
+            route_event("CUSTOM_EVENT", {})
+        mock_email.assert_not_called()
+
+
 class TestDeliveryRecordPersistence:
     """Tests that delivery records are persisted via _persist_delivery_record."""
 
@@ -746,10 +819,128 @@ class TestRecurringWarnDedupWindow:
     def test_non_recurring_events_use_default_window(self) -> None:
         from alerting_service.notifiers.router import _dedup_window_for
 
-        # CRITICAL one-shot/flappy events keep the short default (None → 60s) so
-        # their page is not over-suppressed.
-        assert _dedup_window_for("CONSOLIDATOR_DOWN") is None
+        # Genuinely one-shot/flappy events (a kill switch arm/disarm is a single
+        # state-machine transition, not a re-scanned-every-tick sweep signal)
+        # keep the short default (None → 60s) so their page is not over-suppressed.
         assert _dedup_window_for("KILL_SWITCH_ACTIVATED") is None
+
+
+# ── 2026-08-06: CONSOLIDATOR_DOWN / MANIFEST_CONSOLIDATION_FAILED /
+# FEED_REFETCH_FAILED get real state-transition dedup instead of the bare 60s
+# default (Finding 3 — CONSOLIDATOR_DOWN was refiring ~every 60s for a
+# still-down consolidator, crashing PagerDuty on every fire; see
+# plans/active/issues/alerting_pagerduty_secret_missing_no_email_fallback_2026_08_06.md).
+class TestConsolidatorFamilyDedupWindow:
+    def test_consolidator_down_gets_hourly_cooldown(self) -> None:
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        assert _dedup_window_for("CONSOLIDATOR_DOWN") == 3600.0
+
+    def test_manifest_consolidation_failed_gets_hourly_cooldown(self) -> None:
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        assert _dedup_window_for("MANIFEST_CONSOLIDATION_FAILED") == 3600.0
+
+    def test_feed_refetch_failed_gets_hourly_cooldown(self) -> None:
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        assert _dedup_window_for("FEED_REFETCH_FAILED") == 3600.0
+
+    def test_consolidator_recovered_is_a_distinct_key_unaffected_by_cooldown(self) -> None:
+        """CONSOLIDATOR_RECOVERED is NOT in the cooldown map — a different
+        event_name always hashes to a different dedup key regardless, so the
+        RESOLVED notification is never suppressed by CONSOLIDATOR_DOWN's
+        cooldown window."""
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        assert _dedup_window_for("CONSOLIDATOR_RECOVERED") is None
+
+    def test_consolidator_down_collapses_within_hourly_window(self) -> None:
+        from unittest.mock import patch
+
+        from alerting_service.core.dedup import AlertDeduplicator
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        cooldown = _dedup_window_for("CONSOLIDATOR_DOWN")
+        assert cooldown == 3600.0
+        dedup = AlertDeduplicator(ttl_seconds=60.0)
+        det = {"bucket": "market-data-tick-defi-prd-x"}
+        with patch("alerting_service.core.dedup.time.monotonic", return_value=0.0):
+            assert dedup.is_duplicate("CONSOLIDATOR_DOWN", det, ttl_override=cooldown) is False
+        # 5 minutes later (roughly the old ~60s refire cadence, many times over)
+        # the SAME still-down bucket collapses -> no second page.
+        with patch("alerting_service.core.dedup.time.monotonic", return_value=300.0):
+            assert dedup.is_duplicate("CONSOLIDATOR_DOWN", det, ttl_override=cooldown) is True
+
+    def test_consolidator_down_re_pages_past_hourly_boundary(self) -> None:
+        from unittest.mock import patch
+
+        from alerting_service.core.dedup import AlertDeduplicator
+        from alerting_service.notifiers.router import _dedup_window_for
+
+        cooldown = _dedup_window_for("CONSOLIDATOR_DOWN")
+        assert cooldown is not None
+        dedup = AlertDeduplicator(ttl_seconds=60.0)
+        det = {"bucket": "market-data-tick-defi-prd-y"}
+        with patch("alerting_service.core.dedup.time.monotonic", return_value=0.0):
+            assert dedup.is_duplicate("CONSOLIDATOR_DOWN", det, ttl_override=cooldown) is False
+        with patch("alerting_service.core.dedup.time.monotonic", return_value=cooldown + 1.0):
+            assert dedup.is_duplicate("CONSOLIDATOR_DOWN", det, ttl_override=cooldown) is False
+
+
+# ── 2026-08-06: route_event_with_explicit_channels now honours the SAME
+# cooldown map as route_event() — this is the actual dispatch path CONSOLIDATOR_DOWN
+# / MANIFEST_CONSOLIDATION_FAILED / FEED_REFETCH_FAILED use (bypassing route_event
+# entirely), so before this fix the cooldown map above had NO effect on them at all.
+class TestRouteEventWithExplicitChannelsDedup:
+    def test_consolidator_down_collapses_via_explicit_channels_path(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_uts_live_alert: MagicMock,
+        mock_log_event: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        mock_config_slack_only: MagicMock,
+        empty_paging_creds: MagicMock,
+    ) -> None:
+        from alerting_service.notifiers.router import route_event_with_explicit_channels
+
+        details = {"bucket": "bkt-explicit-1"}
+        route_event_with_explicit_channels(
+            "CONSOLIDATOR_DOWN", details, channels={"pagerduty", "telegram"}, pd_severity="critical"
+        )
+        route_event_with_explicit_channels(
+            "CONSOLIDATOR_DOWN", details, channels={"pagerduty", "telegram"}, pd_severity="critical"
+        )
+
+        # Same identity, well within the hourly cooldown -> the SECOND call is
+        # a duplicate, so PagerDuty is only actually invoked ONCE.
+        mock_pd_send_event.assert_called_once()
+
+    def test_non_recurring_explicit_channel_event_keeps_bare_60s_default(
+        self,
+        mock_pd_send_event: MagicMock,
+        mock_send_uts_live_alert: MagicMock,
+        mock_log_event: MagicMock,
+        mock_persist_delivery: MagicMock,
+        mock_persist_config: MagicMock,
+        mock_config_slack_only: MagicMock,
+        empty_paging_creds: MagicMock,
+    ) -> None:
+        """A non-cooldown-mapped event (e.g. a kill-switch fire) is unaffected
+        by this fix — it still dedups on the bare 60s default, unchanged
+        behaviour for every OTHER route_event_with_explicit_channels caller."""
+        from alerting_service.notifiers.router import route_event_with_explicit_channels
+
+        details = {"strategy_id": "s1"}
+        route_event_with_explicit_channels(
+            "KILL_SWITCH_ACTIVATED", details, channels={"pagerduty", "telegram"}, pd_severity="critical"
+        )
+        route_event_with_explicit_channels(
+            "KILL_SWITCH_ACTIVATED", details, channels={"pagerduty", "telegram"}, pd_severity="critical"
+        )
+
+        mock_pd_send_event.assert_called_once()
 
 
 # ── 2026-07-28: STATIC BACKLOG DP_RUN_MOSTLY_EMPTY paging-cadence downgrade ──

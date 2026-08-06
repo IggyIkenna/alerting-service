@@ -1,6 +1,6 @@
 """Manifest-consolidator liveness + consolidation-failure alert rules.
 
-Consumes the two UTL consolidator events that previously had NO consumer in
+Consumes the UTL consolidator events that previously had NO consumer in
 alerting-service (manifest_reader_fail_fast_on_stale_fallback_2026_05_28
 follow-up — a crash-looping or down consolidator paged no one):
 
@@ -10,7 +10,14 @@ follow-up — a crash-looping or down consolidator paged no one):
   is the SSOT freshness mechanism the whole data-status stack depends on —
   when it is down every manifest reader is one stale-index away from
   loud-fail (``ManifestConsolidatorStaleError``). → **CRITICAL**
-  (PagerDuty + Telegram, page now).
+  (PagerDuty + Telegram, page now). Fires ONCE + an hourly re-remind while
+  still down (router.py's ``_RECURRING_ALERT_COOLDOWNS``, 2026-08-06 fix —
+  was refiring ~every 60s, crashing PagerDuty on every fire; see
+  ``plans/active/issues/alerting_pagerduty_secret_missing_no_email_fallback_2026_08_06.md``).
+
+- ``CONSOLIDATOR_RECOVERED`` — the RESOLVED half of the same watchdog
+  (2026-08-06 fix: was completely unwired, silently no-opped). → **INFO**,
+  Telegram/Slack only, fires unconditionally (its own dedup key).
 
 - ``MANIFEST_CONSOLIDATION_FAILED`` — emitted by the manifest consolidator
   itself when a consolidation cycle fails. A single failed cycle usually
@@ -22,7 +29,7 @@ follow-up — a crash-looping or down consolidator paged no one):
   uses for SERVICE_ERROR rate tracking) keyed per manifest bucket.
 
 Severity → channel mapping mirrors ``dr_event_handler._severity_channels``:
-CRITICAL → PagerDuty(critical) + Telegram; WARN → Telegram only.
+CRITICAL → PagerDuty(critical) + Telegram; WARN/INFO → Telegram only.
 
 Service event taxonomy:
   SERVICE_EVENT: CONSOLIDATOR_ALERT_ROUTED
@@ -37,11 +44,19 @@ from unified_trading_library import log_event
 
 # Event-name strings mirror the UTL emitters (SSOT:
 # unified_trading_library/events/event_types.py — CONSOLIDATOR_DOWN :689,
-# MANIFEST_CONSOLIDATION_FAILED :682). Matched by NAME like the sibling rule
-# modules: the constants are not re-exported on the UTL facade and the
-# import-pattern gate forbids deep `unified_trading_library.events` imports.
+# MANIFEST_CONSOLIDATION_FAILED :682, CONSOLIDATOR_RECOVERED :721). Matched by
+# NAME like the sibling rule modules: the constants are not re-exported on the
+# UTL facade and the import-pattern gate forbids deep
+# `unified_trading_library.events` imports.
 CONSOLIDATOR_DOWN = "CONSOLIDATOR_DOWN"
 MANIFEST_CONSOLIDATION_FAILED = "MANIFEST_CONSOLIDATION_FAILED"
+# CONSOLIDATOR_RECOVERED (2026-08-06 fix): emitted by the SAME UTL liveness
+# watchdog when a previously-DOWN bucket comes back — was completely unwired
+# (no typed handler, not in any UAC alert registry) so it silently no-opped
+# through the router's no-match Slack fallback (non-runtime event -> no-op).
+# The operator explicitly asked for a fire-again-on-RESOLVED notification once
+# CONSOLIDATOR_DOWN got its recurring-cooldown fix — this is that other half.
+CONSOLIDATOR_RECOVERED = "CONSOLIDATOR_RECOVERED"
 
 from ..circuit_breaker import STATE_OPEN, CircuitBreaker
 from ..notifiers.pagerduty import PagerDutySeverity
@@ -52,7 +67,9 @@ logger = logging.getLogger(__name__)
 _PAGING_CHANNELS: frozenset[str] = frozenset({"pagerduty", "telegram"})
 _CRITICAL: PagerDutySeverity = "critical"
 
-_CONSOLIDATOR_EVENTS: frozenset[str] = frozenset({CONSOLIDATOR_DOWN, MANIFEST_CONSOLIDATION_FAILED})
+_CONSOLIDATOR_EVENTS: frozenset[str] = frozenset(
+    {CONSOLIDATOR_DOWN, MANIFEST_CONSOLIDATION_FAILED, CONSOLIDATOR_RECOVERED}
+)
 
 # Repeat-failure escalation breaker (reuses the service CircuitBreaker idiom —
 # do NOT invent new machinery). The consolidator runs on a */1 Scheduler tick,
@@ -184,17 +201,50 @@ def handle_manifest_consolidation_failed_payload(payload: dict[str, object]) -> 
     )
 
 
+def handle_consolidator_recovered_payload(payload: dict[str, object]) -> None:
+    """Route a CONSOLIDATOR_RECOVERED event — INFO, notify-only (no page).
+
+    The RESOLVED half of the CONSOLIDATOR_DOWN state transition (2026-08-06
+    fix): fires unconditionally on recovery (a distinct event_name -> its own
+    dedup key, never suppressed by CONSOLIDATOR_DOWN's cooldown) so the
+    operator sees the bucket come back, not just silence after the last
+    hourly re-remind. Telegram/Slack only — a recovery is informational, it
+    never needs to page.
+
+    Payload keys mirror ``handle_consolidator_down_payload``: ``bucket``,
+    ``heartbeat_age_sec``, ``detail``.
+    """
+    bucket = str(payload.get("bucket", "unknown"))
+    severity = AlertSeverity.INFO
+    log_event(
+        "CONSOLIDATOR_ALERT_ROUTED",
+        details={"event_name": CONSOLIDATOR_RECOVERED, "bucket": bucket, "severity": severity.value},
+    )
+    logger.info("Consolidator RECOVERED for bucket=%s", bucket)
+    enriched = _enrich(payload, severity, default_message=f"manifest consolidator RECOVERED for bucket={bucket}")
+    route_event_with_explicit_channels(
+        CONSOLIDATOR_RECOVERED,
+        enriched,
+        channels={"telegram"},
+        pd_severity=None,
+    )
+
+
 def route_consolidator_event(event_name: str, details: dict[str, object]) -> None:
     """Dispatch a consolidator event to the matching handler.
 
-    Only handles CONSOLIDATOR_DOWN and MANIFEST_CONSOLIDATION_FAILED; an
-    unknown event name is logged and produces NO alert (closed-set rule —
-    the generic router fallback already covers everything else).
+    Handles CONSOLIDATOR_DOWN, MANIFEST_CONSOLIDATION_FAILED, and
+    CONSOLIDATOR_RECOVERED; an unknown event name is logged and produces NO
+    alert (closed-set rule — the generic router fallback already covers
+    everything else).
     """
     if event_name == CONSOLIDATOR_DOWN:
         handle_consolidator_down_payload(details)
         return
     if event_name == MANIFEST_CONSOLIDATION_FAILED:
         handle_manifest_consolidation_failed_payload(details)
+        return
+    if event_name == CONSOLIDATOR_RECOVERED:
+        handle_consolidator_recovered_payload(details)
         return
     logger.warning("route_consolidator_event called with unrecognised event=%s", event_name)

@@ -133,7 +133,38 @@ class AlertingSystemConfig(UnifiedCloudConfig):
     )
     email_smtp_host: str | None = None
     email_smtp_port: int = 587
-    email_to: ClassVar[list[str]] = []
+    email_smtp_username: str = Field(
+        default="",
+        description=(
+            "SMTP auth username for the CRITICAL-severity email fallback (fires when "
+            "PagerDuty is unavailable/fails — see notifiers/email.py). SM hot-reload via "
+            "'alerting-email-smtp-username'; env EMAIL_SMTP_USERNAME is the fallback. "
+            "Empty = email fallback disabled."
+        ),
+    )
+    email_smtp_password: str = Field(
+        default="",
+        description=(
+            "SMTP auth password (from SM). NEVER LOG. SM hot-reload via "
+            "'alerting-email-smtp-password'; env EMAIL_SMTP_PASSWORD is the fallback."
+        ),
+    )
+    email_from_address: str = Field(
+        default="",
+        description=(
+            "From: address for the CRITICAL email fallback. SM hot-reload via "
+            "'alerting-email-from-address'; env EMAIL_FROM_ADDRESS is the fallback. Empty "
+            "falls back to email_smtp_username at send time."
+        ),
+    )
+    email_to: list[str] = Field(
+        default_factory=list,
+        description=(
+            "To: recipient addresses for the CRITICAL email fallback (2026-08-06 fix — "
+            "was a dead ClassVar with zero consumers; now wired to notifiers/email.py). "
+            "Empty = email fallback disabled (no recipients)."
+        ),
+    )
     google_oauth_domain: str = ""
     poll_interval_seconds: int = 10
     metrics_endpoints: ClassVar[dict[str, str]] = {}
