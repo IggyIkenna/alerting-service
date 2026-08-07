@@ -48,11 +48,18 @@ ENV SETUPTOOLS_SCM_PRETEND_VERSION=${SETUPTOOLS_SCM_PRETEND_VERSION}
 # freshly-minted access token (same auth-precheck mechanism already proven against this
 # exact index) as a BuildKit secret, scoped to only this RUN layer — never baked into an
 # image layer or history.
+# --upgrade-package unified-api-contracts (2026-08-07): the base image's pre-baked UAC copy
+# already satisfies alerting-service's wide floor (>=0.95.0,<1.0.0), so a plain resolve leaves
+# it untouched even when a newer UAC wheel with a real fix has since been published — this
+# service's DP-alert routing rules live in UAC and need same-day freshness, unlike UTL. Scoped
+# to this one package only (not a blanket --upgrade) to keep the rest of the base image's
+# pinned resolution untouched. See
+# alerting_service_lifecycle_events_sub_dual_consumer_slack_spam_2026_08_07.md.
 # Retry-with-backoff (3 attempts, ~45s total budget): hardens against the exact
 # publish-ordering-race window this doc tracks recurring on the next cross-repo floor-bump.
 RUN --mount=type=secret,id=gar_token \
     UV_EXTRA_INDEX_URL="https://oauth2accesstoken:$(cat /run/secrets/gar_token)@asia-northeast1-python.pkg.dev/central-element-323112/unified-libraries/simple/" \
-    sh -c 'i=1; until uv pip install --system --no-sources -e .; do [ "$i" -ge 3 ] && { echo "uv pip install failed after 3 attempts" >&2; exit 1; }; w=$((15 * i)); echo "uv pip install failed (attempt $i/3) -- retrying in ${w}s"; sleep "$w"; i=$((i + 1)); done'
+    sh -c 'i=1; until uv pip install --system --no-sources --upgrade-package unified-api-contracts -e .; do [ "$i" -ge 3 ] && { echo "uv pip install failed after 3 attempts" >&2; exit 1; }; w=$((15 * i)); echo "uv pip install failed (attempt $i/3) -- retrying in ${w}s"; sleep "$w"; i=$((i + 1)); done'
 
 # Create non-root user; pre-create mock-mode cache dir needed by delivery_status tests
 RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
