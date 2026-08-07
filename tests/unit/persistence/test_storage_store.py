@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 
-from alerting_service.persistence.storage_store import AlertStorageStore, QuietnessReport
+from alerting_service.persistence.storage_store import AlertStorageStore, QuietnessReport, _is_gcs_rate_limit
 
 
 @pytest.fixture
@@ -350,3 +350,142 @@ class TestReadDeliveryRecords:
 
         # Should scan 7 date partitions
         assert mock_storage_client.list_blobs.call_count == 7
+
+
+class TestIsGcsRateLimit:
+    """Unit tests for the _is_gcs_rate_limit helper."""
+
+    def test_true_for_too_many_requests_class(self) -> None:
+        class TooManyRequests(Exception):  # noqa: N818
+            pass
+
+        assert _is_gcs_rate_limit(TooManyRequests("bucket throttled"))
+
+    def test_true_for_rate_limit_exceeded_class(self) -> None:
+        class RateLimitExceeded(Exception):  # noqa: N818
+            pass
+
+        assert _is_gcs_rate_limit(RateLimitExceeded("x"))
+
+    def test_true_for_resource_exhausted_class(self) -> None:
+        class ResourceExhausted(Exception):  # noqa: N818
+            pass
+
+        assert _is_gcs_rate_limit(ResourceExhausted("grpc RESOURCE_EXHAUSTED"))
+
+    def test_true_for_429_in_message(self) -> None:
+        assert _is_gcs_rate_limit(RuntimeError("HTTP 429 Too Many Requests"))
+
+    def test_true_for_ratelimitexceeded_camel(self) -> None:
+        assert _is_gcs_rate_limit(RuntimeError("rateLimitExceeded on bucket foo"))
+
+    def test_true_for_rate_limit_exceeded_snake(self) -> None:
+        assert _is_gcs_rate_limit(RuntimeError("rate_limit_exceeded for project"))
+
+    def test_true_for_resource_exhausted_in_message(self) -> None:
+        assert _is_gcs_rate_limit(RuntimeError("RESOURCE_EXHAUSTED: quota exceeded"))
+
+    def test_false_for_unrelated_error(self) -> None:
+        assert not _is_gcs_rate_limit(RuntimeError("NotFound: blob missing"))
+
+    def test_false_for_permission_error(self) -> None:
+        assert not _is_gcs_rate_limit(PermissionError("403 Forbidden"))
+
+
+class TestGcs429RoutingToDP:
+    """Write methods must emit DP_GCS_429_THRASH (not SERVICE_ERROR) on 429 errors."""
+
+    @pytest.fixture
+    def mock_classify(self) -> MagicMock:
+        with patch("alerting_service.persistence.storage_store.classify_and_emit_error") as m:
+            yield m
+
+    def _make_429_exc(self) -> RuntimeError:
+        return RuntimeError("HTTP 429 rateLimitExceeded")
+
+    def test_write_config_snapshot_emits_dp_gcs_429_thrash(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+        mock_classify: MagicMock,
+    ) -> None:
+        mock_storage_client.upload_bytes.side_effect = self._make_429_exc()
+        storage_store.write_config_snapshot({"rules": []})
+
+        mock_log_event.assert_called_once()
+        assert mock_log_event.call_args[0][0] == "DP_GCS_429_THRASH"
+        details = mock_log_event.call_args.kwargs.get("details", mock_log_event.call_args[1].get("details", {}))
+        assert details["operation"] == "write_config_snapshot"
+        mock_classify.assert_not_called()
+
+    def test_write_config_snapshot_still_uses_classify_for_non_429(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+        mock_classify: MagicMock,
+    ) -> None:
+        mock_storage_client.upload_bytes.side_effect = RuntimeError("connection reset")
+        storage_store.write_config_snapshot({"rules": []})
+        mock_classify.assert_called_once()
+        # log_event should NOT have been called with DP_GCS_429_THRASH
+        dp_calls = [c for c in mock_log_event.call_args_list if c[0][0] == "DP_GCS_429_THRASH"]
+        assert dp_calls == []
+
+    def test_write_alert_history_emits_dp_gcs_429_thrash(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+        mock_classify: MagicMock,
+    ) -> None:
+        mock_storage_client.upload_bytes.side_effect = self._make_429_exc()
+        storage_store.write_alert_history({"alert_id": "a1"})
+
+        mock_log_event.assert_called_once()
+        assert mock_log_event.call_args[0][0] == "DP_GCS_429_THRASH"
+        mock_classify.assert_not_called()
+
+    def test_write_quietness_report_emits_dp_gcs_429_thrash(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+        mock_classify: MagicMock,
+    ) -> None:
+        mock_storage_client.upload_bytes.side_effect = self._make_429_exc()
+        report = [QuietnessReport(alert_code="X", fires=1, suppressed=0, fp_count=0, fp_rate=0.0, threshold=0.0)]
+        storage_store.write_quietness_report("run-1", report)
+
+        mock_log_event.assert_called_once()
+        assert mock_log_event.call_args[0][0] == "DP_GCS_429_THRASH"
+        mock_classify.assert_not_called()
+
+    def test_write_cooldown_state_emits_dp_gcs_429_thrash(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+        mock_classify: MagicMock,
+    ) -> None:
+        mock_storage_client.upload_bytes.side_effect = self._make_429_exc()
+        storage_store.write_cooldown_state({"rule-1": "ts"})
+
+        mock_log_event.assert_called_once()
+        assert mock_log_event.call_args[0][0] == "DP_GCS_429_THRASH"
+        mock_classify.assert_not_called()
+
+    def test_resource_exhausted_also_routes_to_dp_gcs_429_thrash(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+        mock_classify: MagicMock,
+    ) -> None:
+        mock_storage_client.upload_bytes.side_effect = RuntimeError("RESOURCE_EXHAUSTED quota exceeded")
+        storage_store.write_config_snapshot({"rules": []})
+
+        mock_log_event.assert_called_once()
+        assert mock_log_event.call_args[0][0] == "DP_GCS_429_THRASH"
+        mock_classify.assert_not_called()
