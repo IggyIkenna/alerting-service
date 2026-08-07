@@ -678,16 +678,17 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
     dp_rule = data_pipeline_rule_for(event_name)
     if dp_rule is not None:
         if _batch_mode:
-            # Apply the same STATIC BACKLOG downgrade as the live path (see
-            # _effective_dp_severity) so batch-replay audit stats don't count a
-            # suppressed page as paged.
+            # Apply the same STATIC BACKLOG downgrade as the live path (see _effective_dp_severity)
+            # so batch-replay audit stats don't count a suppressed page as paged.
             dp_severity = _effective_dp_severity(event_name, details, dp_rule.severity)
             dp_channels = {ch.value for ch in dp_rule.channels} or {AlertChannel.LOG_ONLY.value}
             dp_pd = "critical" if dp_severity is AlertSeverity.CRITICAL else None
             _record_batch_audit(alert_id, event_name, dp_channels, dp_pd, source, details)
             return
-        _route_data_pipeline_event(event_name, summary, details, dp_rule.severity, config)
-        log_event("ALERT_SENT", details={"event_name": event_name, "alert_id": alert_id})
+        if dp_rule.mirror_live:  # False (2026-08-07): still tracked, skips the live post
+            _route_data_pipeline_event(event_name, summary, details, dp_rule.severity, config)
+        sent: dict[str, object] = {"event_name": event_name, "alert_id": alert_id, "mirrored_live": dp_rule.mirror_live}
+        log_event("ALERT_SENT", details=sent)
         _persist_config_snapshot(config)
         return
 
