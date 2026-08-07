@@ -36,6 +36,13 @@ _SM_DATA_PIPELINE_SLACK_WEBHOOK = "DATA_PIPELINE_ALERTS_SLACK_WEBHOOK"
 # Deployment-ui base URL + durable run.log bucket — for alert deep-link enrichment
 _SM_DEPLOYMENT_UI_BASE_URL = "DEPLOYMENT_UI_BASE_URL"
 _SM_DEPLOYMENT_SCRIPTS_LOG_BUCKET = "DEPLOYMENT_SCRIPTS_LOG_BUCKET"
+# CRITICAL-severity email fallback (2026-08-06 — fires when PagerDuty is
+# unavailable/fails; see notifiers/email.py). Host/port stay plain config
+# (non-secret); auth + from-address are genuinely secret, hot-reloaded here
+# like every other paging credential in this class.
+_SM_EMAIL_SMTP_USERNAME = "alerting-email-smtp-username"
+_SM_EMAIL_SMTP_PASSWORD = "alerting-email-smtp-password"
+_SM_EMAIL_FROM_ADDRESS = "alerting-email-from-address"
 
 _ALL_PAGING_SM_KEYS = (
     _SM_BOT_TOKEN,
@@ -51,6 +58,9 @@ _ALL_PAGING_SM_KEYS = (
     _SM_DATA_PIPELINE_SLACK_WEBHOOK,
     _SM_DEPLOYMENT_UI_BASE_URL,
     _SM_DEPLOYMENT_SCRIPTS_LOG_BUCKET,
+    _SM_EMAIL_SMTP_USERNAME,
+    _SM_EMAIL_SMTP_PASSWORD,
+    _SM_EMAIL_FROM_ADDRESS,
 )
 
 _PAGING_REFRESH_INTERVAL = 300.0  # 5 minutes
@@ -126,6 +136,18 @@ class _PagingCredentialsReloader:
         with self._lock:
             return self._credentials.get("deployment_scripts_log_bucket") or ""  # noqa: qg-empty-fallback
 
+    def get_email_smtp_username(self) -> str:
+        with self._lock:
+            return self._credentials.get("email_smtp_username") or ""  # noqa: qg-empty-fallback
+
+    def get_email_smtp_password(self) -> str:
+        with self._lock:
+            return self._credentials.get("email_smtp_password") or ""  # noqa: qg-empty-fallback
+
+    def get_email_from_address(self) -> str:
+        with self._lock:
+            return self._credentials.get("email_from_address") or ""  # noqa: qg-empty-fallback
+
     def start(self, project_id: str | None) -> None:
         if self._started:
             return
@@ -170,6 +192,9 @@ class _PagingCredentialsReloader:
                 _SM_DATA_PIPELINE_SLACK_WEBHOOK: "data_pipeline_slack_webhook",
                 _SM_DEPLOYMENT_UI_BASE_URL: "deployment_ui_base_url",
                 _SM_DEPLOYMENT_SCRIPTS_LOG_BUCKET: "deployment_scripts_log_bucket",
+                _SM_EMAIL_SMTP_USERNAME: "email_smtp_username",
+                _SM_EMAIL_SMTP_PASSWORD: "email_smtp_password",
+                _SM_EMAIL_FROM_ADDRESS: "email_from_address",
             }
             for sm_key, cred_key in _mapping.items():
                 val = raw.get(sm_key)
@@ -225,6 +250,8 @@ def get_paging_credentials() -> dict[str, str]:
     ``data_pipeline_slack_webhook``.
     Deep-link enrichment keys: ``deployment_ui_base_url``,
     ``deployment_scripts_log_bucket``.
+    Email fallback keys: ``email_smtp_username``, ``email_smtp_password``,
+    ``email_from_address``.
     Empty string for keys not yet provisioned in SM.
     """
     return {
@@ -241,6 +268,9 @@ def get_paging_credentials() -> dict[str, str]:
         "data_pipeline_slack_webhook": _paging_creds_reloader.get_data_pipeline_slack_webhook(),
         "deployment_ui_base_url": _paging_creds_reloader.get_deployment_ui_base_url(),
         "deployment_scripts_log_bucket": _paging_creds_reloader.get_deployment_scripts_log_bucket(),
+        "email_smtp_username": _paging_creds_reloader.get_email_smtp_username(),
+        "email_smtp_password": _paging_creds_reloader.get_email_smtp_password(),
+        "email_from_address": _paging_creds_reloader.get_email_from_address(),
     }
 
 

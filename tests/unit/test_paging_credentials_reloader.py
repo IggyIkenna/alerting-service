@@ -7,7 +7,9 @@ Covers:
   4. SM fetch failure on _refresh — keeps previous credentials (no regression)
   5. stop() — joins thread, idempotent
   6. Double start() — idempotent, no duplicate thread
-  7. get_paging_credentials() module function — returns dict with all 10 keys
+  7. get_paging_credentials() module function — returns dict with all keys (incl.
+     the 2026-08-06 CRITICAL-email-fallback keys: email_smtp_username/_password/
+     email_from_address)
   8. Credential refresh on SM change — second SM response supersedes first
   9. Twilio SM keys loaded and accessible via getters
 """
@@ -51,6 +53,9 @@ _ALL_PAGING_KEYS = {
     "data_pipeline_slack_webhook",
     "deployment_ui_base_url",
     "deployment_scripts_log_bucket",
+    "email_smtp_username",
+    "email_smtp_password",
+    "email_from_address",
 }
 
 

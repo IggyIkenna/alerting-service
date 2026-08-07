@@ -71,6 +71,7 @@ from ..recon_drift_event_handler import (
 from ..risk_rule_event_handler import handle_risk_rule_fired_payload
 from ..rules.consolidator_rules import (
     handle_consolidator_down_payload,
+    handle_consolidator_recovered_payload,
     handle_manifest_consolidation_failed_payload,
 )
 from ..rules.margin_rules import route_margin_event_payload
@@ -171,6 +172,7 @@ _BATCH_LIVE_RECON_DRIFT_EVENT: str = "BATCH_LIVE_RECON_DRIFT"
 # manifest_consolidator) — see rules/consolidator_rules.py.
 _CONSOLIDATOR_DOWN_EVENT: str = "CONSOLIDATOR_DOWN"
 _MANIFEST_CONSOLIDATION_FAILED_EVENT: str = "MANIFEST_CONSOLIDATION_FAILED"
+_CONSOLIDATOR_RECOVERED_EVENT: str = "CONSOLIDATOR_RECOVERED"
 
 
 def _extract_event_name(payload: dict[str, object]) -> str:
@@ -444,6 +446,7 @@ class AlertSubscriber:
         _BATCH_LIVE_RECON_DRIFT_EVENT: handle_batch_live_recon_drift_payload,
         _CONSOLIDATOR_DOWN_EVENT: handle_consolidator_down_payload,
         _MANIFEST_CONSOLIDATION_FAILED_EVENT: handle_manifest_consolidation_failed_payload,
+        _CONSOLIDATOR_RECOVERED_EVENT: handle_consolidator_recovered_payload,
     }
 
     @classmethod

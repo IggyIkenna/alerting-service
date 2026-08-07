@@ -53,6 +53,7 @@ from ..gateway.recovery_verifier import RecoveryVerifier
 from ..gateway.state_machine import IncidentStateMachine
 from ..persistence.storage_store import AlertStorageStore
 from .data_pipeline_slack import send_data_pipeline_alert
+from .email import send_critical_fallback
 from .incident_fallback import route_incident_envelope_to_fallbacks
 from .pagerduty import PagerDutySeverity
 from .pagerduty import send_event as pd_send_event
@@ -65,26 +66,22 @@ _VALID_SEVERITIES: frozenset[str] = frozenset(get_args(PagerDutySeverity))
 # Module-level deduplicator (shared across all route_event calls).
 _deduplicator = AlertDeduplicator(ttl_seconds=60.0)
 
-# Recurring-alert cooldowns: the data-pipeline monitor sweeps re-detect the SAME
-# ongoing condition every poll, so without a cooldown a single stalled VM (or a
-# still-failing manifest cell) floods the channel every sweep. Each entry gets a
-# dedup window >= its detector's sweep interval — with the volatile-field-excluding
-# dedup key, the same identity+event collapses to ONE key, held for this cooldown,
-# so an ongoing condition pings once per window and re-alerts only when it resolves
-# and recurs (or the window elapses, for the still-firing CRITICAL case).
-#
-# Most CRITICAL events (CONSOLIDATOR_DOWN) are intentionally NOT here — they are
-# one-shot/flappy signals where the short default keeps the incident page from
-# being over-suppressed. A CRITICAL event opts in ONLY when its underlying
-# condition is a *static, re-scanned-every-tick* signal (e.g. a manifest cell that
-# stays failed until a human re-runs the backfill) with a cooldown >= its
-# detector's measured cadence — this still pages (re-nags every cooldown window
-# while unresolved), it just stops literally duplicating every single tick.
+# Recurring-alert cooldowns: a sweep/breaker re-detects the SAME ongoing
+# condition every tick; window >= detector cadence. The volatile-field-
+# excluding dedup key collapses identity+event to ONE key held for this
+# cooldown — pings once per window (re-nagging, not silence), re-alerts
+# sooner on resolve+recur. CONSOLIDATOR_DOWN/MANIFEST_CONSOLIDATION_FAILED/
+# FEED_REFETCH_FAILED dispatch CRITICAL via route_event_with_explicit_channels
+# (2026-08-06: that path now honours this map too, was bare 60s) — hourly
+# re-remind while down; each fires again on its own RESOLVED/RECOVERED name.
 _RECURRING_ALERT_COOLDOWNS: dict[str, float] = {
     "DP_VM_STALL": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
     "DP_EVENT_LOOP_STARVED": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
     "DP_RUN_MOSTLY_EMPTY": 1800.0,  # 30 min; CRITICAL, static manifest-cell signal, >= 900s meta-sweep cadence
     "DP_VM_GONE_NO_CAPTURE": 1800.0,  # 30 min; CRITICAL, static exit-code-sweep signal, >= 300s detector cadence
+    "CONSOLIDATOR_DOWN": 3600.0,  # 1h; CRITICAL, fires once + hourly re-remind while down
+    "MANIFEST_CONSOLIDATION_FAILED": 3600.0,  # 1h; escalates WARN->CRITICAL on breaker-open (crash-loop)
+    "FEED_REFETCH_FAILED": 3600.0,  # 1h; escalates WARN/HIGH->CRITICAL on breaker-open (same pattern)
 }
 
 # DP_RUN_MOSTLY_EMPTY STATIC BACKLOG paging-cadence downgrade lives in
@@ -764,10 +761,15 @@ def route_event_with_explicit_channels(
     the ONLY difference is that channel resolution is supplied by the caller.
     ``channels == {"log_only"}`` (or any set excluding pagerduty/telegram) results
     in no delivery — only the ``ALERT_ROUTED`` / ``ALERT_SENT`` audit trail.
+
+    Dedup now consults ``_dedup_window_for`` too (2026-08-06 fix) — this path
+    used to sit on the deduplicator's bare 60s default, so CONSOLIDATOR_DOWN
+    (dispatched here, bypassing ``route_event``'s cooldown check) re-fired
+    ~every 60s instead of respecting its opted-in hourly cooldown.
     """
     global _batch_deduplicated
 
-    if _deduplicator.is_duplicate(event_name, details):
+    if _deduplicator.is_duplicate(event_name, details, ttl_override=_dedup_window_for(event_name, details)):
         logger.debug("Duplicate alert suppressed (explicit channels): %s", event_name)
         if _batch_mode:
             _batch_deduplicated += 1
@@ -832,6 +834,10 @@ def _deliver_to_channels(
         if not ok:
             logger.error("PagerDuty delivery failed for event %s", event_name)
             any_failed = True
+            # CRITICAL last-resort fallback (2026-08-06): PD unavailable/failing ->
+            # email (log_event observability lives in notifiers/email.py).
+            if severity == "critical" and not send_critical_fallback(summary, source, details, config):
+                logger.error("Email fallback ALSO failed for CRITICAL event %s — undelivered", event_name)
         _persist_delivery_record(
             _build_delivery_record(
                 alert_id,

@@ -11,6 +11,7 @@ from alerting_service.circuit_breaker import CircuitBreaker
 from alerting_service.rules import consolidator_rules
 from alerting_service.rules.consolidator_rules import (
     handle_consolidator_down_payload,
+    handle_consolidator_recovered_payload,
     handle_manifest_consolidation_failed_payload,
     route_consolidator_event,
 )
@@ -143,6 +144,35 @@ class TestManifestConsolidationFailed:
 
 
 # ---------------------------------------------------------------------------
+# CONSOLIDATOR_RECOVERED → INFO, notify-only (the RESOLVED half, 2026-08-06)
+# ---------------------------------------------------------------------------
+
+
+class TestConsolidatorRecovered:
+    def test_routes_info_to_telegram_only_no_page(self, mock_route: MagicMock, mock_log_event: MagicMock) -> None:
+        handle_consolidator_recovered_payload({"bucket": "bkt-1"})
+
+        mock_route.assert_called_once()
+        event_name, details = mock_route.call_args.args
+        assert event_name == "CONSOLIDATOR_RECOVERED"
+        assert mock_route.call_args.kwargs["channels"] == {"telegram"}
+        assert mock_route.call_args.kwargs["pd_severity"] is None
+        assert details["severity"] == "INFO"
+
+    def test_payload_carries_bucket_and_default_message(self, mock_route: MagicMock, mock_log_event: MagicMock) -> None:
+        handle_consolidator_recovered_payload({"bucket": "bkt-2"})
+
+        _, details = mock_route.call_args.args
+        assert details["bucket"] == "bkt-2"
+        assert details["message"] == "manifest consolidator RECOVERED for bucket=bkt-2"
+
+    def test_never_dispatches_to_pagerduty_channel(self, mock_route: MagicMock, mock_log_event: MagicMock) -> None:
+        handle_consolidator_recovered_payload({"bucket": "bkt-3"})
+
+        assert "pagerduty" not in mock_route.call_args.kwargs["channels"]
+
+
+# ---------------------------------------------------------------------------
 # Dispatch: route_consolidator_event + subscriber typed-handler wiring
 # ---------------------------------------------------------------------------
 
@@ -159,10 +189,17 @@ class TestDispatch:
         assert mock_route.call_args.args[0] == "MANIFEST_CONSOLIDATION_FAILED"
 
     def test_unknown_event_produces_no_alert(self, mock_route: MagicMock, mock_log_event: MagicMock) -> None:
-        route_consolidator_event("CONSOLIDATOR_RECOVERED", {"bucket": "bkt-x"})
+        route_consolidator_event("SOME_OTHER_EVENT", {"bucket": "bkt-x"})
 
         mock_route.assert_not_called()
         mock_log_event.assert_not_called()
+
+    def test_route_consolidator_event_dispatches_recovered(
+        self, mock_route: MagicMock, mock_log_event: MagicMock
+    ) -> None:
+        route_consolidator_event("CONSOLIDATOR_RECOVERED", {"bucket": "bkt-x"})
+
+        assert mock_route.call_args.args[0] == "CONSOLIDATOR_RECOVERED"
 
     def test_subscriber_dispatches_consolidator_down_to_rule(
         self, mock_route: MagicMock, mock_log_event: MagicMock
@@ -181,3 +218,12 @@ class TestDispatch:
         mock_route.assert_called_once()
         assert mock_route.call_args.args[0] == "MANIFEST_CONSOLIDATION_FAILED"
         assert mock_route.call_args.args[1]["severity"] == "WARN"
+
+    def test_subscriber_dispatches_consolidator_recovered_to_rule(
+        self, mock_route: MagicMock, mock_log_event: MagicMock
+    ) -> None:
+        AlertSubscriber.dispatch_event("CONSOLIDATOR_RECOVERED", {"bucket": "bkt-x"})
+
+        mock_route.assert_called_once()
+        assert mock_route.call_args.args[0] == "CONSOLIDATOR_RECOVERED"
+        assert mock_route.call_args.kwargs["pd_severity"] is None
