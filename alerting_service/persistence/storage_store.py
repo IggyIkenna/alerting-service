@@ -31,6 +31,26 @@ from unified_trading_library import (
 
 logger = logging.getLogger(__name__)
 
+
+def _is_gcs_rate_limit(exc: BaseException) -> bool:
+    """Return True when exc looks like a GCS 429 / RESOURCE_EXHAUSTED rate-limit error.
+
+    Checks class name and message text without importing provider-specific exception
+    classes (keeps UTL storage abstraction intact).
+    """
+    cls_name = type(exc).__name__
+    if cls_name in ("TooManyRequests", "RateLimitExceeded", "ResourceExhausted"):
+        return True
+    msg = str(exc).lower()
+    return (
+        "429" in msg
+        or "ratelimitexceeded" in msg
+        or "rate_limit_exceeded" in msg
+        or "resource_exhausted" in msg
+        or "resourceexhausted" in msg
+    )
+
+
 _HISTORY_PREFIX = "alerting/history"
 _CONFIGS_PREFIX = "alerting/configs"
 _STATE_PREFIX = "alerting/state"
@@ -122,30 +142,29 @@ class AlertStorageStore:
                 data=data,
                 content_type="application/x-ndjson",
             )
-            try:
-                writer = ManifestWriter(
-                    service_name="alerting-service",
-                    catalogue_bucket=self._bucket,
-                )
-                writer.add(
-                    processing_date=now.date(),
-                    row_count=1,
-                    data_type="alert_history",
-                )
-                writer.write()
-            except Exception as _mw_err:
-                logger.debug("ManifestWriter failed: %s", _mw_err)
+            self._record_manifest_row(processing_date=now.date(), row_count=1, data_type="alert_history")
             log_event(
                 "PERSISTENCE_COMPLETED",
                 details={"target": "alert_history", "blob_path": blob_path},
             )
         except Exception as exc:
-            classify_and_emit_error(
-                exc,
-                service_name="alerting-service",
-                operation="write_alert_history",
-                shard=blob_path,
-            )
+            if _is_gcs_rate_limit(exc):
+                log_event(
+                    "DP_GCS_429_THRASH",
+                    details={
+                        "service": "alerting-service",
+                        "operation": "write_alert_history",
+                        "shard": blob_path,
+                        "error": str(exc),
+                    },
+                )
+            else:
+                classify_and_emit_error(
+                    exc,
+                    service_name="alerting-service",
+                    operation="write_alert_history",
+                    shard=blob_path,
+                )
 
     # ------------------------------------------------------------------
     # Quietness report (JSONL)
@@ -188,12 +207,23 @@ class AlertStorageStore:
                 details={"target": "quietness_report", "blob_path": blob_path, "run_id": run_id, "rows": len(report)},
             )
         except Exception as exc:
-            classify_and_emit_error(
-                exc,
-                service_name="alerting-service",
-                operation="write_quietness_report",
-                shard=blob_path,
-            )
+            if _is_gcs_rate_limit(exc):
+                log_event(
+                    "DP_GCS_429_THRASH",
+                    details={
+                        "service": "alerting-service",
+                        "operation": "write_quietness_report",
+                        "shard": blob_path,
+                        "error": str(exc),
+                    },
+                )
+            else:
+                classify_and_emit_error(
+                    exc,
+                    service_name="alerting-service",
+                    operation="write_quietness_report",
+                    shard=blob_path,
+                )
 
     # ------------------------------------------------------------------
     # Config snapshots (YAML)
@@ -221,12 +251,23 @@ class AlertStorageStore:
                 details={"target": "config_snapshot", "blob_path": blob_path},
             )
         except Exception as exc:
-            classify_and_emit_error(
-                exc,
-                service_name="alerting-service",
-                operation="write_config_snapshot",
-                shard=blob_path,
-            )
+            if _is_gcs_rate_limit(exc):
+                log_event(
+                    "DP_GCS_429_THRASH",
+                    details={
+                        "service": "alerting-service",
+                        "operation": "write_config_snapshot",
+                        "shard": blob_path,
+                        "error": str(exc),
+                    },
+                )
+            else:
+                classify_and_emit_error(
+                    exc,
+                    service_name="alerting-service",
+                    operation="write_config_snapshot",
+                    shard=blob_path,
+                )
 
     # ------------------------------------------------------------------
     # Cooldown state (JSON)
@@ -311,8 +352,19 @@ class AlertStorageStore:
                 details={"target": "cooldown_state", "blob_path": _COOLDOWN_BLOB},
             )
         except Exception as exc:
-            classify_and_emit_error(
-                exc,
-                service_name="alerting-service",
-                operation="write_cooldown_state",
-            )
+            if _is_gcs_rate_limit(exc):
+                log_event(
+                    "DP_GCS_429_THRASH",
+                    details={
+                        "service": "alerting-service",
+                        "operation": "write_cooldown_state",
+                        "shard": _COOLDOWN_BLOB,
+                        "error": str(exc),
+                    },
+                )
+            else:
+                classify_and_emit_error(
+                    exc,
+                    service_name="alerting-service",
+                    operation="write_cooldown_state",
+                )
