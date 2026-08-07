@@ -216,24 +216,27 @@ class TestRouteEventDataPipeline:
         assert mock_send_dp.call_count == 2
         assert mock_explicit_route.call_count == 2
 
-    def test_dp_fleet_monitor_run_started_mirrors_only_no_page(
+    def test_dp_fleet_monitor_run_started_registered_but_not_mirrored(
         self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
     ) -> None:
-        """2026-07-27 regression — routine dp-fleet-monitor telemetry must mirror to
-        #data-pipeline-alerts (not the generic incident catch-all) and never page."""
+        """2026-07-27 regression — routine dp-fleet-monitor telemetry must be exact-match
+        REGISTERED (data_pipeline_rule_for matches it, never falls through to the generic
+        incident catch-all / wrong channel) and never page. 2026-08-07 update (operator:
+        "i just need to know if it failed to complete... and if it doesnt start at all"):
+        STARTED/COMPLETED additionally no longer mirror to Slack at all on every ~5min sweep
+        tick (DataPipelineAlertRule.mirror_live=False) — the deadman/cron-watches-cron
+        sentinel layer already covers "didn't start" independently of this event."""
         route_event("DP_FLEET_MONITOR_RUN_STARTED", {"message": "sweep starting", "run_id": "20260727T000000Z-abc"})
 
-        mock_send_dp.assert_called_once()
-        assert mock_send_dp.call_args.args[3]["severity"] == "INFO"
+        mock_send_dp.assert_not_called()
         mock_explicit_route.assert_not_called()
 
-    def test_dp_fleet_monitor_run_completed_mirrors_only_no_page(
+    def test_dp_fleet_monitor_run_completed_registered_but_not_mirrored(
         self, mock_send_dp: MagicMock, mock_explicit_route: MagicMock
     ) -> None:
         route_event("DP_FLEET_MONITOR_RUN_COMPLETED", {"message": "sweep done", "elapsed_s": 12.3})
 
-        mock_send_dp.assert_called_once()
-        assert mock_send_dp.call_args.args[3]["severity"] == "INFO"
+        mock_send_dp.assert_not_called()
         mock_explicit_route.assert_not_called()
 
     def test_dp_fleet_monitor_run_failed_mirrors_and_pages(
