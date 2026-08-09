@@ -139,6 +139,70 @@ class TestWriteConfigSnapshot:
         mock_storage_client.upload_bytes.side_effect = RuntimeError("GCS down")
         storage_store.write_config_snapshot({"rules": []})
 
+    def test_identical_content_skips_redundant_write(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+    ) -> None:
+        """Regression for the 2026-08-07 GCS 429 storm: route_event() calls
+        write_config_snapshot() on every routed event with unchanged
+        (process-lifetime-static) routing_rules content — the second and
+        subsequent calls with identical content must NOT re-upload."""
+        config: dict[str, object] = {"routing_rules": [{"event_pattern": "FOO_*", "channels": ["slack"]}]}
+
+        storage_store.write_config_snapshot(config, name="routing_rules")
+        storage_store.write_config_snapshot(config, name="routing_rules")
+        storage_store.write_config_snapshot(config, name="routing_rules")
+
+        mock_storage_client.upload_bytes.assert_called_once()
+
+    def test_changed_content_writes_again(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+    ) -> None:
+        """A genuine config change (different content) must still write —
+        the dedup gate only skips byte-identical repeats, never real
+        changes."""
+        storage_store.write_config_snapshot({"routing_rules": [{"event_pattern": "FOO_*"}]}, name="routing_rules")
+        storage_store.write_config_snapshot({"routing_rules": [{"event_pattern": "BAR_*"}]}, name="routing_rules")
+
+        assert mock_storage_client.upload_bytes.call_count == 2
+
+    def test_different_names_write_independently(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+    ) -> None:
+        """The content-hash cache is keyed per snapshot `name` — identical
+        content under two different names is not conflated."""
+        config: dict[str, object] = {"rules": []}
+        storage_store.write_config_snapshot(config, name="routing_rules")
+        storage_store.write_config_snapshot(config, name="default_rules")
+
+        assert mock_storage_client.upload_bytes.call_count == 2
+
+    def test_failed_upload_does_not_poison_cache(
+        self,
+        storage_store: AlertStorageStore,
+        mock_storage_client: MagicMock,
+        mock_log_event: MagicMock,
+    ) -> None:
+        """A failed write must NOT be recorded as the last-written hash —
+        otherwise a genuinely-never-persisted snapshot would be silently
+        skipped forever on retry."""
+        config: dict[str, object] = {"rules": [{"name": "rule1"}]}
+        mock_storage_client.upload_bytes.side_effect = RuntimeError("GCS down")
+        storage_store.write_config_snapshot(config, name="routing_rules")
+
+        mock_storage_client.upload_bytes.side_effect = None
+        storage_store.write_config_snapshot(config, name="routing_rules")
+
+        assert mock_storage_client.upload_bytes.call_count == 2
+
 
 class TestCooldownState:
     def test_read_returns_empty_dict_when_blob_missing(
