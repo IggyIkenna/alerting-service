@@ -11,6 +11,7 @@ Path conventions (see ``docs/GCS_PATHS.md``):
 """
 
 import dataclasses
+import hashlib
 import json
 import logging
 import uuid
@@ -115,6 +116,9 @@ class AlertStorageStore:
             project_id=project_id,
         )
         self._bucket = bucket or _bucket_name(project_id)
+        # In-memory content-hash cache keyed by snapshot `name`, so a
+        # redundant identical write is a no-op — see `write_config_snapshot`.
+        self._last_snapshot_hash: dict[str, str] = {}
 
     # ------------------------------------------------------------------
     # Alert history (JSONL)
@@ -230,14 +234,21 @@ class AlertStorageStore:
     # ------------------------------------------------------------------
 
     def write_config_snapshot(self, config: dict[str, object], name: str = "default_rules") -> None:
-        """Write a YAML snapshot of the routing config to GCS.
+        """Write a YAML routing-config snapshot to GCS (``name`` = filename stem).
 
-        Args:
-            config: Routing rule configuration dictionary.
-            name: Filename stem (default ``default_rules``).
+        SKIPS a rewrite when content is byte-identical to the last write for
+        this ``name`` (in-memory SHA-256 gate) — fixes the 2026-08-07 GCS 429
+        storm: the router snapshots on every routed event, but
+        ``routing_rules`` is process-lifetime static, so the prior
+        unconditional write re-uploaded identical content every time. A
+        genuine change still writes immediately.
         """
-        blob_path = f"{_CONFIGS_PREFIX}/{name}.yaml"
         data = yaml.dump(config, default_flow_style=False).encode("utf-8")
+        content_hash = hashlib.sha256(data).hexdigest()
+        if self._last_snapshot_hash.get(name) == content_hash:
+            logger.debug("Config snapshot %r unchanged — skipping redundant GCS write", name)
+            return
+        blob_path = f"{_CONFIGS_PREFIX}/{name}.yaml"
 
         try:
             self._client.upload_bytes(
@@ -246,6 +257,7 @@ class AlertStorageStore:
                 data=data,
                 content_type="application/x-yaml",
             )
+            self._last_snapshot_hash[name] = content_hash
             log_event(
                 "PERSISTENCE_COMPLETED",
                 details={"target": "config_snapshot", "blob_path": blob_path},
