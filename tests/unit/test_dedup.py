@@ -112,6 +112,37 @@ class TestStableIdentityDedup:
         assert dedup.is_duplicate("TICK_STALENESS", b) is True  # only volatile fields differ
         assert dedup.is_duplicate("TICK_STALENESS", c) is False  # different instrument → distinct
 
+    def test_correlation_id_does_not_break_dedup(self) -> None:
+        """A fresh per-delivery ``correlation_id`` (subscriber-injected) must NOT
+        change the dedup key — else the recurring-event cooldowns never engage and
+        the same DP_* alert re-pages every sweep (the 2026-08-10 refire storm)."""
+        dedup = AlertDeduplicator(ttl_seconds=60.0)
+        base = {
+            "vm_name": "mdps-cefi-2022-20260810-023628",
+            "asset_group": "cefi",
+            "umbrella": "BATCH",
+            "cloud": "GCP",
+            "run_log_tail": "POLARS AGGREGATED: 1440 1m candles",
+        }
+        a = {
+            **base,
+            "correlation_id": "74fa08c7-233f-49ef-84ce-8a3f695e13e6",
+            "service_name": "dp-fleet-monitor",
+            "source": "lifecycle-events-sub",
+        }
+        b = {
+            **base,
+            "correlation_id": "00e73fc9-2a0d-49d8-b6a6-eb01e28e397f",
+            "service_name": "dp-fleet-monitor",
+            "source": "lifecycle-events-sub",
+        }
+        assert dedup.is_duplicate("DP_VM_PREEMPTED", a) is False
+        # different correlation_id (new delivery) but identical logical identity → suppressed
+        assert dedup.is_duplicate("DP_VM_PREEMPTED", b) is True
+        # a genuinely different VM is still a distinct alert
+        c = {**base, "vm_name": "mdps-cefi-2022-20260810-023141", "correlation_id": "zzz"}
+        assert dedup.is_duplicate("DP_VM_PREEMPTED", c) is False
+
 
 class TestTtlOverride:
     """A per-call ttl_override gives recurring WARN alerts a cooldown >= sweep interval."""

@@ -72,6 +72,17 @@ _VOLATILE_DETAIL_KEYS: frozenset[str] = frozenset(
         "run_log_tail",
         "trace",
         "trace_id",
+        # subscriber-injected per-delivery envelope metadata (alert_subscriber
+        # `_unwrap_utl_envelope`/`_process_message`). ``correlation_id`` is a
+        # fresh uuid (or UTL metadata value) on EVERY message — keeping it in
+        # the key made every delivery hash uniquely, so the recurring-event
+        # cooldowns (DP_VM_PREEMPTED / DP_VM_GONE_NO_CAPTURE / ...) never
+        # engaged and the same logical alert re-paged every sweep
+        # (2026-08-10 storm). ``service_name`` / ``source`` are stable but
+        # render/envelope metadata, not logical identity — same treatment.
+        "correlation_id",
+        "service_name",
+        "source",
     }
 )
 
