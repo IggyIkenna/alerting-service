@@ -66,19 +66,18 @@ _VALID_SEVERITIES: frozenset[str] = frozenset(get_args(PagerDutySeverity))
 # Module-level deduplicator (shared across all route_event calls).
 _deduplicator = AlertDeduplicator(ttl_seconds=60.0)
 
-# Recurring-alert cooldowns: a sweep/breaker re-detects the SAME ongoing
-# condition every tick; window >= detector cadence. The volatile-field-
-# excluding dedup key collapses identity+event to ONE key held for this
-# cooldown — pings once per window (re-nagging, not silence), re-alerts
-# sooner on resolve+recur. CONSOLIDATOR_DOWN/MANIFEST_CONSOLIDATION_FAILED/
-# FEED_REFETCH_FAILED dispatch CRITICAL via route_event_with_explicit_channels
-# (2026-08-06: that path now honours this map too, was bare 60s) — hourly
-# re-remind while down; each fires again on its own RESOLVED/RECOVERED name.
+# Per-event dedup cooldowns for recurring alerts whose detector re-scans the
+# same static condition every tick — window >= detector cadence. The
+# volatile-field-excluding dedup key holds ONE key per window per
+# (identity, event); re-nags while down, re-alerts on resolve+recur.
 _RECURRING_ALERT_COOLDOWNS: dict[str, float] = {
     "DP_VM_STALL": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
     "DP_EVENT_LOOP_STARVED": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
     "DP_RUN_MOSTLY_EMPTY": 1800.0,  # 30 min; CRITICAL, static manifest-cell signal, >= 900s meta-sweep cadence
     "DP_VM_GONE_NO_CAPTURE": 1800.0,  # 30 min; CRITICAL, static exit-code-sweep signal, >= 300s detector cadence
+    "DP_VM_EXIT_NONZERO": 1800.0,  # 30 min; CRITICAL, static exit-code-sweep signal, >= 300s detector cadence
+    "DP_VM_PREEMPTED": 1800.0,  # 30 min; INFO telemetry, ~5 min sweep cadence — suppress refire storm per sweep
+    "DP_VM_PREEMPTED_NO_RELAUNCH": 1800.0,  # 30 min; CRITICAL, static signal, >= 300s detector cadence
     "CONSOLIDATOR_DOWN": 3600.0,  # 1h; CRITICAL, fires once + hourly re-remind while down
     "MANIFEST_CONSOLIDATION_FAILED": 3600.0,  # 1h; escalates WARN->CRITICAL on breaker-open (crash-loop)
     "FEED_REFETCH_FAILED": 3600.0,  # 1h; escalates WARN/HIGH->CRITICAL on breaker-open (same pattern)
