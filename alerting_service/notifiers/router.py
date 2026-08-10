@@ -65,23 +65,23 @@ _VALID_SEVERITIES: frozenset[str] = frozenset(get_args(PagerDutySeverity))
 
 # Module-level deduplicator (shared across all route_event calls).
 _deduplicator = AlertDeduplicator(ttl_seconds=60.0)
-
-# Per-event dedup cooldowns for recurring alerts whose detector re-scans the
-# same static condition every tick — window >= detector cadence. The
-# volatile-field-excluding dedup key holds ONE key per window per
-# (identity, event); re-nags while down, re-alerts on resolve+recur.
+# Per-event dedup cooldowns (window >= detector cadence). One key per
+# (identity, event) per window; re-nags while down, re-alerts on resolve+recur.
 _RECURRING_ALERT_COOLDOWNS: dict[str, float] = {
-    "DP_VM_STALL": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
+    "DP_CATALOG_NOT_RUNNING": 1800.0,  # 30 min; WARN, ~15 min meta-sweep (census liveness)
+    "DP_CRON_DID_NOT_FIRE": 1800.0,  # 30 min; CRITICAL, ~15 min meta-sweep — suppress per-prefix re-fire
     "DP_EVENT_LOOP_STARVED": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
-    "DP_RUN_MOSTLY_EMPTY": 1800.0,  # 30 min; CRITICAL, static manifest-cell signal, >= 900s meta-sweep cadence
-    "DP_VM_GONE_NO_CAPTURE": 1800.0,  # 30 min; CRITICAL, static exit-code-sweep signal, >= 300s detector cadence
-    "DP_VM_EXIT_NONZERO": 1800.0,  # 30 min; CRITICAL, static exit-code-sweep signal, >= 300s detector cadence
-    "DP_VM_PREEMPTED": 1800.0,  # 30 min; INFO telemetry, ~5 min sweep cadence — suppress refire storm per sweep
-    "DP_VM_PREEMPTED_NO_RELAUNCH": 1800.0,  # 30 min; CRITICAL, static signal, >= 300s detector cadence
-    "DP_SOURCE_RATE_LIMITED": 1800.0,  # 30 min; WARN auto_recover — 429 storms re-page every sweep per VM
-    "CONSOLIDATOR_DOWN": 3600.0,  # 1h; CRITICAL, fires once + hourly re-remind while down
-    "MANIFEST_CONSOLIDATION_FAILED": 3600.0,  # 1h; escalates WARN->CRITICAL on breaker-open (crash-loop)
-    "FEED_REFETCH_FAILED": 3600.0,  # 1h; escalates WARN/HIGH->CRITICAL on breaker-open (same pattern)
+    "DP_RUN_MOSTLY_EMPTY": 1800.0,  # 30 min; CRITICAL, static manifest-cell, >= 900s meta-sweep
+    "DP_VM_EXIT_NONZERO": 1800.0,  # 30 min; CRITICAL, static exit-code signal, >= 300s cadence
+    "DP_VM_GONE_NO_CAPTURE": 1800.0,  # 30 min; CRITICAL, static exit-code signal, >= 300s cadence
+    "DP_VM_PARTIAL_UNCONFIRMED": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
+    "DP_VM_PREEMPTED": 1800.0,  # 30 min; INFO, ~5 min sweep — suppress refire per sweep
+    "DP_VM_PREEMPTED_NO_RELAUNCH": 1800.0,  # 30 min; CRITICAL, static signal, >= 300s cadence
+    "DP_VM_STALL": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
+    "DP_SOURCE_RATE_LIMITED": 1800.0,  # 30 min; WARN auto_recover — 429 storms
+    "CONSOLIDATOR_DOWN": 3600.0,  # 1h; CRITICAL, once + hourly re-remind while down
+    "MANIFEST_CONSOLIDATION_FAILED": 3600.0,  # 1h; WARN->CRITICAL on breaker-open (crash-loop)
+    "FEED_REFETCH_FAILED": 3600.0,  # 1h; WARN/HIGH->CRITICAL on breaker-open (same pattern)
 }
 
 # DP_RUN_MOSTLY_EMPTY STATIC BACKLOG paging-cadence downgrade lives in
