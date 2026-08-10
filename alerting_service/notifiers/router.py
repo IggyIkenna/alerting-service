@@ -78,6 +78,7 @@ _RECURRING_ALERT_COOLDOWNS: dict[str, float] = {
     "DP_VM_EXIT_NONZERO": 1800.0,  # 30 min; CRITICAL, static exit-code-sweep signal, >= 300s detector cadence
     "DP_VM_PREEMPTED": 1800.0,  # 30 min; INFO telemetry, ~5 min sweep cadence — suppress refire storm per sweep
     "DP_VM_PREEMPTED_NO_RELAUNCH": 1800.0,  # 30 min; CRITICAL, static signal, >= 300s detector cadence
+    "DP_SOURCE_RATE_LIMITED": 1800.0,  # 30 min; WARN auto_recover — 429 storms re-page every sweep per VM
     "CONSOLIDATOR_DOWN": 3600.0,  # 1h; CRITICAL, fires once + hourly re-remind while down
     "MANIFEST_CONSOLIDATION_FAILED": 3600.0,  # 1h; escalates WARN->CRITICAL on breaker-open (crash-loop)
     "FEED_REFETCH_FAILED": 3600.0,  # 1h; escalates WARN/HIGH->CRITICAL on breaker-open (same pattern)
