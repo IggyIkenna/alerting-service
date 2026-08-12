@@ -34,6 +34,7 @@ from fnmatch import fnmatch
 from functools import lru_cache
 from typing import cast, get_args
 
+from pydantic import BaseModel
 from unified_api_contracts import LIVE_ALERT_RULES, AlertChannel, AlertSeverity
 from unified_api_contracts.incident import (
     ImmediateSev0Override,
@@ -114,21 +115,19 @@ def _dedup_window_for(event_name: str, details: dict[str, object] | None = None)
 from alerting_service.notifiers.coalesce import (
     COALESCE_WINDOW_SECONDS as _COALESCE_WINDOW_SECONDS,
 )
-from alerting_service.notifiers.coalesce import (  # noqa: F401 — test-surface re-export (router._COALESCED_EVENT_NAMES)
-    COALESCED_EVENT_NAMES as _COALESCED_EVENT_NAMES,
-)
+from alerting_service.notifiers.coalesce import COALESCED_EVENT_NAMES, coalesce_key, reset_coalesce_window_for_tests
 from alerting_service.notifiers.coalesce import (
     check_coalesce_window as _check_coalesce_window,
-)
-from alerting_service.notifiers.coalesce import (  # noqa: F401 — test-surface re-export
-    coalesce_key as _coalesce_key,
 )
 from alerting_service.notifiers.coalesce import (
     is_synthetic as _is_synthetic,
 )
-from alerting_service.notifiers.coalesce import (  # noqa: F401 — test-surface re-export
-    reset_coalesce_window_for_tests as _reset_coalesce_window_for_tests,
-)
+
+# Only reached via router._X attribute access from tests (invisible to static
+# analysis within this file) — the reassignment below is the real usage.
+_COALESCED_EVENT_NAMES = COALESCED_EVENT_NAMES
+_coalesce_key = coalesce_key
+_reset_coalesce_window_for_tests = reset_coalesce_window_for_tests
 
 # Module-level GCS store (lazily initialised).
 _storage_store_instance: object | None = None
@@ -1085,7 +1084,7 @@ def _handle_auto_action_recovery(
 
 
 def route_legacy_alert(
-    payload: "dict[str, object] | object",
+    payload: "dict[str, object] | BaseModel",
     *,
     fallback_service: str = "unknown",
 ) -> None:

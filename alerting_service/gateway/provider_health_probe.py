@@ -17,6 +17,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import cast
 
 import httpx
 
@@ -175,8 +176,12 @@ class ProviderHealthProbe:
             resp = await client.get(url)
             latency = (time.monotonic() - t0) * 1000
             if resp.status_code == 200:
-                data = resp.json()
-                if data.get("ok") and data.get("result", {}).get("is_bot"):  # noqa: qg-empty-fallback
+                data = cast("dict[str, object]", resp.json())
+                result = data.get("result")
+                is_bot = False
+                if isinstance(result, dict):
+                    is_bot = bool(cast("dict[str, object]", result).get("is_bot"))
+                if data.get("ok") and is_bot:
                     return True, latency, None
                 return False, latency, "bot payload invalid"
             return False, latency, f"http {resp.status_code}"

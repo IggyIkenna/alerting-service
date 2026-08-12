@@ -19,6 +19,7 @@ import logging
 import subprocess
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import cast
 
 import httpx
 from unified_api_contracts.incident import IncidentEnvelope, IncidentEvidence
@@ -111,7 +112,7 @@ class EvidenceCollector:
                 if resp.status_code == 204:
                     return None
                 if resp.status_code == 200:
-                    data = resp.json()
+                    data = cast("dict[str, object]", resp.json())
                     et = data.get("evidence_type")
                     url_v = data.get("gcs_url")
                     if et and url_v:

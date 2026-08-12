@@ -22,7 +22,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, cast
 
 import httpx
 from unified_api_contracts.alerting import AlertSeverity
@@ -112,7 +112,7 @@ class PhysicalPagerNotifierWebhook(PhysicalPagerNotifier):
                 resp = client.post(self._endpoint, headers=headers, json=body)
             if 200 <= resp.status_code < 300:
                 try:
-                    payload = resp.json()
+                    payload = cast("dict[str, object]", resp.json())
                     message_id = str(payload.get("id") or payload.get("message_id") or "") or None
                 except Exception:
                     message_id = None

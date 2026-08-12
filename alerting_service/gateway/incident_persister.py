@@ -21,6 +21,7 @@ import json
 import logging
 import uuid
 from datetime import UTC, datetime
+from typing import cast
 
 from unified_api_contracts.incident import AgentActionEvent, IncidentEnvelope, IncidentState
 from unified_trading_library import (
@@ -92,7 +93,8 @@ class IncidentPersister:
         date_str = _date_partition(event.timestamp)
         blob_id = event.event_id
         blob = _actions_blob(event.parent_incident_key, date_str, blob_id)
-        self._write(blob, json.loads(event.model_dump_json()))
+        record = cast("dict[str, object]", json.loads(event.model_dump_json()))
+        self._write(blob, record)
 
     def _write(self, blob_path: str, record: dict[str, object]) -> None:
         line = (json.dumps(record, default=str) + "\n").encode()
