@@ -9,12 +9,21 @@ escalation ladder:
   outage > expected + warning + human_invest  → WARNING  + sev1_escalate (SEV1)
   outage > hard_escalation OR no-fallback     → CRITICAL (SEV0, PagerDuty + Telegram)
 
-Events consumed:
-- CONNECTIVITY_DEGRADED  — a dependency outage has been detected
-- DEPENDENCY_RECOVERED   — emitted when outage_seconds drops to 0
+STATUS (verified 2026-08-12): NOT WIRED. This module is imported by nothing —
+no handler computes ``current_outage_seconds`` and no subscriber calls these
+rules, so ``DEPENDENCY_DEGRADED`` cannot currently fire. The unit tests pass by
+calling the functions directly with synthetic values, which proves the ladder's
+arithmetic and nothing about reachability. Do not read a green test here as
+evidence that dependency alerting works.
 
-Plan: ``plans/active/connectivity_dependency_buffer_policy_2026_05_23.md``
-Phase 3 P0.6-P0.7.
+Input contract: callers pass ``event_details`` with ``dependency_id`` and
+``current_outage_seconds``, plus the matching policy. An earlier version of this
+docstring named a ``CONNECTIVITY_DEGRADED`` event as the source; **no such event
+type exists anywhere in the fleet** — it was never built. The agreed producer is
+a probe driven by each policy's ``test_method`` field; see the issue doc below.
+
+Issue: ``/plans/active/issues/dependency_health_alerting_never_wired_2026_08_12.md``
+Plan (archived): ``/plans/archive/2026_05/connectivity_dependency_buffer_policy_2026_05_23.md``
 """
 
 from __future__ import annotations
