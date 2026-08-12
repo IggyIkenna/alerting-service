@@ -145,9 +145,10 @@ async def post_incident(envelope: IncidentEnvelope) -> IncidentIngestResponse:
         )
     if envelope.human_audit_ack_required and envelope.audit_ack_due_at is None:
         sla = lookup_sla(envelope.severity_hint)
-        envelope = envelope.model_copy(
-            update={"audit_ack_due_at": datetime.now(UTC) + timedelta(seconds=sla.default_seconds)}
-        )
+        if sla.default_seconds is not None:
+            envelope = envelope.model_copy(
+                update={"audit_ack_due_at": datetime.now(UTC) + timedelta(seconds=sla.default_seconds)}
+            )
     get_gateway_state().register_incident(envelope)
     return IncidentIngestResponse(
         ok=True,

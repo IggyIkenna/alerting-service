@@ -180,7 +180,7 @@ skips = []
 
 # ── quality-gates ratchet ceilings ───────────────────────────────────────────────
 [tool.quality-gates]
-basedpyright_max_errors = 21
+basedpyright_max_errors = 0
 
 [tool.hatch.version]
 source = "vcs"

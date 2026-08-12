@@ -78,7 +78,7 @@ from ..rules.margin_rules import route_margin_event_payload
 
 logger = logging.getLogger(__name__)
 
-_EVENTS_INITIALISED = False
+_events_initialised = False
 
 
 def _ensure_local_events() -> None:
@@ -96,11 +96,11 @@ def _ensure_local_events() -> None:
     (stdout-only) loses nothing. ``sink=None`` is explicit (local mode publishes
     nowhere). SSOT: plans/active/issues/dp_event_pubsub_delivery_gap_2026_06_22.md.
     """
-    global _EVENTS_INITIALISED
-    if _EVENTS_INITIALISED:
+    global _events_initialised
+    if _events_initialised:
         return
     setup_events(service_name="dp-alerting-subscriber", mode="local", sink=None)
-    _EVENTS_INITIALISED = True
+    _events_initialised = True
 
 
 # PubSub subscriptions to pull from.
