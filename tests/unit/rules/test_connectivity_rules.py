@@ -130,12 +130,34 @@ class TestCriticalBand:
         assert a["rule_id"] == "DEPENDENCY_DEGRADED_CRITICAL"
         assert a["sev1_escalate"] is False
 
-    def test_no_fallback_any_outage_is_critical(self) -> None:
+    def test_no_fallback_below_expected_floor_stays_empty(self) -> None:
         p = _policy(fallback_available=False)
-        # Any outage > 0 with no fallback → immediate SEV0
-        alerts = evaluate_dependency_health(_event(10), p)
+        # Duration floor: outage below expected_recovery_time (60s) must NOT SEV0 —
+        # "no fallback" raises severity, never bypasses duration. A single flaky
+        # probe must not page (issue dependency_health_alerting_never_wired P0).
+        assert evaluate_dependency_health(_event(10), p) == []
+
+    def test_no_fallback_at_expected_floor_is_critical(self) -> None:
+        p = _policy(fallback_available=False)
+        # Outage >= expected floor (60s) with no fallback → SEV0 immediately
+        alerts = evaluate_dependency_health(_event(60), p)
         assert len(alerts) == 1
         assert alerts[0]["severity"] == "CRITICAL"
+        assert alerts[0]["rule_id"] == "DEPENDENCY_DEGRADED_CRITICAL"
+        assert alerts[0]["delivery_channel"] == "pagerduty+telegram"
+
+    def test_no_fallback_sub_warn_but_past_floor_is_critical(self) -> None:
+        p = _policy(fallback_available=False)
+        # Outage in [expected, warn_at) — a sub-warn band that would be silent with a
+        # fallback — escalates straight to CRITICAL because no fallback exists.
+        alerts = evaluate_dependency_health(_event(90), p)
+        assert len(alerts) == 1
+        assert alerts[0]["severity"] == "CRITICAL"
+
+    def test_no_fallback_with_fallback_sub_warn_stays_empty(self) -> None:
+        p = _policy(fallback_available=True)
+        # Control: the same sub-warn outage with a fallback available stays silent.
+        assert evaluate_dependency_health(_event(90), p) == []
 
     def test_no_fallback_zero_outage_still_empty(self) -> None:
         p = _policy(fallback_available=False)

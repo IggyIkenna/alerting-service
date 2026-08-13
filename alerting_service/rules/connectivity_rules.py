@@ -7,7 +7,8 @@ escalation ladder:
   outage <= expected_recovery_time            → no alert
   outage > expected + warning_buffer          → WARNING  (Slack)
   outage > expected + warning + human_invest  → WARNING  + sev1_escalate (SEV1)
-  outage > hard_escalation OR no-fallback     → CRITICAL (SEV0, PagerDuty + Telegram)
+  outage > hard_escalation                    → CRITICAL (SEV0, PagerDuty + Telegram)
+  no-fallback AND outage >= expected_recovery → CRITICAL (SEV0) — raises severity, never bypasses duration
 
 STATUS (verified 2026-08-12): NOT WIRED. This module is imported by nothing —
 no handler computes ``current_outage_seconds`` and no subscriber calls these
@@ -21,6 +22,13 @@ Input contract: callers pass ``event_details`` with ``dependency_id`` and
 docstring named a ``CONNECTIVITY_DEGRADED`` event as the source; **no such event
 type exists anywhere in the fleet** — it was never built. The agreed producer is
 a probe driven by each policy's ``test_method`` field; see the issue doc below.
+
+Producer contract (unwired, 2026-08-13): the prober MUST require N consecutive
+failed probes before reporting an outage — the outage clock only starts after
+the Nth consecutive failure, so ``current_outage_seconds`` is never a single
+flaky-probe artifact. This rule enforces the DURATION floor (no-fallback SEV0
+only at ``outage >= expected_recovery_time_seconds``); the consecutive-failure
+count is per-dependency producer state and cannot be enforced here.
 
 Issue: ``/plans/active/issues/dependency_health_alerting_never_wired_2026_08_12.md``
 Plan (archived): ``/plans/archive/2026_05/connectivity_dependency_buffer_policy_2026_05_23.md``
@@ -62,8 +70,16 @@ def evaluate_dependency_health(
     warn_at = expected + policy.warning_buffer_seconds
     sev1_at = warn_at + policy.human_investigation_buffer_seconds
 
-    # SEV0 conditions: exceeded hard ceiling OR zero fallback available
-    if outage >= policy.hard_escalation_seconds or not policy.fallback_available:
+    # SEV0 conditions: exceeded hard ceiling, OR (no fallback available AND the
+    # outage has already exceeded the expected-recovery floor). "No fallback"
+    # RAISES SEVERITY (a sub-warn-band outage escalates straight to CRITICAL) but
+    # never bypasses DURATION — a single flaky probe (outage < expected) must not
+    # page. The N-consecutive-failed-probes gate is the producer's job
+    # (per-dependency last-healthy state); this rule only enforces the duration
+    # floor so a buggy/short probe report cannot SEV0 on a 1-second blip.
+    if outage >= policy.hard_escalation_seconds or (
+        not policy.fallback_available and outage >= policy.expected_recovery_time_seconds
+    ):
         severity: AlertSeverity = AlertSeverity.CRITICAL
         delivery_channel = "pagerduty+telegram"
         rule_id = "DEPENDENCY_DEGRADED_CRITICAL"
