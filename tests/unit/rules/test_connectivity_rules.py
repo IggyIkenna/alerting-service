@@ -132,10 +132,16 @@ class TestCriticalBand:
 
     def test_no_fallback_any_outage_is_critical(self) -> None:
         p = _policy(fallback_available=False)
-        # Any outage > 0 with no fallback → immediate SEV0
-        alerts = evaluate_dependency_health(_event(10), p)
+        # Outage >= expected recovery time (60s) with no fallback → SEV0
+        alerts = evaluate_dependency_health(_event(60), p)
         assert len(alerts) == 1
         assert alerts[0]["severity"] == "CRITICAL"
+
+    def test_no_fallback_below_expected_is_not_critical(self) -> None:
+        # Duration floor: no-fallback raises SEVERITY but never bypasses DURATION.
+        # A single flaky probe (outage < expected recovery) must not page SEV0.
+        p = _policy(fallback_available=False)
+        assert evaluate_dependency_health(_event(10), p) == []
 
     def test_no_fallback_zero_outage_still_empty(self) -> None:
         p = _policy(fallback_available=False)

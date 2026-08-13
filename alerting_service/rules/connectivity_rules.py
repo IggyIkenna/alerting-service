@@ -7,7 +7,15 @@ escalation ladder:
   outage <= expected_recovery_time            → no alert
   outage > expected + warning_buffer          → WARNING  (Slack)
   outage > expected + warning + human_invest  → WARNING  + sev1_escalate (SEV1)
-  outage > hard_escalation OR no-fallback     → CRITICAL (SEV0, PagerDuty + Telegram)
+  outage > hard_escalation                    → CRITICAL (SEV0, PagerDuty + Telegram)
+  outage >= expected AND no-fallback          → CRITICAL (SEV0, PagerDuty + Telegram)
+
+No-fallback escalates SEVERITY but never bypasses DURATION: a dependency with
+``fallback_available=False`` reaches CRITICAL only once ``outage >=
+expected_recovery_time_seconds``, so a single flaky probe (outage of a few
+seconds) can never produce a SEV0 page. The consecutive-failure debounce (N
+failed probes before the outage clock starts) is the producer's responsibility —
+see the input contract below.
 
 STATUS (verified 2026-08-12): NOT WIRED. This module is imported by nothing —
 no handler computes ``current_outage_seconds`` and no subscriber calls these
@@ -21,6 +29,15 @@ Input contract: callers pass ``event_details`` with ``dependency_id`` and
 docstring named a ``CONNECTIVITY_DEGRADED`` event as the source; **no such event
 type exists anywhere in the fleet** — it was never built. The agreed producer is
 a probe driven by each policy's ``test_method`` field; see the issue doc below.
+
+``current_outage_seconds`` is the *sustained* outage duration, derived by the
+producer as time-since-first-failure **only after N consecutive failed probes**
+(the debounce lives in the producer, not here — this is a pure function with no
+per-dependency state, mirroring ``gateway/provider_health_probe.py``'s
+``_consecutive_fails``/``_fail_threshold``). A single flaky probe must therefore
+either report ``current_outage_seconds = 0`` (clock not started) or a value below
+``expected_recovery_time_seconds``, so it can never reach CRITICAL on the
+no-fallback path.
 
 Issue: ``/plans/active/issues/dependency_health_alerting_never_wired_2026_08_12.md``
 Plan (archived): ``/plans/archive/2026_05/connectivity_dependency_buffer_policy_2026_05_23.md``
@@ -62,8 +79,11 @@ def evaluate_dependency_health(
     warn_at = expected + policy.warning_buffer_seconds
     sev1_at = warn_at + policy.human_investigation_buffer_seconds
 
-    # SEV0 conditions: exceeded hard ceiling OR zero fallback available
-    if outage >= policy.hard_escalation_seconds or not policy.fallback_available:
+    # SEV0 conditions: exceeded hard ceiling, OR zero fallback available AND the
+    # outage has already sustained past expected recovery time. The duration floor
+    # ensures "no fallback" raises SEVERITY (CRITICAL) without bypassing DURATION —
+    # a single flaky probe (outage < expected) must never page SEV0.
+    if outage >= policy.hard_escalation_seconds or (not policy.fallback_available and outage >= expected):
         severity: AlertSeverity = AlertSeverity.CRITICAL
         delivery_channel = "pagerduty+telegram"
         rule_id = "DEPENDENCY_DEGRADED_CRITICAL"
