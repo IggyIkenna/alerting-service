@@ -5,9 +5,10 @@ AlertCode has at least one integration test asserting it fires correctly.
 
 Two tiers of coverage:
   1. Parametrized sweep (77 tests): every AlertCode matches ≥1 rule (even catch-all *).
-  2. Explicit-rule ratchet: exactly CHAOS_DRILL_FAILED + RECON_DEGRADED are catch-all-
-     only; all 75 others have dedicated explicit routing rules. Prevents new codes from
-     silently slipping through without an AlertRule.
+  2. Explicit-rule ratchet: all 77 AlertCodes have dedicated explicit routing rules
+     (UAC 76e144d5 registered CHAOS_DRILL_FAILED + DAILY_LEDGER_DIGEST and fixed the
+     RECON_DEGRADED glob, closing the last catch-all-only gaps). Prevents new codes
+     from silently slipping through without an AlertRule.
   3. Family spot-checks: DeFi Family 1/2 / risk-rule / stablecoin / QG snapshot codes
      each have an explicit (non-catch-all) routing rule.
 """
@@ -47,18 +48,13 @@ def test_every_alert_code_routes_to_at_least_one_rule(code: AlertCode) -> None:
 
 # Codes whose only handler is the catch-all `*` (no dedicated AlertRule yet).
 # Adding a code here requires also adding an explicit AlertRule in UAC rules.py.
-_KNOWN_CATCH_ALL_ONLY: frozenset[AlertCode] = frozenset(
-    {
-        AlertCode.CHAOS_DRILL_FAILED,  # DR drill; explicit rule is a future UAC addition
-        AlertCode.RECON_DEGRADED,  # RECON_DEGRADED_CLOSE has an explicit rule via RECON_DEGRADED_*
-        AlertCode.DAILY_LEDGER_DIGEST,  # Always INFO informational digest (never a paged alert);
-        # catch-all INFO routing is correct — explicit AlertRule deferred per UAC docstring
-    }
-)
+# Empty as of UAC 76e144d5 (2026-08-12): CHAOS_DRILL_FAILED + DAILY_LEDGER_DIGEST
+# got explicit rules and the RECON_DEGRADED glob fix made the bare code match too.
+_KNOWN_CATCH_ALL_ONLY: frozenset[AlertCode] = frozenset()
 
 
 def test_catch_all_only_codes_are_the_known_set() -> None:
-    """Ratchet: exactly the known 2 codes are handled only by the catch-all `*`.
+    """Ratchet: exactly the known (currently empty) set is catch-all-`*`-only.
 
     Fails when a new AlertCode is added to the enum without a corresponding
     explicit AlertRule in LIVE_ALERT_RULES. Add the AlertRule, or update
@@ -82,17 +78,17 @@ def test_catch_all_only_codes_are_the_known_set() -> None:
 
 
 def test_explicit_coverage_count_at_least_75() -> None:
-    """Growth ratchet: ≥75 of 77 AlertCodes have explicit routing rules (all
-    but the 2 known catch-all-only codes). Prevents silent regression when codes
-    are removed or rules deleted."""
+    """Growth ratchet: all 77 AlertCodes have explicit routing rules (no
+    catch-all-only codes remain, per UAC 76e144d5). Prevents silent regression
+    when codes are removed or rules deleted."""
     explicitly_covered = sum(
         1
         for code in AlertCode
         if any(r.event_pattern != "*" and fnmatch.fnmatchcase(code.value, r.event_pattern) for r in LIVE_ALERT_RULES)
     )
-    assert explicitly_covered >= 75, (
+    assert explicitly_covered >= 77, (
         f"Only {explicitly_covered} AlertCodes have explicit routing rules "
-        "(expected ≥75). A recently-added code may lack an AlertRule, or an existing "
+        "(expected ≥77). A recently-added code may lack an AlertRule, or an existing "
         "rule was removed."
     )
 
@@ -187,8 +183,8 @@ def test_recon_degraded_close_has_explicit_routing_rule() -> None:
     """RECON_DEGRADED_CLOSE must have an explicit routing rule — closing positions
     without verified reconciliation state is an operator-visibility event.
 
-    NOTE: RECON_DEGRADED (without _CLOSE) is catch-all-only; the RECON_DEGRADED_*
-    wildcard pattern covers RECON_DEGRADED_CLOSE explicitly.
+    NOTE: the RECON_DEGRADED* wildcard pattern (UAC 76e144d5) covers both the bare
+    RECON_DEGRADED code and the RECON_DEGRADED_CLOSE suffix variant explicitly.
     """
     matched = [
         r
