@@ -37,6 +37,7 @@ import logging
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
+from typing import cast
 
 import yaml
 from unified_api_contracts.dependency import DependencyHealthPolicy
@@ -63,11 +64,11 @@ def load_dependency_policies_from_yaml(config_path: str | Path) -> list[Dependen
     load the same file once a path is supplied at runtime). Fails loud on any
     invalid entry — a misconfigured policy must not be silently skipped.
     """
-    raw = yaml.safe_load(Path(config_path).read_text())
-    entries: list[dict[str, object]] = raw.get("dependencies", []) if isinstance(raw, dict) else []
+    raw = cast("dict[str, object]", yaml.safe_load(Path(config_path).read_text()))
+    entries = cast("list[dict[str, object]]", raw.get("dependencies", []))
     if not entries:
         raise ValueError(f"No 'dependencies' list found in {config_path}")
-    return [DependencyHealthPolicy(**entry) for entry in entries]
+    return [DependencyHealthPolicy.model_validate(entry) for entry in entries]
 
 
 class DependencyHealthProber:

@@ -40,7 +40,7 @@ from .rules.connectivity_rules import (
 
 logger = logging.getLogger(__name__)
 
-_POLICIES: dict[str, DependencyHealthPolicy] = {}
+_policies: dict[str, DependencyHealthPolicy] = {}
 
 _PAGING_CHANNELS: frozenset[str] = frozenset({"pagerduty", "telegram"})
 _TELEGRAM_ONLY: frozenset[str] = frozenset({"telegram"})
@@ -53,14 +53,14 @@ def set_dependency_policies(policies: list[DependencyHealthPolicy]) -> None:
     Idempotent — a later call replaces the registry wholesale. Call this once at
     startup (or on config reload) before the prober begins probing.
     """
-    global _POLICIES
-    _POLICIES = {p.dependency_id: p for p in policies}
-    logger.info("Dependency policy registry seeded with %d policies", len(_POLICIES))
+    global _policies
+    _policies = {p.dependency_id: p for p in policies}
+    logger.info("Dependency policy registry seeded with %d policies", len(_policies))
 
 
 def get_dependency_policy(dependency_id: str) -> DependencyHealthPolicy | None:
     """Return the registered policy for ``dependency_id``, or None if unknown."""
-    return _POLICIES.get(dependency_id)
+    return _policies.get(dependency_id)
 
 
 def _route_dependency_alert(alert: dict[str, object]) -> None:
