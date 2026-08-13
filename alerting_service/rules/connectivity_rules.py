@@ -7,7 +7,10 @@ escalation ladder:
   outage <= expected_recovery_time            → no alert
   outage > expected + warning_buffer          → WARNING  (Slack)
   outage > expected + warning + human_invest  → WARNING  + sev1_escalate (SEV1)
-  outage > hard_escalation OR no-fallback     → CRITICAL (SEV0, PagerDuty + Telegram)
+  outage > hard_escalation                    → CRITICAL (SEV0, PagerDuty + Telegram)
+  no fallback AND outage >= expected AND >= N consecutive failed probes
+                                               → CRITICAL (SEV0) — "no fallback" raises
+                                                 severity, never bypasses duration
 
 STATUS (verified 2026-08-12): NOT WIRED. This module is imported by nothing —
 no handler computes ``current_outage_seconds`` and no subscriber calls these
@@ -32,6 +35,19 @@ from datetime import UTC, datetime
 
 from unified_api_contracts.alerting import AlertSeverity
 from unified_api_contracts.dependency import DependencyHealthPolicy
+
+DEPENDENCY_DEGRADED_MIN_CONSECUTIVE_FAILURES: int = 3
+"""Minimum consecutive failed probes required before the no-fallback branch may
+raise an outage to CRITICAL (SEV0).
+
+"no fallback" raises SEVERITY, it never bypasses DURATION: a single flaky probe
+(or any outage shorter than ``expected_recovery_time_seconds``) against a
+dependency with ``fallback_available: false`` must not page. The no-fallback
+severity-raise fires only once BOTH the duration floor is crossed AND the outage
+is confirmed by this many consecutive failed probes. The producer (probe-driven,
+tracked per ``dependency_id``) passes ``consecutive_failures`` in
+``event_details``; while it is unwired, a missing counter defaults to 0 and the
+no-fallback branch stays silent."""
 
 
 def evaluate_dependency_health(
@@ -58,12 +74,29 @@ def evaluate_dependency_health(
     if outage <= 0:
         return []
 
+    # Confirmed-failure count comes from the producer (probe-driven, tracked per
+    # dependency_id). Missing/unparseable → 0, which leaves the no-fallback
+    # branch silent — the SAFE default while the producer is unwired.
+    try:
+        consecutive_failures = int(str(event_details.get("consecutive_failures", "0")))
+    except (ValueError, TypeError):
+        consecutive_failures = 0
+
     expected = policy.expected_recovery_time_seconds
     warn_at = expected + policy.warning_buffer_seconds
     sev1_at = warn_at + policy.human_investigation_buffer_seconds
 
-    # SEV0 conditions: exceeded hard ceiling OR zero fallback available
-    if outage >= policy.hard_escalation_seconds or not policy.fallback_available:
+    # SEV0 conditions: hard ceiling breached (a duration floor on its own) OR the
+    # no-fallback severity-raise — which requires BOTH the duration floor crossed
+    # AND DEPENDENCY_DEGRADED_MIN_CONSECUTIVE_FAILURES consecutive failed probes.
+    # "no fallback" raises SEVERITY, it never bypasses DURATION: a single flaky
+    # probe against a fallback-less dependency must not page.
+    no_fallback_confirmed = (
+        not policy.fallback_available
+        and outage >= expected
+        and consecutive_failures >= DEPENDENCY_DEGRADED_MIN_CONSECUTIVE_FAILURES
+    )
+    if outage >= policy.hard_escalation_seconds or no_fallback_confirmed:
         severity: AlertSeverity = AlertSeverity.CRITICAL
         delivery_channel = "pagerduty+telegram"
         rule_id = "DEPENDENCY_DEGRADED_CRITICAL"
@@ -95,12 +128,14 @@ def evaluate_dependency_health(
             "severity": severity,
             "dependency_id": dependency_id,
             "dependency_class": policy.dependency_class.value,
+            "consecutive_failures": consecutive_failures,
             "venue": str(event_details.get("venue", "")),  # noqa: qg-empty-fallback
             "message": (
                 f"Dependency {dependency_id} outage {outage:.0f}s "
                 f"(class={policy.dependency_class.value}, "
                 f"expected={expected}s, hard={policy.hard_escalation_seconds}s, "
-                f"fallback={'yes' if policy.fallback_available else 'no'})"
+                f"fallback={'yes' if policy.fallback_available else 'no'}, "
+                f"consecutive_failures={consecutive_failures})"
             ),
             "created_at": now.isoformat(),
             "delivered": False,

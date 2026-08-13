@@ -3,6 +3,12 @@
 Pure-function tests — no mocks, credential-free.
 
 Plan: connectivity_dependency_buffer_policy_2026_05_23.md Phase 3 P0.6-P0.7.
+Fix: dependency_health_alerting_never_wired_2026_08_12.md P0 — the no-fallback
+branch must not bypass DURATION. It fires SEV0 only once BOTH
+``outage >= expected_recovery_time_seconds`` AND ``consecutive_failures >=
+DEPENDENCY_DEGRADED_MIN_CONSECUTIVE_FAILURES`` are true. "No fallback" raises
+severity, never bypasses duration — a single flaky probe against a
+fallback-less dependency must not page.
 """
 
 from __future__ import annotations
@@ -14,6 +20,7 @@ from unified_api_contracts.alerting import AlertSeverity
 from unified_api_contracts.dependency import DependencyClass, DependencyHealthPolicy
 
 from alerting_service.rules.connectivity_rules import (
+    DEPENDENCY_DEGRADED_MIN_CONSECUTIVE_FAILURES,
     evaluate_dependency_health,
     evaluate_dependency_recovered,
 )
@@ -48,12 +55,19 @@ def _policy(
     )
 
 
-def _event(outage_seconds: float, dependency_id: str = "test_dep") -> dict[str, object]:
-    return {
+def _event(
+    outage_seconds: float,
+    dependency_id: str = "test_dep",
+    consecutive_failures: int | None = None,
+) -> dict[str, object]:
+    event: dict[str, object] = {
         "dependency_id": dependency_id,
         "current_outage_seconds": outage_seconds,
         "venue": "binance",
     }
+    if consecutive_failures is not None:
+        event["consecutive_failures"] = consecutive_failures
+    return event
 
 
 # ── No-alert band ─────────────────────────────────────────────────────────────
@@ -73,6 +87,12 @@ class TestNoAlert:
     def test_between_expected_and_warn_returns_empty(self) -> None:
         # outage in [60, 120) — above expected, below warn_at
         assert evaluate_dependency_health(_event(90), _policy()) == []
+
+    def test_sub_warn_stays_empty_even_with_confirmed_no_fallback(self) -> None:
+        # Sub-warn band + confirmed no-fallback → the no-fallback raise applies
+        # only once outage >= expected; below expected it stays silent.
+        p = _policy(fallback_available=False)
+        assert evaluate_dependency_health(_event(30, consecutive_failures=5), p) == []
 
 
 # ── WARNING band ──────────────────────────────────────────────────────────────
@@ -130,16 +150,43 @@ class TestCriticalBand:
         assert a["rule_id"] == "DEPENDENCY_DEGRADED_CRITICAL"
         assert a["sev1_escalate"] is False
 
-    def test_no_fallback_any_outage_is_critical(self) -> None:
+    def test_no_fallback_single_failure_below_expected_stays_empty(self) -> None:
+        # One failed probe, outage < expected — must NOT page (the P0 bug).
         p = _policy(fallback_available=False)
-        # Any outage > 0 with no fallback → immediate SEV0
-        alerts = evaluate_dependency_health(_event(10), p)
+        assert evaluate_dependency_health(_event(10, consecutive_failures=1), p) == []
+
+    def test_no_fallback_confirmed_above_expected_is_critical(self) -> None:
+        p = _policy(fallback_available=False)
+        alerts = evaluate_dependency_health(
+            _event(90, consecutive_failures=DEPENDENCY_DEGRADED_MIN_CONSECUTIVE_FAILURES),
+            p,
+        )
         assert len(alerts) == 1
         assert alerts[0]["severity"] == "CRITICAL"
+        assert alerts[0]["delivery_channel"] == "pagerduty+telegram"
+
+    def test_no_fallback_above_expected_but_unconfirmed_is_not_critical(self) -> None:
+        # outage >= expected but fewer than N consecutive failures → the
+        # no-fallback raise must not fire (no bypass of the confirmation floor).
+        p = _policy(fallback_available=False)
+        alerts = evaluate_dependency_health(
+            _event(90, consecutive_failures=DEPENDENCY_DEGRADED_MIN_CONSECUTIVE_FAILURES - 1),
+            p,
+        )
+        assert len(alerts) == 1
+        assert alerts[0]["severity"] != "CRITICAL"
+        assert alerts[0]["delivery_channel"] == "telegram"
+        assert alerts[0]["sev1_escalate"] is True
+
+    def test_no_fallback_missing_counter_stays_silent_above_expected(self) -> None:
+        # Producer unwired → no consecutive_failures in the payload → defaults
+        # to 0 → the no-fallback branch must stay silent (SAFE default).
+        p = _policy(fallback_available=False)
+        assert evaluate_dependency_health(_event(500), p) == []
 
     def test_no_fallback_zero_outage_still_empty(self) -> None:
         p = _policy(fallback_available=False)
-        assert evaluate_dependency_health(_event(0), p) == []
+        assert evaluate_dependency_health(_event(0, consecutive_failures=3), p) == []
 
 
 # ── Alert dict fields ─────────────────────────────────────────────────────────
@@ -168,6 +215,22 @@ class TestAlertFields:
     def test_delivered_is_false(self) -> None:
         alerts = evaluate_dependency_health(_event(500), _policy())
         assert alerts[0]["delivered"] is False
+
+    def test_consecutive_failures_propagated(self) -> None:
+        p = _policy(fallback_available=False)
+        alerts = evaluate_dependency_health(_event(90, consecutive_failures=5), p)
+        assert alerts[0]["consecutive_failures"] == 5
+
+    def test_consecutive_failures_defaults_to_zero(self) -> None:
+        alerts = evaluate_dependency_health(_event(1800), _policy())
+        assert alerts[0]["consecutive_failures"] == 0
+
+    def test_non_numeric_consecutive_failures_defaults_to_zero(self) -> None:
+        alerts = evaluate_dependency_health(
+            {"dependency_id": "x", "current_outage_seconds": 1800, "consecutive_failures": "bad"},
+            _policy(),
+        )
+        assert alerts[0]["consecutive_failures"] == 0
 
 
 # ── Recovered ─────────────────────────────────────────────────────────────────
