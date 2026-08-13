@@ -72,7 +72,7 @@ class TestConsecutiveFailureGate:
             consecutive_fail_threshold=3,
             clock=clock,
         )
-        with patch("alerting_service.dependency_health_event_handler.handle_dependency_health_payload") as mock_health:
+        with patch("alerting_service.dependency_health_prober.handle_dependency_health_payload") as mock_health:
             results = await probe.probe_all()
         clock.advance(1.0)
         await probe.probe_all()
@@ -88,7 +88,7 @@ class TestConsecutiveFailureGate:
             consecutive_fail_threshold=3,
             clock=clock,
         )
-        with patch("alerting_service.dependency_health_event_handler.handle_dependency_health_payload") as mock_health:
+        with patch("alerting_service.dependency_health_prober.handle_dependency_health_payload") as mock_health:
             for _ in range(3):
                 clock.advance(1.0)
                 await probe.probe_all()
@@ -107,10 +107,8 @@ class TestConsecutiveFailureGate:
             clock=clock,
         )
         with (
-            patch("alerting_service.dependency_health_event_handler.handle_dependency_health_payload"),
-            patch(
-                "alerting_service.dependency_health_event_handler.handle_dependency_recovered_payload"
-            ) as mock_recovered,
+            patch("alerting_service.dependency_health_prober.handle_dependency_health_payload"),
+            patch("alerting_service.dependency_health_prober.handle_dependency_recovered_payload") as mock_recovered,
         ):
             for _ in range(3):
                 clock.advance(1.0)
