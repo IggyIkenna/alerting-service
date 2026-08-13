@@ -55,6 +55,10 @@ from ..defi_feature_event_handler import (
     DEFI_FEATURE_EVENT_NAMES,
     handle_defi_feature_event,
 )
+from ..dependency_health_event_handler import (
+    handle_dependency_health_payload,
+    handle_dependency_recovered_payload,
+)
 from ..dr_event_handler import (
     handle_circuit_breaker_fire_payload,
     handle_kill_switch_armed_payload,
@@ -173,6 +177,11 @@ _BATCH_LIVE_RECON_DRIFT_EVENT: str = "BATCH_LIVE_RECON_DRIFT"
 _CONSOLIDATOR_DOWN_EVENT: str = "CONSOLIDATOR_DOWN"
 _MANIFEST_CONSOLIDATION_FAILED_EVENT: str = "MANIFEST_CONSOLIDATION_FAILED"
 _CONSOLIDATOR_RECOVERED_EVENT: str = "CONSOLIDATOR_RECOVERED"
+# Dependency-health events. The producer is probe-driven (dependency_health_prober.py)
+# and calls the handler in-process; these typed-handler entries give the same
+# handler an event-name dispatch path for any future event-driven emitter.
+_DEPENDENCY_DEGRADED_EVENT: str = "DEPENDENCY_DEGRADED"
+_DEPENDENCY_RECOVERED_EVENT: str = "DEPENDENCY_RECOVERED"
 
 
 def _extract_event_name(payload: dict[str, object]) -> str:
@@ -447,6 +456,8 @@ class AlertSubscriber:
         _CONSOLIDATOR_DOWN_EVENT: handle_consolidator_down_payload,
         _MANIFEST_CONSOLIDATION_FAILED_EVENT: handle_manifest_consolidation_failed_payload,
         _CONSOLIDATOR_RECOVERED_EVENT: handle_consolidator_recovered_payload,
+        _DEPENDENCY_DEGRADED_EVENT: handle_dependency_health_payload,
+        _DEPENDENCY_RECOVERED_EVENT: handle_dependency_recovered_payload,
     }
 
     @classmethod
