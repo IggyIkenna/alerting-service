@@ -65,7 +65,10 @@ def load_dependency_policies_from_yaml(config_path: str | Path) -> list[Dependen
     invalid entry — a misconfigured policy must not be silently skipped.
     """
     raw = cast("dict[str, object]", yaml.safe_load(Path(config_path).read_text()))
-    entries = cast("list[dict[str, object]]", raw.get("dependencies", []))
+    entries_obj = raw.get("dependencies")
+    if not isinstance(entries_obj, list):
+        raise ValueError(f"No 'dependencies' list found in {config_path}")
+    entries = cast("list[dict[str, object]]", entries_obj)
     if not entries:
         raise ValueError(f"No 'dependencies' list found in {config_path}")
     return [DependencyHealthPolicy.model_validate(entry) for entry in entries]
