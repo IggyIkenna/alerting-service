@@ -13,6 +13,7 @@ from alerting_service.rules.consolidator_rules import (
     handle_consolidator_down_payload,
     handle_consolidator_recovered_payload,
     handle_manifest_consolidation_failed_payload,
+    handle_manifest_consolidation_stalled_payload,
     route_consolidator_event,
 )
 from alerting_service.subscribers.alert_subscriber import AlertSubscriber
@@ -61,6 +62,19 @@ def _down_payload(bucket: str = "market-data-tick-defi-prd-x") -> dict[str, obje
 
 def _failed_payload(bucket: str = "market-data-tick-defi-prd-x") -> dict[str, object]:
     return {"bucket": bucket, "error": "boom: shard merge raised"}
+
+
+def _stalled_payload(bucket: str = "market-data-tick-defi-prd-x") -> dict[str, object]:
+    return {
+        "bucket": bucket,
+        "streak": 290,
+        "shards_scanned": 16,
+        "baseline_shards": 2,
+        "detail": (
+            f"290 consecutive no-op consolidation cycles for {bucket} while per-VM shards kept "
+            "landing (now 16, baseline 2) — likely a bulk shard drop needing --force"
+        ),
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -141,6 +155,45 @@ class TestManifestConsolidationFailed:
 
         severities = [call.args[1]["severity"] for call in mock_route.call_args_list]
         assert severities == ["WARN", "WARN", "WARN", "WARN"]
+
+
+# ---------------------------------------------------------------------------
+# MANIFEST_CONSOLIDATION_STALLED → CRITICAL page on first occurrence
+# ---------------------------------------------------------------------------
+
+
+class TestManifestConsolidationStalled:
+    def test_routes_critical_to_paging_channels(self, mock_route: MagicMock, mock_log_event: MagicMock) -> None:
+        handle_manifest_consolidation_stalled_payload(_stalled_payload())
+
+        mock_route.assert_called_once()
+        event_name, details = mock_route.call_args.args
+        assert event_name == "MANIFEST_CONSOLIDATION_STALLED"
+        assert mock_route.call_args.kwargs["channels"] == {"pagerduty", "telegram"}
+        assert mock_route.call_args.kwargs["pd_severity"] == "critical"
+        assert details["severity"] == "CRITICAL"
+
+    def test_pages_on_first_occurrence_no_breaker(self, mock_route: MagicMock, mock_log_event: MagicMock) -> None:
+        # Unlike MANIFEST_CONSOLIDATION_FAILED, a single call must page CRITICAL
+        # immediately — the emitter itself already gates on a sustained streak.
+        handle_manifest_consolidation_stalled_payload(_stalled_payload())
+
+        assert mock_route.call_args.args[1]["severity"] == "CRITICAL"
+        assert mock_route.call_args.kwargs["pd_severity"] == "critical"
+
+    def test_payload_carries_bucket_and_detail_message(self, mock_route: MagicMock, mock_log_event: MagicMock) -> None:
+        handle_manifest_consolidation_stalled_payload(_stalled_payload(bucket="bkt-1"))
+
+        _, details = mock_route.call_args.args
+        assert details["bucket"] == "bkt-1"
+        assert "likely a bulk shard drop" in str(details["message"])
+        assert details["source"] == "alerting-service/consolidator-rules"
+
+    def test_default_message_when_detail_absent(self, mock_route: MagicMock, mock_log_event: MagicMock) -> None:
+        handle_manifest_consolidation_stalled_payload({"bucket": "bkt-2"})
+
+        _, details = mock_route.call_args.args
+        assert details["message"] == "manifest consolidation STALLED for bucket=bkt-2"
 
 
 # ---------------------------------------------------------------------------
@@ -227,3 +280,21 @@ class TestDispatch:
         mock_route.assert_called_once()
         assert mock_route.call_args.args[0] == "CONSOLIDATOR_RECOVERED"
         assert mock_route.call_args.kwargs["pd_severity"] is None
+
+    def test_route_consolidator_event_dispatches_stalled(
+        self, mock_route: MagicMock, mock_log_event: MagicMock
+    ) -> None:
+        route_consolidator_event("MANIFEST_CONSOLIDATION_STALLED", _stalled_payload())
+
+        assert mock_route.call_args.args[0] == "MANIFEST_CONSOLIDATION_STALLED"
+        assert mock_route.call_args.kwargs["pd_severity"] == "critical"
+
+    def test_subscriber_dispatches_consolidation_stalled_to_rule(
+        self, mock_route: MagicMock, mock_log_event: MagicMock
+    ) -> None:
+        AlertSubscriber.dispatch_event("MANIFEST_CONSOLIDATION_STALLED", _stalled_payload())
+
+        mock_route.assert_called_once()
+        assert mock_route.call_args.args[0] == "MANIFEST_CONSOLIDATION_STALLED"
+        assert mock_route.call_args.args[1]["severity"] == "CRITICAL"
+        assert mock_route.call_args.kwargs["channels"] == {"pagerduty", "telegram"}
