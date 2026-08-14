@@ -77,6 +77,7 @@ from ..rules.consolidator_rules import (
     handle_consolidator_down_payload,
     handle_consolidator_recovered_payload,
     handle_manifest_consolidation_failed_payload,
+    handle_manifest_consolidation_stalled_payload,
 )
 from ..rules.margin_rules import route_margin_event_payload
 
@@ -177,6 +178,7 @@ _BATCH_LIVE_RECON_DRIFT_EVENT: str = "BATCH_LIVE_RECON_DRIFT"
 _CONSOLIDATOR_DOWN_EVENT: str = "CONSOLIDATOR_DOWN"
 _MANIFEST_CONSOLIDATION_FAILED_EVENT: str = "MANIFEST_CONSOLIDATION_FAILED"
 _CONSOLIDATOR_RECOVERED_EVENT: str = "CONSOLIDATOR_RECOVERED"
+_MANIFEST_CONSOLIDATION_STALLED_EVENT: str = "MANIFEST_CONSOLIDATION_STALLED"
 # Dependency-health events. The producer is probe-driven (dependency_health_prober.py)
 # and calls the handler in-process; these typed-handler entries give the same
 # handler an event-name dispatch path for any future event-driven emitter.
@@ -456,6 +458,7 @@ class AlertSubscriber:
         _CONSOLIDATOR_DOWN_EVENT: handle_consolidator_down_payload,
         _MANIFEST_CONSOLIDATION_FAILED_EVENT: handle_manifest_consolidation_failed_payload,
         _CONSOLIDATOR_RECOVERED_EVENT: handle_consolidator_recovered_payload,
+        _MANIFEST_CONSOLIDATION_STALLED_EVENT: handle_manifest_consolidation_stalled_payload,
         _DEPENDENCY_DEGRADED_EVENT: handle_dependency_health_payload,
         _DEPENDENCY_RECOVERED_EVENT: handle_dependency_recovered_payload,
     }

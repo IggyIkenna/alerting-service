@@ -28,6 +28,22 @@ follow-up — a crash-looping or down consolidator paged no one):
   sliding-window/threshold idiom (same machinery ``error_event_handler``
   uses for SERVICE_ERROR rate tracking) keyed per manifest bucket.
 
+- ``MANIFEST_CONSOLIDATION_STALLED`` — emitted by
+  ``manifest_consolidator._check_consolidation_stall`` when per-VM shards
+  keep landing for a bucket but no cycle has merged them for
+  ``_STALL_ALERT_CYCLES`` consecutive ticks (a lock-orphan / mtime-cutoff
+  blind spot — distinct from a hard cycle FAILURE: the cycle reports
+  ``success=True`` every time, it just never progresses). Was emitted via
+  ``logger.critical`` + ``log_event(severity="ERROR")`` with NO consumer
+  anywhere in alerting-service (confirmed live 2026-08-14,
+  ``plans/active/issues/data_status_rollup_ml_service_full_blob_missing_2026_07_26.md``
+  — a real bucket sat stalled 9+ hours, fully unpaged). → **CRITICAL**
+  (PagerDuty + Telegram) on the FIRST occurrence — unlike
+  ``MANIFEST_CONSOLIDATION_FAILED``, no breaker is needed here because the
+  emitter itself only fires after the streak has already crossed its own
+  alert threshold, so by the time alerting-service sees it the condition is
+  already sustained, not a single blip.
+
 Severity → channel mapping mirrors ``dr_event_handler._severity_channels``:
 CRITICAL → PagerDuty(critical) + Telegram; WARN/INFO → Telegram only.
 
@@ -44,12 +60,13 @@ from unified_trading_library import log_event
 
 # Event-name strings mirror the UTL emitters (SSOT:
 # unified_trading_library/events/event_types.py — CONSOLIDATOR_DOWN :689,
-# MANIFEST_CONSOLIDATION_FAILED :682, CONSOLIDATOR_RECOVERED :721). Matched by
-# NAME like the sibling rule modules: the constants are not re-exported on the
-# UTL facade and the import-pattern gate forbids deep
-# `unified_trading_library.events` imports.
+# MANIFEST_CONSOLIDATION_FAILED :682, CONSOLIDATOR_RECOVERED :721,
+# MANIFEST_CONSOLIDATION_STALLED :805). Matched by NAME like the sibling rule
+# modules: the constants are not re-exported on the UTL facade and the
+# import-pattern gate forbids deep `unified_trading_library.events` imports.
 CONSOLIDATOR_DOWN = "CONSOLIDATOR_DOWN"
 MANIFEST_CONSOLIDATION_FAILED = "MANIFEST_CONSOLIDATION_FAILED"
+MANIFEST_CONSOLIDATION_STALLED = "MANIFEST_CONSOLIDATION_STALLED"
 # CONSOLIDATOR_RECOVERED (2026-08-06 fix): emitted by the SAME UTL liveness
 # watchdog when a previously-DOWN bucket comes back — was completely unwired
 # (no typed handler, not in any UAC alert registry) so it silently no-opped
@@ -68,7 +85,7 @@ _PAGING_CHANNELS: frozenset[str] = frozenset({"pagerduty", "telegram"})
 _CRITICAL: PagerDutySeverity = "critical"
 
 _CONSOLIDATOR_EVENTS: frozenset[str] = frozenset(
-    {CONSOLIDATOR_DOWN, MANIFEST_CONSOLIDATION_FAILED, CONSOLIDATOR_RECOVERED}
+    {CONSOLIDATOR_DOWN, MANIFEST_CONSOLIDATION_FAILED, CONSOLIDATOR_RECOVERED, MANIFEST_CONSOLIDATION_STALLED}
 )
 
 # Repeat-failure escalation breaker (reuses the service CircuitBreaker idiom —
@@ -230,13 +247,56 @@ def handle_consolidator_recovered_payload(payload: dict[str, object]) -> None:
     )
 
 
+def handle_manifest_consolidation_stalled_payload(payload: dict[str, object]) -> None:
+    """Route a MANIFEST_CONSOLIDATION_STALLED event — CRITICAL, pages immediately.
+
+    Payload keys (from ``manifest_consolidator._check_consolidation_stall``):
+    ``bucket``, ``streak``, ``shards_scanned``, ``baseline_shards``, ``detail``.
+    Unlike ``MANIFEST_CONSOLIDATION_FAILED`` (WARN, escalating only on
+    repeat), this event only fires once the emitter's own no-progress streak
+    has already crossed its alert threshold — by the time alerting-service
+    sees it the condition is already sustained, not a single blip, so it
+    pages on the first occurrence (no breaker needed).
+    """
+    bucket = str(payload.get("bucket", "unknown"))
+    severity = AlertSeverity.CRITICAL
+    channels, pd_severity = _severity_channels(severity)
+    log_event(
+        "CONSOLIDATOR_ALERT_ROUTED",
+        details={
+            "event_name": MANIFEST_CONSOLIDATION_STALLED,
+            "bucket": bucket,
+            "severity": severity.value,
+        },
+    )
+    logger.error(
+        "Manifest consolidation STALLED for bucket=%s streak=%s shards_scanned=%s baseline_shards=%s "
+        "— shards keep landing but no cycle has merged them",
+        bucket,
+        payload.get("streak"),
+        payload.get("shards_scanned"),
+        payload.get("baseline_shards"),
+    )
+    enriched = _enrich(
+        payload,
+        severity,
+        default_message=f"manifest consolidation STALLED for bucket={bucket}",
+    )
+    route_event_with_explicit_channels(
+        MANIFEST_CONSOLIDATION_STALLED,
+        enriched,
+        channels=channels,
+        pd_severity=pd_severity,
+    )
+
+
 def route_consolidator_event(event_name: str, details: dict[str, object]) -> None:
     """Dispatch a consolidator event to the matching handler.
 
-    Handles CONSOLIDATOR_DOWN, MANIFEST_CONSOLIDATION_FAILED, and
-    CONSOLIDATOR_RECOVERED; an unknown event name is logged and produces NO
-    alert (closed-set rule — the generic router fallback already covers
-    everything else).
+    Handles CONSOLIDATOR_DOWN, MANIFEST_CONSOLIDATION_FAILED,
+    CONSOLIDATOR_RECOVERED, and MANIFEST_CONSOLIDATION_STALLED; an unknown
+    event name is logged and produces NO alert (closed-set rule — the
+    generic router fallback already covers everything else).
     """
     if event_name == CONSOLIDATOR_DOWN:
         handle_consolidator_down_payload(details)
@@ -246,5 +306,8 @@ def route_consolidator_event(event_name: str, details: dict[str, object]) -> Non
         return
     if event_name == CONSOLIDATOR_RECOVERED:
         handle_consolidator_recovered_payload(details)
+        return
+    if event_name == MANIFEST_CONSOLIDATION_STALLED:
+        handle_manifest_consolidation_stalled_payload(details)
         return
     logger.warning("route_consolidator_event called with unrecognised event=%s", event_name)
