@@ -10,25 +10,27 @@ escalation ladder:
   outage > hard_escalation                    → CRITICAL (SEV0, PagerDuty + Telegram)
   no-fallback AND outage >= expected_recovery → CRITICAL (SEV0) — raises severity, never bypasses duration
 
-STATUS (verified 2026-08-12): NOT WIRED. This module is imported by nothing —
-no handler computes ``current_outage_seconds`` and no subscriber calls these
-rules, so ``DEPENDENCY_DEGRADED`` cannot currently fire. The unit tests pass by
-calling the functions directly with synthetic values, which proves the ladder's
-arithmetic and nothing about reachability. Do not read a green test here as
-evidence that dependency alerting works.
+STATUS (2026-08-13): WIRED. ``dependency_health_prober.py`` computes
+``current_outage_seconds`` per dependency (behind an N-consecutive-failure
+gate) and ``dependency_health_event_handler.py`` calls these rules, registered
+in ``subscribers/alert_subscriber.py`` under ``DEPENDENCY_DEGRADED`` /
+``DEPENDENCY_RECOVERED``. ``tests/integration/test_dependency_health_wiring.py``
+drives a simulated outage through the real producer→handler→rule→router chain
+(only the router boundary mocked) and fails if any link is unwired — a green
+unit test alone is no longer the only signal here.
 
 Input contract: callers pass ``event_details`` with ``dependency_id`` and
 ``current_outage_seconds``, plus the matching policy. An earlier version of this
 docstring named a ``CONNECTIVITY_DEGRADED`` event as the source; **no such event
-type exists anywhere in the fleet** — it was never built. The agreed producer is
-a probe driven by each policy's ``test_method`` field; see the issue doc below.
+type exists anywhere in the fleet** — it was never built. The producer is a
+probe driven by each policy's ``test_method`` field.
 
-Producer contract (unwired, 2026-08-13): the prober MUST require N consecutive
-failed probes before reporting an outage — the outage clock only starts after
-the Nth consecutive failure, so ``current_outage_seconds`` is never a single
-flaky-probe artifact. This rule enforces the DURATION floor (no-fallback SEV0
-only at ``outage >= expected_recovery_time_seconds``); the consecutive-failure
-count is per-dependency producer state and cannot be enforced here.
+Producer contract: the prober MUST require N consecutive failed probes before
+reporting an outage — the outage clock only starts after the Nth consecutive
+failure, so ``current_outage_seconds`` is never a single flaky-probe artifact.
+This rule enforces the DURATION floor (no-fallback SEV0 only at
+``outage >= expected_recovery_time_seconds``); the consecutive-failure count is
+per-dependency producer state and cannot be enforced here.
 
 Issue: ``/plans/active/issues/dependency_health_alerting_never_wired_2026_08_12.md``
 Plan (archived): ``/plans/archive/2026_05/connectivity_dependency_buffer_policy_2026_05_23.md``
