@@ -69,6 +69,12 @@ regexes = [
 ]
 
 [[allowlists]]
+description = "Firebase Web API key — Google/Firebase's own security model treats this value as public-safe (it identifies a project to Firebase's client SDK; it is not a bearer credential and carries no scoped permissions — see Firebase docs). The same key is already committed in unified-trading-system-ui/.env.production without incident (predates gitleaks adoption there). Allowlisted by EXACT value, not an AIza* pattern, so a real scoped GCP API key (Maps, other paid APIs) with actual abuse potential still trips gcp-api-key normally. Added 2026-08-12 when deployment-api/Dockerfile started baking this same key in for deployment-ui's Firebase Google sign-in (deployment_api_unauthenticated_prod_p0_2026_08_10.md follow-up)."
+regexes = [
+  '''AIzaSyAd6_p1UIGPY2Va5yGzLOR4DyxyHJ8QCzo''',
+]
+
+[[allowlists]]
 description = "Test fixtures and VCR cassettes — synthetic/mocked credential-shaped values"
 paths = [
   '''.*tests/.*fixtures/.*''',
@@ -108,6 +114,12 @@ description = "Cloud Build image tags of the shape <service>:golive-<7-hex-commi
 regexes = [
   '''[a-z][a-z0-9-]*:golive-[0-9a-f]{7}\b''',
   '''golive-[0-9a-f]{7}\b''',
+]
+
+[[allowlists]]
+description = "MORPHO/FLUID A_TOKEN/DEBT_TOKEN pair_key symbol segments (collateral-loan-marketkeyhex, e.g. AUSDC-EURC-0x305dd1 / ACBBTC-USDC-0x125081) quoted verbatim in plan/issue-doc instrument_id evidence — a canonical DeFi lending instrument_id fragment, not a credential; confirmed via `gitleaks protect --staged` on canonical_id_builder_retrofit_checklist_2026_07_08.md, 2026-08-01"
+regexes = [
+  '''\b(A|DEBT)[A-Za-z0-9]+-[A-Za-z0-9]+-0x[0-9a-fA-F]{6,8}\b''',
 ]
 
 [[allowlists]]

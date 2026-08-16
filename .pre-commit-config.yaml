@@ -40,6 +40,37 @@ repos:
         pass_filenames: false
         fail_fast: true # behind-origin -> STOP before any formatter mutates (no reflow residue that breaks slot FF-sync)
 
+  # Gitignore re-add gate — blocks a staged file that matches the repo's own
+  # .gitignore (only reachable via `git add -f`; add -A/. already skip ignored
+  # paths). SSOT: scripts/hooks/check-gitignore-readd.sh.
+  - repo: local
+    hooks:
+      - id: check-gitignore-readd
+        name: Block re-adding a gitignored path
+        entry:
+          bash -c 'HOOK="${WORKSPACE_ROOT:-$(cd "$(git rev-parse --show-toplevel)/.." &&
+          pwd)}/unified-trading-pm/scripts/hooks/check-gitignore-readd.sh"; [ -f "$HOOK" ] || exit 0; bash "$HOOK"'
+        language: system
+        pass_filenames: false
+
+  # Quickmerge-provenance gate — the commit-TIME half of check_strict_quickmerge.py's
+  # pre-push carve-out logic (SSOT there: commit_violates()/_is_source()/NONSOURCE_DIR).
+  # A raw `git commit` of a source file with no `Quickmerge:` trailer was previously only
+  # ever caught at PUSH time, after it had already sat in a shared checkout racing every
+  # other concurrent session's pulls/rebases — this catches it before that window opens.
+  # WARN-only (see the hook's own header) until QUICKMERGE_PROVENANCE_BLOCK=1 is set fleet-
+  # wide, mirroring STRICT_QUICKMERGE_BLOCK's own unblocking-first rollout.
+  - repo: local
+    hooks:
+      - id: check-quickmerge-provenance
+        name: Quickmerge provenance (source commits need the Quickmerge trailer)
+        entry:
+          bash -c 'HOOK="${WORKSPACE_ROOT:-$(cd "$(git rev-parse --show-toplevel)/.." &&
+          pwd)}/unified-trading-pm/scripts/hooks/check-quickmerge-provenance.sh"; [ -f "$HOOK" ] || exit 0; bash "$HOOK"
+          "$@"' --
+        language: system
+        stages: [commit-msg]
+
   # Ruff - Fast Python linter AND formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.15.0
