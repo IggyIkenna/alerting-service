@@ -89,3 +89,50 @@ class TestMirrorLiveFalseSuppressesDispatchNotTracking:
         mock_pd.assert_called()
         sent_calls = [c for c in mock_log.call_args_list if c.args and c.args[0] == "ALERT_SENT"]
         assert any(c.kwargs["details"].get("mirrored_live") is True for c in sent_calls)
+
+
+class TestResolvedBookendNeverPages:
+    """2026-08-17 fix: ``meta_watchers.reconcile_resolved`` emits a ``resolved=True``
+    INFO bookend under the SAME event name a CRITICAL DP_* finding uses (e.g.
+    ``DP_CRON_DID_NOT_FIRE``). Before this fix, ``_route_data_pipeline_event`` used
+    the registry's STATIC severity (``dp_rule.severity`` == CRITICAL) regardless of
+    the emitted event, so the "condition cleared" bookend rode the SAME PagerDuty +
+    Telegram page path as a real fire. Its ``details`` shape (``resolved``/``label``/
+    ``registry_id="DP-RESOLVED"``/``message``/``cloud``) is entirely different from a
+    real fire's identity, so it was ALSO never caught by the dedup cooldown — every
+    resolve/re-onset flap paged fresh, defeating the 1800s DP_CRON_DID_NOT_FIRE
+    cooldown (confirmed live 2026-08-17,
+    dp_cron_did_not_fire_dedup_fix_deployed_but_ineffective_2026_08_17.md)."""
+
+    def test_resolved_bookend_does_not_page_pagerduty(self) -> None:
+        mock_dp, mock_pd, _mock_slack, _mock_log = _run(
+            "DP_CRON_DID_NOT_FIRE",
+            {
+                "resolved": True,
+                "label": "live-capture-productivity::vm::BYBIT-FUTURES::book_snapshot_5",
+                "registry_id": "DP-RESOLVED",
+                "message": ":white_check_mark: RESOLVED — recovered",
+                "cloud": "GCP",
+            },
+        )
+        mock_pd.assert_not_called()
+        # The Slack channel mirror still fires — a RESOLVED bookend must stay
+        # VISIBLE, only the CRITICAL page is suppressed.
+        mock_dp.assert_called_once()
+
+    def test_fresh_critical_fire_still_pages(self) -> None:
+        """Control: an ordinary (non-resolved) CRITICAL fire is unaffected."""
+        mock_dp, mock_pd, _mock_slack, _mock_log = _run(
+            "DP_CRON_DID_NOT_FIRE",
+            {
+                "label": "live-capture-productivity::vm::BYBIT-FUTURES::book_snapshot_5",
+                "vm_name": "mtds-live-cefi-consolidated-x",
+                "venue": "BYBIT-FUTURES",
+                "data_type": "book_snapshot_5",
+                "bucket": "some-bucket",
+                "attempted_age_hours": 1.2,
+                "last_captured_at": None,
+            },
+        )
+        mock_dp.assert_called_once()
+        mock_pd.assert_called()

@@ -399,11 +399,9 @@ def _route_data_pipeline_event(
     ``route_event`` before this is called). The CRITICAL page fires for BOTH umbrellas
     (a live OR batch CRITICAL pages) — only the Slack CHANNEL differs by umbrella.
 
-    A STATIC BACKLOG DP_RUN_MOSTLY_EMPTY cell is downgraded to WARN here first
-    (see ``dp_run_mostly_empty_static_backlog.effective_severity``), taking the
-    INFO/WARN channel-only path instead of paging.
+    STATIC BACKLOG downgrades CRITICAL->WARN; resolved=True forces INFO (else it re-pages every flap, dodging dedup).
     """
-    severity = _effective_dp_severity(event_name, details, severity)
+    severity = AlertSeverity.INFO if details.get("resolved") else _effective_dp_severity(event_name, details, severity)
     details_with_sev: dict[str, object] = {**details, "severity": severity.value}
     if _is_live_umbrella(details_with_sev):
         _mirror_to_uts_live_alerts_slack_dp(event_name, summary, details_with_sev, config)
