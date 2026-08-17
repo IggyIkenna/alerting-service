@@ -143,6 +143,30 @@ class TestStableIdentityDedup:
         c = {**base, "vm_name": "mdps-cefi-2022-20260810-023141", "correlation_id": "zzz"}
         assert dedup.is_duplicate("DP_VM_PREEMPTED", c) is False
 
+    def test_attempted_age_hours_does_not_break_dedup(self) -> None:
+        """DP-LIVE-004 (live_stream_watcher.check_live_capture_productivity) recomputes
+        ``attempted_age_hours`` every ~15min sweep and it wasn't in the exact-match
+        exclusion set — the climbing value defeated the 1800s DP_CRON_DID_NOT_FIRE
+        cooldown every single sweep (2026-08-17 finding: 69 messages/24h, 2 live VMs)."""
+        dedup = AlertDeduplicator(ttl_seconds=60.0)
+        base = {"vm_name": "mtds-live-cefi-consolidated-x", "venue": "BYBIT-FUTURES", "data_type": "trades"}
+        a = {**base, "attempted_age_hours": 0.1, "last_captured_at": None}
+        b = {**base, "attempted_age_hours": 0.2, "last_captured_at": None}
+        assert dedup.is_duplicate("DP_CRON_DID_NOT_FIRE", a) is False
+        assert dedup.is_duplicate("DP_CRON_DID_NOT_FIRE", b) is True
+        # a different venue/data_type is still a distinct alert
+        c = {**base, "data_type": "book_snapshot_5", "attempted_age_hours": 0.1}
+        assert dedup.is_duplicate("DP_CRON_DID_NOT_FIRE", c) is False
+
+    def test_generic_age_suffix_fields_are_volatile(self) -> None:
+        """Belt-and-braces: ANY ``*_age_hours``/``*_age_days``/etc. key is excluded, not
+        just the ones with an exact-match entry, so a future detector's own age-field
+        name can't reproduce this bug class."""
+        dedup = AlertDeduplicator(ttl_seconds=60.0)
+        base = {"vm_name": "some-vm"}
+        assert dedup.is_duplicate("SOME_EVENT", {**base, "custom_metric_age_days": 1.0}) is False
+        assert dedup.is_duplicate("SOME_EVENT", {**base, "custom_metric_age_days": 2.5}) is True
+
 
 class TestTtlOverride:
     """A per-call ttl_override gives recurring WARN alerts a cooldown >= sweep interval."""
