@@ -83,7 +83,23 @@ _VOLATILE_DETAIL_KEYS: frozenset[str] = frozenset(
         "correlation_id",
         "service_name",
         "source",
+        # DP-LIVE-004 (live_stream_watcher.check_live_capture_productivity) recomputes this
+        # every ~15min sweep and embeds it in the CRITICAL DP_CRON_DID_NOT_FIRE summary — an
+        # exact-match miss (only "age"/"age_hours" etc. were listed, not this producer's own
+        # key name) let it slip into the identity hash, defeating the 1800s cooldown every
+        # single sweep (2026-08-17 finding: 69 DP_CRON_DID_NOT_FIRE messages/24h on 2 live VMs).
+        "attempted_age_hours",
     }
+)
+
+# Suffix patterns for volatile per-sweep age/staleness fields not yet given an exact-match
+# entry above — belt-and-braces so a NEW detector's own age-field name doesn't reproduce the
+# same class of dedup-defeat bug (2026-08-17).
+_VOLATILE_DETAIL_KEY_SUFFIXES: tuple[str, ...] = (
+    "_age_hours",
+    "_age_days",
+    "_age_minutes",
+    "_age_seconds",
 )
 
 
@@ -115,7 +131,11 @@ class AlertDeduplicator:
         before hashing so the same logical alert hashes identically across
         sweeps and emit-shape variants.
         """
-        identity = {k: v for k, v in details.items() if k not in _VOLATILE_DETAIL_KEYS}
+        identity = {
+            k: v
+            for k, v in details.items()
+            if k not in _VOLATILE_DETAIL_KEYS and not k.endswith(_VOLATILE_DETAIL_KEY_SUFFIXES)
+        }
         details_json = json.dumps(identity, sort_keys=True, default=str)
         details_hash = hashlib.sha256(details_json.encode("utf-8")).hexdigest()[:16]
         return f"{event_name}:{details_hash}"
