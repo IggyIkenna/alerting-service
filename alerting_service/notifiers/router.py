@@ -67,46 +67,6 @@ _VALID_SEVERITIES: frozenset[str] = frozenset(get_args(PagerDutySeverity))
 
 # Module-level deduplicator (shared across all route_event calls).
 _deduplicator = AlertDeduplicator(ttl_seconds=60.0)
-# Per-event dedup cooldowns (window >= detector cadence). One key per
-# (identity, event) per window; re-nags while down, re-alerts on resolve+recur.
-_RECURRING_ALERT_COOLDOWNS: dict[str, float] = {
-    "DP_CATALOG_NOT_RUNNING": 1800.0,  # 30 min; WARN, ~15 min meta-sweep (census liveness)
-    "DP_CRON_DID_NOT_FIRE": 1800.0,  # 30 min; CRITICAL, ~15 min meta-sweep — suppress per-prefix re-fire
-    "DP_EVENT_LOOP_STARVED": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
-    "DP_RUN_MOSTLY_EMPTY": 1800.0,  # 30 min; CRITICAL, static manifest-cell, >= 900s meta-sweep
-    "DP_VM_EXIT_NONZERO": 1800.0,  # 30 min; CRITICAL, static exit-code signal, >= 300s cadence
-    "DP_VM_GONE_NO_CAPTURE": 1800.0,  # 30 min; CRITICAL, static exit-code signal, >= 300s cadence
-    "DP_VM_PARTIAL_UNCONFIRMED": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
-    "DP_VM_PREEMPTED": 1800.0,  # 30 min; INFO, ~5 min sweep — suppress refire per sweep
-    "DP_VM_PREEMPTED_NO_RELAUNCH": 1800.0,  # 30 min; CRITICAL, static signal, >= 300s cadence
-    "DP_VM_STALL": 1800.0,  # 30 min; WARN, ~5 min sweep cadence
-    "DP_SOURCE_RATE_LIMITED": 1800.0,  # 30 min; WARN auto_recover — 429 storms
-    "CONSOLIDATOR_DOWN": 3600.0,  # 1h; CRITICAL, once + hourly re-remind while down
-    "MANIFEST_CONSOLIDATION_FAILED": 3600.0,  # 1h; WARN->CRITICAL on breaker-open (crash-loop)
-    "FEED_REFETCH_FAILED": 3600.0,  # 1h; WARN/HIGH->CRITICAL on breaker-open (same pattern)
-}
-
-# DP_RUN_MOSTLY_EMPTY STATIC BACKLOG paging-cadence downgrade lives in
-# ``dp_run_mostly_empty_static_backlog.py`` (split out rather than grown here —
-# router.py is already at its 1100-line file-size cap; mirrors why
-# ``coalesce.py`` / ``kill_switch_rules.py`` exist as siblings below). Re-bound
-# under the original private names so the test surface
-# (router._dedup_window_for / router._effective_dp_severity) is unchanged.
-from alerting_service.notifiers.dp_run_mostly_empty_static_backlog import (
-    dedup_window_override as _dp_run_mostly_empty_dedup_window_override,
-)
-from alerting_service.notifiers.dp_run_mostly_empty_static_backlog import (
-    effective_severity as _effective_dp_severity,
-)
-
-
-def _dedup_window_for(event_name: str, details: dict[str, object] | None = None) -> float | None:
-    """Per-event dedup window: a cooldown for recurring alerts (WARN floods and
-    opted-in static/CRITICAL conditions), else ``None`` (the deduplicator's 60s
-    default). DP_RUN_MOSTLY_EMPTY widens to a daily cooldown once STATIC
-    BACKLOG fires — see ``dp_run_mostly_empty_static_backlog.py``."""
-    return _dp_run_mostly_empty_dedup_window_override(event_name, details, _RECURRING_ALERT_COOLDOWNS.get(event_name))
-
 
 # Coalesce-window + synthetic-event suppression live in ``coalesce.py``
 # (split 2026-06-12, codex ratchet plan Phase 1.5 — file-size <900).
@@ -123,6 +83,17 @@ from alerting_service.notifiers.coalesce import (
 from alerting_service.notifiers.coalesce import (
     is_synthetic as _is_synthetic,
 )
+from alerting_service.notifiers.dp_run_mostly_empty_static_backlog import (
+    effective_severity as _effective_dp_severity,
+)
+
+# Per-event dedup/ladder cooldown window lives in
+# ``recurring_alert_cooldowns.py`` (split 2026-08-18, Phase 3 of
+# alerting_service_escalation_ladder_centralization_2026_08_18.md -- router.py
+# is at its 1100-line cap). Re-bound under the original private name so the
+# test surface is unchanged; orchestrator_dispatch_gate.py imports the SAME
+# function directly for the escalation ladder's occurrence window.
+from alerting_service.notifiers.recurring_alert_cooldowns import dedup_window_for as _dedup_window_for
 
 # Only reached via router._X attribute access from tests (invisible to static
 # analysis within this file) — the reassignment below is the real usage.

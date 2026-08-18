@@ -7,14 +7,27 @@ Split out of ``router.py`` (2026-08-18) -- ``router.py`` sits at its
 / ``dp_run_mostly_empty_static_backlog.py`` already exist as siblings.
 Re-bound under the original private name (``_maybe_dispatch_to_orchestrator``)
 in ``router.py`` so the test/patch surface stays unchanged.
+
+Phase 3 (same plan) adds the GCS-durable escalation ladder
+(``alerting_service.escalation_ladder``) as a gate BEFORE the dedup check +
+dispatch call below: a FILE_ISSUE/PAGE_OPERATOR-tier finding must cross the
+ladder's occurrence threshold (CLOSED->OPEN, or a HALF_OPEN->OPEN
+re-escalation after a cooldown) before the loud GitHub-dispatch path fires
+at all -- replacing the old "dispatch on every tier-matched, non-deduped
+occurrence" behavior with "try N occurrences quietly [the per-event Slack
+mirror already fires unconditionally], the Nth crossing escalates".
 """
 
 from __future__ import annotations
 
 import logging
 
+from unified_api_contracts.alerting import derive_escalation_identity
+
+from ..escalation_ladder import record_occurrence
 from .orchestrator_dispatch import dispatch_to_orchestrator
 from .orchestrator_dispatch_budget import check_dispatch_dedup_gcs
+from .recurring_alert_cooldowns import dedup_window_for
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +44,48 @@ logger = logging.getLogger(__name__)
 # router-side gate becomes the ONLY dispatch trigger).
 _DISPATCH_GATED_TIERS = frozenset({"file_issue", "page_operator"})
 
+# Fallback ladder window for a tier-gated event absent from
+# `recurring_alert_cooldowns.RECURRING_ALERT_COOLDOWNS` (e.g. DEPLOYMENT_FAILED,
+# which also routes through `_route_data_pipeline_event`/this gate but isn't a
+# DP_* recurring-alert code) -- the most common entry in that table, so an
+# unlisted event gets the same 30-minute occurrence window as the majority of
+# DP_* findings rather than an arbitrary bespoke value.
+_DEFAULT_LADDER_WINDOW_SECONDS = 1800.0
+
+
+def _resolve_ladder_identity(details: dict[str, object]) -> str | None:
+    """Best-effort escalation identity for the ladder check -- ``None`` when
+    the finding carries neither identity shape
+    (:func:`unified_api_contracts.alerting.derive_escalation_identity`
+    raises ``ValueError`` in that case; a finding this gate can't identify
+    can't be laddered, so it falls through to the dedup+dispatch path
+    unchanged, exactly like `record_occurrence`'s own `None` fail-open
+    contract)."""
+    registry_id = str(details.get("registry_id", ""))  # noqa: qg-empty-fallback — absent means no registry id
+    asset_group = str(details.get("asset_group_name", "")).strip()  # noqa: qg-empty-fallback — absent means not tuple-shaped
+    data_type = str(details.get("data_type", "")).strip()  # noqa: qg-empty-fallback — same as asset_group_name above
+    vm_name = str(details.get("vm_name", "")).strip()  # noqa: qg-empty-fallback — absent means not vm-shaped
+    try:
+        return derive_escalation_identity(
+            registry_id=registry_id, vm_name=vm_name, asset_group=asset_group, data_type=data_type
+        )
+    except ValueError:
+        return None
+
 
 def maybe_dispatch_to_orchestrator(event_name: str, summary: str, details: dict[str, object]) -> None:
     """Gate + fire the relocated GitHub ``repository_dispatch`` fast-spawn
     call for a FILE_ISSUE/PAGE_OPERATOR-tier data-pipeline finding.
+
+    Phase 3's escalation ladder (``alerting_service.escalation_ladder.
+    record_occurrence``) runs FIRST, before the dedup check below: a finding
+    below the ladder's occurrence threshold (or already OPEN and still
+    within its cooldown) is muted here -- returns without dispatching, and
+    without even consulting the dedup checkpoint. Only a genuine CLOSED->OPEN
+    (or cooldown-elapsed HALF_OPEN->OPEN) crossing -- or a ladder read/write
+    failure, which fails OPEN toward dispatching rather than silently
+    swallowing a PAGE_OPERATOR-tier finding -- proceeds to the dedup +
+    dispatch logic that already existed here.
 
     Applies the GCS-durable dispatch-dedup checkpoint
     (``orchestrator_dispatch_budget.check_dispatch_dedup_gcs``) when the
@@ -53,6 +104,16 @@ def maybe_dispatch_to_orchestrator(event_name: str, summary: str, details: dict[
     if tier not in _DISPATCH_GATED_TIERS:
         return
     try:
+        identity = _resolve_ladder_identity(details)
+        if identity is not None:
+            window = dedup_window_for(event_name, details) or _DEFAULT_LADDER_WINDOW_SECONDS
+            transition = record_occurrence(identity, window_seconds=window)
+            if transition == "":
+                return  # below the escalation threshold, or already-OPEN-and-quiet -- muted
+            # transition is STATE_OPEN (a genuine crossing/re-crossing) or
+            # None (ladder state unresolvable) -- both fall through to the
+            # dedup+dispatch logic below; see record_occurrence's docstring
+            # for why None must never be treated like "".
         asset_group = str(details.get("asset_group_name", "")).strip()  # noqa: qg-empty-fallback — absent means this finding isn't tuple-shaped
         data_type = str(details.get("data_type", "")).strip()  # noqa: qg-empty-fallback — same as asset_group_name above
         if asset_group and data_type:
