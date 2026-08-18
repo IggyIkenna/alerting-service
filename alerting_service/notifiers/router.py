@@ -65,7 +65,14 @@ logger = logging.getLogger(__name__)
 _VALID_SEVERITIES: frozenset[str] = frozenset(get_args(PagerDutySeverity))
 
 # Module-level deduplicator (shared across all route_event calls).
-_deduplicator = AlertDeduplicator(ttl_seconds=60.0)
+# `persisted_store_factory=lambda: _get_storage_store()` closes the
+# redeploy-wipes-state gap (dp_cron_did_not_fire_dedup_state_lost_on_redeploy_2026_08_18.md):
+# `_get_storage_store` is defined further down this module, but the lambda body
+# only resolves that name lazily on first `is_duplicate` call (after module
+# import has completed), never at this assignment. Persistence only engages
+# for entries recorded with a `_RECURRING_ALERT_COOLDOWNS`-sourced ttl_override
+# -- see core/dedup.py's module docstring for the full mechanism + scoping.
+_deduplicator = AlertDeduplicator(ttl_seconds=60.0, persisted_store_factory=lambda: _get_storage_store())
 # Per-event dedup cooldowns (window >= detector cadence). One key per
 # (identity, event) per window; re-nags while down, re-alerts on resolve+recur.
 _RECURRING_ALERT_COOLDOWNS: dict[str, float] = {

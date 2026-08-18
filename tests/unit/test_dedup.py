@@ -7,6 +7,37 @@ from unittest.mock import patch
 from alerting_service.core.dedup import AlertDeduplicator
 
 
+class FakeCooldownStore:
+    """In-memory stand-in for ``AlertStorageStore``'s cooldown-state methods.
+
+    Structurally satisfies ``core.dedup.CooldownPersistedStore`` -- exercises
+    the persistence wiring without touching real GCS/cloud config.
+    """
+
+    def __init__(self, initial: dict[str, object] | None = None) -> None:
+        self.state: dict[str, object] = dict(initial) if initial else {}
+        self.read_calls = 0
+        self.write_calls = 0
+
+    def read_cooldown_state(self) -> dict[str, object]:
+        self.read_calls += 1
+        return self.state
+
+    def write_cooldown_state(self, state: dict[str, object]) -> None:
+        self.write_calls += 1
+        self.state = dict(state)
+
+
+class RaisingCooldownStore:
+    """A store whose read/write always raise -- proves fail-open behavior."""
+
+    def read_cooldown_state(self) -> dict[str, object]:
+        raise RuntimeError("boom-read")
+
+    def write_cooldown_state(self, state: dict[str, object]) -> None:
+        raise RuntimeError("boom-write")
+
+
 class TestAlertDeduplicator:
     def test_first_event_is_not_duplicate(self) -> None:
         dedup = AlertDeduplicator(ttl_seconds=60.0)
@@ -190,3 +221,101 @@ class TestTtlOverride:
             dedup.is_duplicate("OTHER_EVENT", det)
         with patch("alerting_service.core.dedup.time.monotonic", return_value=61.0):
             assert dedup.is_duplicate("OTHER_EVENT", det) is False  # default 60s expired
+
+
+class TestPersistedCooldownState:
+    """GCS-persisted state for the ttl_override (recurring) subset --
+    dp_cron_did_not_fire_dedup_state_lost_on_redeploy_2026_08_18.md."""
+
+    def test_no_factory_never_touches_a_store(self) -> None:
+        """Default construction (no persisted_store_factory) behaves exactly
+        as before -- persistence is fully opt-in."""
+        dedup = AlertDeduplicator(ttl_seconds=60.0)
+        assert dedup.is_duplicate("EVENT_A", {"k": "v"}, ttl_override=1800.0) is False
+        assert dedup._persisted_store is None
+
+    def test_non_recurring_entry_is_never_persisted(self) -> None:
+        """No ttl_override (the plain 60s-default path) must add ZERO GCS
+        I/O -- the issue's own scoping requirement."""
+        store = FakeCooldownStore()
+        dedup = AlertDeduplicator(ttl_seconds=60.0, persisted_store_factory=lambda: store)
+        dedup.is_duplicate("EVENT_A", {"k": "v"})
+        dedup.is_duplicate("EVENT_B", {"k": "v"})
+        assert store.write_calls == 0
+
+    def test_recurring_entry_writes_through_on_first_occurrence(self) -> None:
+        store = FakeCooldownStore()
+        dedup = AlertDeduplicator(ttl_seconds=60.0, persisted_store_factory=lambda: store)
+        with patch("alerting_service.core.dedup.time.time", return_value=1000.0):
+            assert dedup.is_duplicate("DP_CRON_DID_NOT_FIRE", {"vm": "x"}, ttl_override=1800.0) is False
+        assert store.write_calls == 1
+        key = AlertDeduplicator._make_key("DP_CRON_DID_NOT_FIRE", {"vm": "x"})
+        assert store.state[key] == {"ts": 1000.0, "ttl": 1800.0}
+
+    def test_duplicate_within_window_does_not_re_write(self) -> None:
+        """A suppressed (duplicate) hit is a no-op read of ``_seen`` -- it
+        must not trigger another GCS write."""
+        store = FakeCooldownStore()
+        dedup = AlertDeduplicator(ttl_seconds=60.0, persisted_store_factory=lambda: store)
+        det = {"vm": "x"}
+        with patch("alerting_service.core.dedup.time.monotonic", return_value=0.0):
+            dedup.is_duplicate("DP_CRON_DID_NOT_FIRE", det, ttl_override=1800.0)
+        with patch("alerting_service.core.dedup.time.monotonic", return_value=100.0):
+            assert dedup.is_duplicate("DP_CRON_DID_NOT_FIRE", det, ttl_override=1800.0) is True
+        assert store.write_calls == 1
+
+    def test_fresh_instance_survives_a_simulated_redeploy(self) -> None:
+        """THE regression this fix closes: a brand-new AlertDeduplicator
+        instance (mirrors a fresh Cloud Run container after a redeploy),
+        backed by the SAME persisted store a prior instance wrote to, must
+        still suppress a still-cooling-down identity -- not treat it as
+        first-occurrence."""
+        store = FakeCooldownStore()
+        det = {"venue": "BYBIT-FUTURES", "data_type": "trades"}
+
+        dedup_before_redeploy = AlertDeduplicator(ttl_seconds=60.0, persisted_store_factory=lambda: store)
+        with patch("alerting_service.core.dedup.time.time", return_value=5000.0):
+            assert dedup_before_redeploy.is_duplicate("DP_CRON_DID_NOT_FIRE", det, ttl_override=1800.0) is False
+
+        # Simulate the redeploy: a FRESH instance, fresh in-process `_seen`,
+        # but the same GCS-backed store -- 600s later, still inside the 1800s
+        # cooldown window.
+        dedup_after_redeploy = AlertDeduplicator(ttl_seconds=60.0, persisted_store_factory=lambda: store)
+        with patch("alerting_service.core.dedup.time.time", return_value=5600.0):
+            assert dedup_after_redeploy.is_duplicate("DP_CRON_DID_NOT_FIRE", det, ttl_override=1800.0) is True
+
+    def test_load_skips_an_already_expired_persisted_entry(self) -> None:
+        """Fail OPEN, not closed: a persisted entry past its own ttl at load
+        time must not suppress -- the next matching alert pages normally."""
+        key = AlertDeduplicator._make_key("DP_CRON_DID_NOT_FIRE", {"vm": "x"})
+        store = FakeCooldownStore(initial={key: {"ts": 0.0, "ttl": 1800.0}})
+        dedup = AlertDeduplicator(ttl_seconds=60.0, persisted_store_factory=lambda: store)
+        with patch("alerting_service.core.dedup.time.time", return_value=5000.0):  # well past ts+ttl
+            assert dedup.is_duplicate("DP_CRON_DID_NOT_FIRE", {"vm": "x"}, ttl_override=1800.0) is False
+
+    def test_load_failure_is_fail_open(self) -> None:
+        dedup = AlertDeduplicator(ttl_seconds=60.0, persisted_store_factory=lambda: RaisingCooldownStore())
+        assert dedup.is_duplicate("DP_CRON_DID_NOT_FIRE", {"vm": "x"}, ttl_override=1800.0) is False
+        assert dedup._persisted_store is None  # load failed -> persistence disabled this instance
+
+    def test_write_failure_does_not_raise(self) -> None:
+        class WriteOnlyRaisingStore(FakeCooldownStore):
+            def write_cooldown_state(self, state: dict[str, object]) -> None:
+                raise RuntimeError("boom-write")
+
+        dedup = AlertDeduplicator(ttl_seconds=60.0, persisted_store_factory=lambda: WriteOnlyRaisingStore())
+        # must not raise even though the underlying write fails
+        assert dedup.is_duplicate("DP_CRON_DID_NOT_FIRE", {"vm": "x"}, ttl_override=1800.0) is False
+
+    def test_factory_resolved_at_most_once(self) -> None:
+        calls: list[int] = []
+
+        def factory() -> FakeCooldownStore:
+            calls.append(1)
+            return FakeCooldownStore()
+
+        dedup = AlertDeduplicator(ttl_seconds=60.0, persisted_store_factory=factory)
+        dedup.is_duplicate("EVENT_A", {"k": "v"}, ttl_override=1800.0)
+        dedup.is_duplicate("EVENT_B", {"k": "v"}, ttl_override=1800.0)
+        dedup.is_duplicate("EVENT_C", {"k": "v"})
+        assert len(calls) == 1

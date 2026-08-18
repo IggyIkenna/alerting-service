@@ -20,11 +20,34 @@ stable IDENTITY fields makes the same vm+event collapse to one key, and a
 per-call ``ttl_override`` lets the router hold that key for a cooldown
 window (≥ the monitor sweep interval) so an ongoing stall pings ONCE per
 window — re-alerting only when it resolves and recurs.
+
+GCS-persisted cooldown state for the ``ttl_override`` subset (2026-08-18
+fix, ``dp_cron_did_not_fire_dedup_state_lost_on_redeploy_2026_08_18.md``):
+``_seen`` is a plain in-process dict, and a Cloud Run service can redeploy
+(a fresh container/process) far more often than a recurring cooldown window
+— confirmed live: 5 ``dp-alerting-subscriber`` revisions in ~3.25h, one gap
+17min shorter than the 1800s ``DP_CRON_DID_NOT_FIRE`` cooldown itself. Every
+redeploy silently wiped ``_seen``, so the very next fire for ANY
+still-cooling-down identity was treated as first-occurrence and delivered —
+structurally defeating every entry in ``router._RECURRING_ALERT_COOLDOWNS``,
+independent of which detector/event was involved. An optional
+``persisted_store_factory`` closes this: entries recorded with a
+non-``None`` ``ttl_override`` (the recurring subset only — the plain 60s
+default path is already shorter than any plausible redeploy gap and is
+never persisted) round-trip through GCS, loaded once lazily on the first
+``is_duplicate`` call and re-written after each new persist-eligible entry.
+Fails OPEN on any read/parse/write error, same direction as
+``deployment_service.data_pipeline_monitors.renag_tracker.RenagTracker``.
 """
 
 import hashlib
 import json
+import logging
 import time
+from collections.abc import Callable
+from typing import Protocol, cast
+
+logger = logging.getLogger(__name__)
 
 # Render-only / per-fire-volatile detail keys excluded from the dedup hash.
 # These change between otherwise-identical fires (or are present in one emit
@@ -103,6 +126,23 @@ _VOLATILE_DETAIL_KEY_SUFFIXES: tuple[str, ...] = (
 )
 
 
+class CooldownPersistedStore(Protocol):
+    """Structural type for a GCS-backed cooldown-state store.
+
+    Matches ``AlertStorageStore.read_cooldown_state`` /
+    ``AlertStorageStore.write_cooldown_state``
+    (``alerting_service/persistence/storage_store.py``) without importing
+    that module here — keeps ``core.dedup`` decoupled from the GCS
+    persistence layer + its cloud-config machinery, and lets unit tests
+    construct an ``AlertDeduplicator`` with a bare fake instead of a real
+    GCS-backed client.
+    """
+
+    def read_cooldown_state(self) -> dict[str, object]: ...
+
+    def write_cooldown_state(self, state: dict[str, object]) -> None: ...
+
+
 class AlertDeduplicator:
     """TTL-based alert deduplicator.
 
@@ -116,12 +156,31 @@ class AlertDeduplicator:
             duplicate.  Defaults to 60.  A per-call ``ttl_override`` (e.g. a
             longer cooldown for recurring lifecycle WARN alerts) wins for the
             entry it records.
+        persisted_store_factory: Optional zero-arg callable returning a
+            :class:`CooldownPersistedStore`. When set, entries recorded with
+            a non-``None`` ``ttl_override`` survive a fresh process/container
+            by round-tripping through GCS (see module docstring). Resolved
+            LAZILY — on the first ``is_duplicate`` call, not at ``__init__``
+            time — so constructing a real store (which touches cloud config)
+            never happens at import time, only on first actual use.
     """
 
-    def __init__(self, ttl_seconds: float = 60.0) -> None:
+    def __init__(
+        self,
+        ttl_seconds: float = 60.0,
+        persisted_store_factory: Callable[[], CooldownPersistedStore] | None = None,
+    ) -> None:
         self._ttl = ttl_seconds
         # Maps dedup key -> (timestamp of first occurrence, effective ttl).
         self._seen: dict[str, tuple[float, float]] = {}
+        self._persisted_store_factory = persisted_store_factory
+        self._persisted_store: CooldownPersistedStore | None = None
+        self._persisted_loaded = False
+        # Wall-clock mirror of the persist-eligible (ttl_override is not
+        # None) subset of `_seen` -- key -> (epoch_seconds, ttl). `_seen`
+        # itself is keyed by `time.monotonic()`, which is meaningless across
+        # a process restart, so this is what actually round-trips via GCS.
+        self._persisted_entries: dict[str, tuple[float, float]] = {}
 
     @staticmethod
     def _make_key(event_name: str, details: dict[str, object]) -> str:
@@ -146,6 +205,62 @@ class AlertDeduplicator:
         for key in expired:
             del self._seen[key]
 
+    def _ensure_persisted_loaded(self) -> None:
+        """Lazily resolve + load persisted cooldown state, once per instance.
+
+        Runs on the FIRST ``is_duplicate`` call only (a cheap flag check on
+        every call thereafter) — this is what lets a FRESH instance (a new
+        Cloud Run container after a redeploy) pick back up a cooldown a PRIOR
+        instance persisted, closing the gap this exists to fix. Fails OPEN:
+        any read/parse error just means this run behaves like persistence was
+        never configured (today's status quo), never a hard failure.
+        """
+        if self._persisted_loaded or self._persisted_store_factory is None:
+            return
+        self._persisted_loaded = True  # attempt at most once, success or fail
+        try:
+            store = self._persisted_store_factory()
+            raw = store.read_cooldown_state()
+        except Exception as exc:
+            logger.warning("AlertDeduplicator: failed to load persisted cooldown state: %s", exc)
+            return
+
+        now_wall = time.time()
+        now_mono = time.monotonic()
+        for key, raw_entry in raw.items():
+            if not isinstance(raw_entry, dict):
+                continue
+            entry = cast("dict[str, object]", raw_entry)
+            ts = entry.get("ts")
+            ttl = entry.get("ttl")
+            if not isinstance(ts, (int, float)) or not isinstance(ttl, (int, float)):
+                continue
+            age = now_wall - float(ts)
+            if age < 0 or age >= float(ttl):
+                continue  # already expired (or clock skew) -- fail open, don't suppress
+            self._seen[key] = (now_mono - age, float(ttl))
+            self._persisted_entries[key] = (float(ts), float(ttl))
+        self._persisted_store = store
+
+    def _flush_persisted(self) -> None:
+        """Best-effort write-through of the persist-eligible subset to GCS.
+
+        Never raises -- a failed write just means the NEXT redeploy inside
+        this entry's cooldown window loses it (today's status quo), not that
+        THIS process's own in-memory dedup breaks.
+        """
+        if self._persisted_store is None:
+            return
+        now_wall = time.time()
+        self._persisted_entries = {
+            k: (ts, ttl) for k, (ts, ttl) in self._persisted_entries.items() if (now_wall - ts) < ttl
+        }
+        state: dict[str, object] = {k: {"ts": ts, "ttl": ttl} for k, (ts, ttl) in self._persisted_entries.items()}
+        try:
+            self._persisted_store.write_cooldown_state(state)
+        except Exception as exc:
+            logger.warning("AlertDeduplicator: failed to persist cooldown state: %s", exc)
+
     def is_duplicate(
         self,
         event_name: str,
@@ -166,11 +281,14 @@ class AlertDeduplicator:
                 recorded entry is held for this long instead of the default
                 ``ttl_seconds`` — used to give recurring lifecycle WARN alerts
                 a cooldown ≥ the monitor sweep interval so an ongoing condition
-                pings once per window, not every sweep.
+                pings once per window, not every sweep. Also the signal for
+                GCS persistence (see ``persisted_store_factory``): a ``None``
+                override (the plain 60s-default path) is never persisted.
 
         Returns:
             ``True`` if the alert is a duplicate, ``False`` otherwise.
         """
+        self._ensure_persisted_loaded()
         now = time.monotonic()
         self._evict_expired(now)
 
@@ -178,5 +296,11 @@ class AlertDeduplicator:
         if key in self._seen:
             return True
 
-        self._seen[key] = (now, ttl_override if ttl_override is not None else self._ttl)
+        effective_ttl = ttl_override if ttl_override is not None else self._ttl
+        self._seen[key] = (now, effective_ttl)
+
+        if ttl_override is not None:
+            self._persisted_entries[key] = (time.time(), effective_ttl)
+            self._flush_persisted()
+
         return False
