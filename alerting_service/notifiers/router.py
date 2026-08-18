@@ -56,6 +56,7 @@ from ..persistence.storage_store import AlertStorageStore
 from .data_pipeline_slack import send_data_pipeline_alert
 from .email import send_critical_fallback
 from .incident_fallback import route_incident_envelope_to_fallbacks
+from .orchestrator_dispatch_gate import maybe_dispatch_to_orchestrator as _maybe_dispatch_to_orchestrator
 from .pagerduty import PagerDutySeverity
 from .pagerduty import send_event as pd_send_event
 from .uts_live_alerts_slack import send_uts_live_alert
@@ -366,8 +367,7 @@ def _mirror_to_data_pipeline_slack(
             deployment_ui_base_url=deployment_ui_base_url,
             log_bucket=log_bucket,
         )
-    except Exception as exc:
-        # Mirror is strictly best-effort — never break the CRITICAL incident path.
+    except Exception as exc:  # best-effort mirror — never break the CRITICAL incident path
         logger.warning("data-pipeline-alerts Slack mirror raised for %s: %s", event_name, exc)
 
 
@@ -415,6 +415,7 @@ def _route_data_pipeline_event(
             channels={"pagerduty", "telegram"},
             pd_severity="critical",
         )
+    _maybe_dispatch_to_orchestrator(event_name, summary, details_with_sev)
 
 
 def _persisted_severity(pd_severity: PagerDutySeverity | None, details: dict[str, object]) -> str | None:
