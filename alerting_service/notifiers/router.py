@@ -617,6 +617,7 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
 
     if _deduplicator.is_duplicate(event_name, details, ttl_override=_dedup_window_for(event_name, details)):
         logger.debug("Duplicate alert suppressed: %s", event_name)
+        log_event("ALERT_DEDUPLICATED", details={"event_name": event_name})
         if _batch_mode:
             _batch_deduplicated += 1
         return
@@ -769,6 +770,7 @@ def route_event_with_explicit_channels(
 
     if _deduplicator.is_duplicate(event_name, details, ttl_override=_dedup_window_for(event_name, details)):
         logger.debug("Duplicate alert suppressed (explicit channels): %s", event_name)
+        log_event("ALERT_DEDUPLICATED", details={"event_name": event_name})
         if _batch_mode:
             _batch_deduplicated += 1
         return
