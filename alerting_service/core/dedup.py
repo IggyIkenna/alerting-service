@@ -103,6 +103,35 @@ _VOLATILE_DETAIL_KEY_SUFFIXES: tuple[str, ...] = (
 )
 
 
+def _compute_identity_hash_key(event_name: str, details: dict[str, object]) -> str:
+    """Build a dedup key from event name + a stable hash of IDENTITY details.
+
+    Volatile / render-only fields (``_VOLATILE_DETAIL_KEYS``) are dropped before
+    hashing so the same logical alert hashes identically across sweeps and emit-shape
+    variants. Module-private top-level function (not a class member) so BOTH
+    :meth:`AlertDeduplicator._make_key` and the public :func:`compute_dedup_key` below
+    share ONE implementation without either reaching into the other across a
+    class/module boundary (avoids basedpyright ``reportPrivateUsage``).
+    """
+    identity = {
+        k: v
+        for k, v in details.items()
+        if k not in _VOLATILE_DETAIL_KEYS and not k.endswith(_VOLATILE_DETAIL_KEY_SUFFIXES)
+    }
+    details_json = json.dumps(identity, sort_keys=True, default=str)
+    details_hash = hashlib.sha256(details_json.encode("utf-8")).hexdigest()[:16]
+    return f"{event_name}:{details_hash}"
+
+
+def compute_dedup_key(event_name: str, details: dict[str, object]) -> str:
+    """Public entry point for the identity-hash key derivation, so an EXTERNAL durable
+    (GCS-persisted) cooldown layer can compute an IDENTICAL key without a
+    cross-module private-attribute reach-in — mirrors the "reuse the convention, don't
+    re-derive it" call already made in ``alerting_service/escalation_ladder.py``'s
+    module docstring."""
+    return _compute_identity_hash_key(event_name, details)
+
+
 class AlertDeduplicator:
     """TTL-based alert deduplicator.
 
@@ -129,16 +158,10 @@ class AlertDeduplicator:
 
         Volatile / render-only fields (``_VOLATILE_DETAIL_KEYS``) are dropped
         before hashing so the same logical alert hashes identically across
-        sweeps and emit-shape variants.
+        sweeps and emit-shape variants. Delegates to the module-level
+        ``_compute_identity_hash_key`` — see that function's docstring.
         """
-        identity = {
-            k: v
-            for k, v in details.items()
-            if k not in _VOLATILE_DETAIL_KEYS and not k.endswith(_VOLATILE_DETAIL_KEY_SUFFIXES)
-        }
-        details_json = json.dumps(identity, sort_keys=True, default=str)
-        details_hash = hashlib.sha256(details_json.encode("utf-8")).hexdigest()[:16]
-        return f"{event_name}:{details_hash}"
+        return _compute_identity_hash_key(event_name, details)
 
     def _evict_expired(self, now: float) -> None:
         """Remove entries older than their own (possibly overridden) TTL."""

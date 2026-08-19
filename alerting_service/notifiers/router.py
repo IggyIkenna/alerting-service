@@ -73,6 +73,14 @@ _deduplicator = AlertDeduplicator(ttl_seconds=60.0)
 # Re-bound here under the original private names so the test surface
 # (router._is_synthetic / router._check_coalesce_window / …) and in-repo
 # consumers resolve unchanged.
+# GCS-persisted cooldown layer for _RECURRING_ALERT_COOLDOWNS-eligible events (2026-08-19
+# fix, dp_cron_did_not_fire_dedup_state_lost_on_redeploy_2026_08_18.md) — survives a
+# dp-alerting-subscriber redeploy landing inside an open cooldown, which otherwise wipes
+# _deduplicator._seen and re-delivers every currently-cooling-down identity as if fresh.
+from alerting_service.core.recurring_dedup_persistence import RecurringCooldownState
+from alerting_service.core.recurring_dedup_persistence import (
+    get_recurring_cooldown_state as _get_recurring_cooldown_state,
+)
 from alerting_service.notifiers.coalesce import (
     COALESCE_WINDOW_SECONDS as _COALESCE_WINDOW_SECONDS,
 )
@@ -568,6 +576,26 @@ from alerting_service.notifiers.kill_switch_rules import (
 )
 
 
+def _is_duplicate_alert(event_name: str, details: dict[str, object]) -> bool:
+    """Shared dedup check for route_event()/route_event_with_explicit_channels().
+
+    Layers the GCS-persisted RecurringCooldownState on top of the existing in-process
+    AlertDeduplicator for _RECURRING_ALERT_COOLDOWNS-eligible events only; batch-replay
+    mode never touches persisted state (audit-only, must not write live cooldown data).
+    """
+    ttl_override = _dedup_window_for(event_name, details)
+    recurring: RecurringCooldownState | None = None
+    if ttl_override is not None and not _batch_mode:
+        recurring = _get_recurring_cooldown_state()
+        if recurring.should_suppress(event_name, details, ttl_override):
+            return True
+    if _deduplicator.is_duplicate(event_name, details, ttl_override=ttl_override):
+        return True
+    if recurring is not None:
+        recurring.record(event_name, details)
+    return False
+
+
 def route_event(event_name: str, details: dict[str, object]) -> None:
     """Route an event to the correct notifier(s) based on config-driven rules.
 
@@ -587,7 +615,7 @@ def route_event(event_name: str, details: dict[str, object]) -> None:
     """
     global _batch_deduplicated, _batch_matched
 
-    if _deduplicator.is_duplicate(event_name, details, ttl_override=_dedup_window_for(event_name, details)):
+    if _is_duplicate_alert(event_name, details):
         logger.debug("Duplicate alert suppressed: %s", event_name)
         log_event("ALERT_DEDUPLICATED", details={"event_name": event_name})
         if _batch_mode:
@@ -740,7 +768,7 @@ def route_event_with_explicit_channels(
     """
     global _batch_deduplicated
 
-    if _deduplicator.is_duplicate(event_name, details, ttl_override=_dedup_window_for(event_name, details)):
+    if _is_duplicate_alert(event_name, details):
         logger.debug("Duplicate alert suppressed (explicit channels): %s", event_name)
         log_event("ALERT_DEDUPLICATED", details={"event_name": event_name})
         if _batch_mode:

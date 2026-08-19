@@ -198,19 +198,32 @@ class TestRouteEventDataPipeline:
             "ratio": 0.215,
         }
 
-        with patch("alerting_service.core.dedup.time.monotonic", return_value=0.0):
+        # time.monotonic() drives the in-process AlertDeduplicator; time.time() drives
+        # the GCS-persisted RecurringCooldownState layered on top of it (2026-08-19 fix)
+        # — both must advance together or the durable layer (real wall-clock in
+        # production) suppresses using whatever the test's actual real-time gap is.
+        with (
+            patch("alerting_service.core.dedup.time.monotonic", return_value=0.0),
+            patch("alerting_service.core.recurring_dedup_persistence.time.time", return_value=0.0),
+        ):
             route_event("DP_RUN_MOSTLY_EMPTY", details)
 
         # Identical fire 900s later (the real-world 12:03 / 12:17 duplicate) →
         # suppressed as a duplicate, not delivered again.
-        with patch("alerting_service.core.dedup.time.monotonic", return_value=900.0):
+        with (
+            patch("alerting_service.core.dedup.time.monotonic", return_value=900.0),
+            patch("alerting_service.core.recurring_dedup_persistence.time.time", return_value=900.0),
+        ):
             route_event("DP_RUN_MOSTLY_EMPTY", details)
 
         mock_send_dp.assert_called_once()
         mock_explicit_route.assert_called_once()
 
         # Past the 1800s cooldown the still-unresolved condition re-nags.
-        with patch("alerting_service.core.dedup.time.monotonic", return_value=1801.0):
+        with (
+            patch("alerting_service.core.dedup.time.monotonic", return_value=1801.0),
+            patch("alerting_service.core.recurring_dedup_persistence.time.time", return_value=1801.0),
+        ):
             route_event("DP_RUN_MOSTLY_EMPTY", details)
 
         assert mock_send_dp.call_count == 2
