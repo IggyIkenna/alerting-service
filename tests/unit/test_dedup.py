@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from alerting_service.core.dedup import AlertDeduplicator
+from alerting_service.core.dedup import AlertDeduplicator, compute_dedup_key
 
 
 class TestAlertDeduplicator:
@@ -190,3 +190,15 @@ class TestTtlOverride:
             dedup.is_duplicate("OTHER_EVENT", det)
         with patch("alerting_service.core.dedup.time.monotonic", return_value=61.0):
             assert dedup.is_duplicate("OTHER_EVENT", det) is False  # default 60s expired
+
+
+class TestComputeDedupKey:
+    """Public wrapper used by the GCS-persisted recurring-cooldown layer
+    (core/recurring_dedup_persistence.py) to compute an IDENTICAL key without a
+    cross-module private-attribute reach-in."""
+
+    def test_matches_the_internal_make_key(self) -> None:
+        assert compute_dedup_key("E", {"a": 1, "b": 2}) == AlertDeduplicator._make_key("E", {"a": 1, "b": 2})
+
+    def test_order_independent(self) -> None:
+        assert compute_dedup_key("E", {"a": 1, "b": 2}) == compute_dedup_key("E", {"b": 2, "a": 1})
