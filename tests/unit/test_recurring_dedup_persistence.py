@@ -83,10 +83,51 @@ class TestRecurringCooldownState:
         state = RecurringCooldownState(store=store)
         state.record("DP_CRON_DID_NOT_FIRE", {"vm_name": "vm-a"})  # must not raise
 
-    def test_load_happens_at_most_once(self) -> None:
+    def test_cached_load_happens_at_most_once_for_should_suppress(self) -> None:
+        """The `_ensure_loaded` cache primes on the first call and is never re-read by
+        `should_suppress` — only `record()`'s own merge-read (see below) issues a second
+        read, and only once per `record()` call, not once per `should_suppress`."""
         store = _fake_store()
         state = RecurringCooldownState(store=store)
         state.should_suppress("DP_CRON_DID_NOT_FIRE", {"vm_name": "vm-a"}, ttl_seconds=1800.0)
         state.should_suppress("DP_CRON_DID_NOT_FIRE", {"vm_name": "vm-b"}, ttl_seconds=1800.0)
-        state.record("DP_CRON_DID_NOT_FIRE", {"vm_name": "vm-c"})
         assert store.read_cooldown_state.call_count == 1
+        state.record("DP_CRON_DID_NOT_FIRE", {"vm_name": "vm-c"})
+        assert store.read_cooldown_state.call_count == 2
+
+    def test_record_merges_against_latest_durable_state_not_a_blind_overwrite(self) -> None:
+        """Regression for the live 2026-08-19 finding: two RecurringCooldownState instances
+        (e.g. old+new Cloud Run revision overlapping during a redeploy) each load state once
+        at construction time and diverge from there. Without a merge-before-write, whichever
+        instance's `record()` runs LAST wins and silently drops every identity the OTHER
+        instance recorded — defeating the cooldown for those identities exactly like the
+        pre-fix in-process-only dict did. `record()` must merge against a fresh read of the
+        durable store, not just persist its own local `_last_emitted_at` view."""
+        backing_json: dict[str, object] = {}
+        store = _fake_store()
+        store.read_cooldown_state.side_effect = lambda: dict(backing_json)
+
+        def _capture_write(state: dict[str, object]) -> None:
+            backing_json.clear()
+            backing_json.update(state)
+
+        store.write_cooldown_state.side_effect = _capture_write
+
+        # Both instances load the SAME (empty) initial state, simulating two processes
+        # that started before either had recorded anything.
+        instance_a = RecurringCooldownState(store=store)
+        instance_b = RecurringCooldownState(store=store)
+        instance_a.should_suppress("DP_CRON_DID_NOT_FIRE", {"vm_name": "vm-a"}, ttl_seconds=1800.0)
+        instance_b.should_suppress("DP_CRON_DID_NOT_FIRE", {"vm_name": "vm-b"}, ttl_seconds=1800.0)
+
+        with patch("alerting_service.core.recurring_dedup_persistence.time.time", return_value=1000.0):
+            instance_a.record("DP_CRON_DID_NOT_FIRE", {"vm_name": "vm-a"})
+        with patch("alerting_service.core.recurring_dedup_persistence.time.time", return_value=1010.0):
+            instance_b.record("DP_CRON_DID_NOT_FIRE", {"vm_name": "vm-b"})
+
+        # A THIRD instance (the next redeploy) must see BOTH identities as cooling down --
+        # a blind overwrite would have let instance_b's write erase vm-a's record.
+        instance_c = RecurringCooldownState(store=store)
+        with patch("alerting_service.core.recurring_dedup_persistence.time.time", return_value=1020.0):
+            assert instance_c.should_suppress("DP_CRON_DID_NOT_FIRE", {"vm_name": "vm-a"}, ttl_seconds=1800.0) is True
+            assert instance_c.should_suppress("DP_CRON_DID_NOT_FIRE", {"vm_name": "vm-b"}, ttl_seconds=1800.0) is True

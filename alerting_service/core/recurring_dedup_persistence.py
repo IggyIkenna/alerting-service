@@ -19,9 +19,11 @@ Scope is deliberately narrow (per the issue doc's own risk note): only events ca
 a ``_RECURRING_ALERT_COOLDOWNS`` ``ttl_override`` touch this layer — the general
 60s-default dedup path (every OTHER event in the system) stays in-process-only,
 unchanged, so this does not add GCS I/O to alerting-service's hot path as a whole.
-State is loaded once per process/container lifetime (cached in memory) and written
-through only on an actual new delivery (cooldown-gated, so writes are infrequent) —
-never a GCS read on every alert.
+State is loaded once per process/container lifetime for the ``should_suppress`` read path
+(cached in memory) — never a GCS read on every alert. ``record()`` is the exception: it
+re-reads + merges the durable state before every write (see its own docstring) to close a
+lost-update race between concurrent processes, so it does cost one GCS read, but only on an
+actual new delivery (cooldown-gated, so this stays infrequent, not a hot-path cost).
 """
 
 from __future__ import annotations
@@ -78,11 +80,28 @@ class RecurringCooldownState:
     def record(self, event_name: str, details: dict[str, object]) -> None:
         """Record this identity's emission NOW and persist. Call only immediately after
         the caller has decided to actually deliver the alert (never on a
-        suppressed/duplicate call, or the cooldown clock advances with nothing sent)."""
+        suppressed/duplicate call, or the cooldown clock advances with nothing sent).
+
+        Re-reads the durable state and merges before writing (2026-08-19 fix,
+        `dp_cron_did_not_fire_dedup_state_lost_on_redeploy_2026_08_18.md`): a blind write of
+        only this process's own `_last_emitted_at` cache silently drops every identity a
+        DIFFERENT process (old+new revision overlap during a redeploy, or a sibling
+        in-flight request) has recorded since THIS process last loaded state — live-measured
+        even after this layer's own first fix shipped (`alerting-service@f48a61193f`):
+        `DP_CRON_DID_NOT_FIRE` still re-fired at ~24min average, under its 1800s cooldown,
+        14h+ post-deploy, because every `write_cooldown_state` call overwrote the whole blob
+        with a stale/partial in-memory view rather than merging against the latest GCS
+        content."""
         self._ensure_loaded()
-        self._last_emitted_at[compute_dedup_key(event_name, details)] = time.time()
+        key = compute_dedup_key(event_name, details)
+        self._last_emitted_at[key] = time.time()
         try:
-            self._get_store().write_cooldown_state(dict(self._last_emitted_at))
+            store = self._get_store()
+            raw = store.read_cooldown_state()
+            merged = {str(k): float(v) for k, v in raw.items() if isinstance(v, int | float)}
+            merged.update(self._last_emitted_at)
+            self._last_emitted_at = merged
+            store.write_cooldown_state(dict(self._last_emitted_at))
         except Exception as exc:  # noqa: broad-except -- persistence is best-effort
             logger.warning("RecurringCooldownState: persist failed: %s", exc)
 
