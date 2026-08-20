@@ -14,8 +14,11 @@ on:
     branches:
       - main
   # Drift-tick schedule REMOVED 2026-06-27: the hourly safety-net for [skip ci] drift is now
-  # handled by PM's branch-health.yml (every 30 min) which dispatches this workflow. For
-  # non-PM repos the push trigger covers the common case; LDR drift is acceptable within 30m.
+  # handled by branch-health.yml (hourly, 0 * * * *) which dispatches this workflow fleet-wide
+  # for unified-trading-pm + every promotion_model: ldr_main repo (2026-08-19) -- so a transient
+  # GHA failure (e.g. a codeload 429) that strands one repo's backmerge is re-driven on the
+  # next hour. The push trigger still handles the immediate push case; LDR drift is acceptable
+  # within ~60 min (the hourly tick window).
   workflow_dispatch: {}
 
 permissions:
