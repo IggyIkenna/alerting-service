@@ -9,9 +9,11 @@ NOT rebuild any of it). When a ``critical`` data feed goes stale:
 (a) the order-blocking ``freshness_gate`` ALREADY blocks new orders — no change
     here (this module never touches the gate; it stays closed until the feed
     recovers, which is the freshness_gate's own job).
-(b) fire the ``refetch-feed`` Layer-0 action (Blue Flame's SILENT_RETRY) — the
-    bound active re-fetch (deployment-service ``refetch_feed.py`` keyed off
-    ``ALL_FRESHNESS_CONTRACTS[feed_id].refetch_action``).
+(b) fire the feed's BOUND Layer-0 action (Blue Flame's SILENT_RETRY) — read
+    from ``ALL_FRESHNESS_CONTRACTS[feed_id].refetch_action``: ``refetch-feed:``
+    (deployment-service ``refetch_feed.py`` REST re-pull) or
+    ``rotate-websocket:`` (``rotate_websocket.py`` ws-session rotation for
+    ws-sourced venues — a re-pull cannot revive a dead socket).
 (c) on REPEATED refetch failure escalate WARN → CRITICAL through the existing
     ``AlertSeverity`` ladder + the audit-ack SLA (``lookup_sla``), routed via
     ``route_event_with_explicit_channels`` — mirroring ``consolidator_rules``'
@@ -34,6 +36,7 @@ import logging
 
 from unified_api_contracts import AlertSeverity
 from unified_api_contracts.incident import lookup_sla
+from unified_api_contracts.internal import ALL_FRESHNESS_CONTRACTS
 from unified_trading_library import log_event
 
 from ..circuit_breaker import STATE_OPEN, CircuitBreaker
@@ -46,8 +49,21 @@ logger = logging.getLogger(__name__)
 FEED_REFETCH_TRIGGERED = "FEED_REFETCH_TRIGGERED"
 FEED_REFETCH_FAILED = "FEED_REFETCH_FAILED"
 
-# The bound Layer-0 action id prefix (mirrors DataFreshnessContract.refetch_action).
+# The legacy/fallback Layer-0 action id prefix (DataFreshnessContract.refetch_action).
 _REFETCH_ACTION_PREFIX = "refetch-feed"
+
+
+def _resolve_bound_action(feed_id: str) -> str:
+    """The feed's bound Layer-0 recovery action id from the freshness registry —
+    ``refetch-feed:<source>`` (REST re-pull) or ``rotate-websocket:<source>``
+    (ws-session rotation). Unknown/unbound feeds fall back to the legacy
+    refetch id so the escalation record still names a concrete verb.
+    """
+    contract = ALL_FRESHNESS_CONTRACTS.get(feed_id)
+    if contract is not None and contract.refetch_action is not None:
+        return contract.refetch_action
+    return f"{_REFETCH_ACTION_PREFIX}:{feed_id}"
+
 
 _PAGING_CHANNELS: frozenset[str] = frozenset({"pagerduty", "telegram"})
 _CRITICAL: PagerDutySeverity = "critical"
@@ -104,13 +120,14 @@ def evaluate_stale_critical_feed(feed_id: str, criticality: str) -> dict[str, ob
     the freshness_gate (this never re-implements that); we only name the bound
     Layer-0 refetch action that the recovery controller should fire.
     """
-    refetch_action = f"{_REFETCH_ACTION_PREFIX}:{feed_id}"
+    refetch_action = _resolve_bound_action(feed_id)
     decision: dict[str, object] = {
         "feed_id": feed_id,
         "criticality": criticality,
         # (a) freshness_gate already blocks orders — recorded, not re-implemented.
         "orders_blocked_by_freshness_gate": criticality == "critical",
-        # (b) the SILENT_RETRY — name the bound active re-fetch action.
+        # (b) the SILENT_RETRY — the feed's bound Layer-0 recovery action
+        # (REST re-pull, or ws-session rotation for ws-sourced venues).
         "refetch_action": refetch_action,
         "recovery_step": "SILENT_RETRY",
     }
@@ -162,8 +179,7 @@ def handle_refetch_failed(feed_id: str, criticality: str) -> dict[str, object]:
         # audit-ack SLA cadence mapped to severity (lookup_sla is the SSOT).
         "audit_ack_due_seconds": sla.default_seconds,
         "message": (
-            f"refetch-feed:{feed_id} FAILED "
-            f"(failures_in_window={failure_count}, severity={severity.value})"
+            f"{_resolve_bound_action(feed_id)} FAILED (failures_in_window={failure_count}, severity={severity.value})"
         ),
     }
 
