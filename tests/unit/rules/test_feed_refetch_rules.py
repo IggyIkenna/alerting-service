@@ -50,7 +50,9 @@ def _fresh_breaker(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_stale_critical_feed_blocks_orders_and_fires_refetch(mock_log_event: MagicMock) -> None:
     decision = evaluate_stale_critical_feed("binance", "critical")
     assert decision["orders_blocked_by_freshness_gate"] is True  # (a) gate stays closed
-    assert decision["refetch_action"] == "refetch-feed:binance"  # (b) bound SILENT_RETRY
+    # (b) bound SILENT_RETRY — binance is ws-sourced, so the freshness registry
+    # binds ws-session rotation (a REST re-pull cannot revive a dead socket).
+    assert decision["refetch_action"] == "rotate-websocket:binance"
     assert decision["recovery_step"] == "SILENT_RETRY"
 
 
@@ -58,6 +60,12 @@ def test_stale_important_feed_does_not_block_orders(mock_log_event: MagicMock) -
     decision = evaluate_stale_critical_feed("pinnacle", "important")
     assert decision["orders_blocked_by_freshness_gate"] is False
     assert decision["refetch_action"] == "refetch-feed:pinnacle"
+
+
+def test_unknown_feed_falls_back_to_refetch_id(mock_log_event: MagicMock) -> None:
+    # No freshness contract → the record still names a concrete verb.
+    decision = evaluate_stale_critical_feed("no_such_feed", "critical")
+    assert decision["refetch_action"] == "refetch-feed:no_such_feed"
 
 
 # ---------------------------------------------------------------------------
@@ -76,9 +84,7 @@ def test_single_refetch_failure_is_warn_no_advisory(mock_route: MagicMock, mock_
     assert kwargs["channels"] == {"telegram"}
 
 
-def test_repeated_failure_escalates_to_critical_with_advisory(
-    mock_route: MagicMock, mock_log_event: MagicMock
-) -> None:
+def test_repeated_failure_escalates_to_critical_with_advisory(mock_route: MagicMock, mock_log_event: MagicMock) -> None:
     # threshold=3 → 3rd failure opens the breaker → CRITICAL + advisory.
     handle_refetch_failed("binance", "critical")
     handle_refetch_failed("binance", "critical")
