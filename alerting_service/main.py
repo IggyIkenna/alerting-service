@@ -27,6 +27,7 @@ from unified_trading_library import (
 )
 
 from .config import AlertingSystemConfig
+from .dependency_health_runner import run_dependency_health_probing
 from .engine.mock_data_provider import run_mock_pipeline
 from .notifiers.router import get_batch_stats, set_batch_mode
 from .persistence.storage_store import AlertStorageStore, QuietnessReport
@@ -213,7 +214,13 @@ async def main() -> None:
         mode: str = cast(str, args.mode)
         if mode == "live":
             subscriber = AlertSubscriber(project_id=config.gcp_project_id)
-            await _run_subscriber_until_shutdown(subscriber, _shutdown_handler)
+            dep_health_task = asyncio.create_task(run_dependency_health_probing(config))
+            try:
+                await _run_subscriber_until_shutdown(subscriber, _shutdown_handler)
+            finally:
+                dep_health_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await dep_health_task
         else:
             await _run_batch_replay(args, config, _shutdown_handler)
 
