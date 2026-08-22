@@ -8,7 +8,7 @@ in deployment-service) exist because the batch revocation mechanism shipped
 across six green phases with no production caller at all — every component
 complete, tested, and unreachable.
 
-The dependency-health chain has the identical defect and one layer more of it:
+The dependency-health chain has the identical defect and two layers more of it:
 
 * ``DependencyHealthProber`` is instantiated ONLY in tests.
 * ``probe_fn`` — the injection point for a real probe — has no production caller,
@@ -18,18 +18,25 @@ The dependency-health chain has the identical defect and one layer more of it:
   "the missing half" of it — so the fully-wired consumer half
   (``alert_subscriber`` -> ``handle_dependency_health_payload`` ->
   ``evaluate_dependency_health``) has nothing to consume.
+* Even a fully-wired CRITICAL alert only pages: ``handle_dependency_health_payload``
+  routes every dependency alert through ``route_event_with_explicit_channels``
+  (PagerDuty/Telegram only) — never ``route_event``, the only path that calls
+  ``publish_kill_switch_event``. No ``DEPENDENCY_DEGRADED*`` rule_id is registered
+  in UAC's ``LIVE_ALERT_RULES`` either, so routing through ``route_event`` would
+  not arm anything today regardless. A silently-dead strategy-service can page a
+  human forever without the live path ever taking a protective action.
 
 Each layer passes review because each layer genuinely IS finished. Checkbox
 completeness cannot see this class of defect; a guard that asserts the component
 has a live caller can, and it belongs next to the component rather than in a
 checklist somebody has to remember to run.
 
-Both guards below are ``xfail(strict=True)`` — they describe a KNOWN-inert state.
-Strict is the load-bearing part: the moment either is genuinely wired the test
-PASSES, strict turns that pass into a failure, and whoever wired it is forced to
-delete the marker in the same change. That is exactly how the batch guard behaved
-when its call site landed. Do NOT relax strict, and do not delete a marker
-without landing the wiring it describes.
+All three guards below are ``xfail(strict=True)`` — they describe a KNOWN-inert
+state. Strict is the load-bearing part: the moment one is genuinely wired the
+test PASSES, strict turns that pass into a failure, and whoever wired it is
+forced to delete the marker in the same change. That is exactly how the batch
+guard behaved when its call site landed. Do NOT relax strict, and do not delete
+a marker without landing the wiring it describes.
 """
 
 from __future__ import annotations
@@ -125,7 +132,49 @@ def test_the_prober_emits_the_event_its_consumer_waits_for() -> None:
     )
 
 
-def test_both_guards_are_strict() -> None:
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "KNOWN INERT — handle_dependency_health_payload routes every dependency "
+        "alert through route_event_with_explicit_channels (paging channels only); "
+        "nothing on the live path calls publish_kill_switch_event or "
+        "get_kill_switch_bus for a dependency-health alert, and no "
+        "DEPENDENCY_DEGRADED* rule_id is registered in LIVE_ALERT_RULES either. "
+        "Tracked in live_path_has_no_stale_producer_revocation_2026_08_14.md. "
+        "Remove this marker in the same change that wires a real actuator."
+    ),
+)
+def test_a_critical_dependency_alert_reaches_an_actuator_not_only_a_channel() -> None:
+    """A CRITICAL dependency-health alert must change behaviour, not just page.
+
+    The gap this guards: even once the prober runs and emits, the consumer half
+    (``dependency_health_event_handler.py``) only routes to paging channels.
+    Nothing halts, flattens, or protects a live position when an internal
+    dependency (e.g. strategy-service) goes SEV0 — a human has to see the page
+    and act on it manually. Scoped to this ONE file deliberately, not a
+    whole-tree ``_calls_named`` search: ``get_kill_switch_bus`` /
+    ``publish_kill_switch_event`` are already called elsewhere in
+    alerting-service for OTHER alert families, so a tree-wide search would pass
+    today for the wrong reason — the exact false-negative shape the emit guard
+    above already learned from once.
+    """
+    actuator_names = {"publish_kill_switch_event", "_publish_kill_switch_event", "get_kill_switch_bus"}
+    source = (_SERVICE_ROOT / "dependency_health_event_handler.py").read_text(encoding="utf-8")
+    calls = [
+        node
+        for node in ast.walk(ast.parse(source))
+        if isinstance(node, ast.Call)
+        and (getattr(node.func, "attr", None) or getattr(node.func, "id", None)) in actuator_names
+    ]
+    assert calls, (
+        "dependency_health_event_handler.py never calls an actuator that changes "
+        "behaviour (publish_kill_switch_event / get_kill_switch_bus) — a CRITICAL "
+        "dependency outage only pages today; nothing on the live path halts or "
+        "protects a position because an internal dependency went SEV0."
+    )
+
+
+def test_all_guards_are_strict() -> None:
     """The markers must stay ``strict``, or they stop being self-removing.
 
     A non-strict xfail silently absorbs a pass, so wiring the chain would leave
@@ -133,7 +182,11 @@ def test_both_guards_are_strict() -> None:
     whole guard family exists to prevent. This asserts the property directly
     rather than trusting a comment.
     """
-    guarded = (test_the_prober_runs_in_production, test_the_prober_emits_the_event_its_consumer_waits_for)
+    guarded = (
+        test_the_prober_runs_in_production,
+        test_the_prober_emits_the_event_its_consumer_waits_for,
+        test_a_critical_dependency_alert_reaches_an_actuator_not_only_a_channel,
+    )
     for fn in guarded:
         marks = [m for m in fn.pytestmark if m.name == "xfail"]
         assert marks, f"{fn.__name__} lost its xfail marker"
