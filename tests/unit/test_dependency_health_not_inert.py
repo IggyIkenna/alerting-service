@@ -70,20 +70,15 @@ def _calls_named(attr: str) -> list[str]:
     return found
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "KNOWN INERT — DependencyHealthProber is instantiated only in tests, so no "
-        "dependency is ever probed and no health alert can fire. Tracked in "
-        "live_path_has_no_stale_producer_revocation_2026_08_14.md. Remove this marker "
-        "in the same change that instantiates the prober in production."
-    ),
-)
 def test_the_prober_runs_in_production() -> None:
     """Something outside tests must actually construct and run the prober.
 
-    A policy nothing evaluates is indistinguishable from no policy. All 27
-    registered dependencies currently report healthy forever.
+    A policy nothing evaluates is indistinguishable from no policy. Fixed
+    2026-08-22 (live_path_has_no_stale_producer_revocation_2026_08_14.md item
+    1): ``dependency_health_runner.py`` constructs ``DependencyHealthProber``
+    in production, wired into ``main.py``'s live-mode background tasks. No
+    longer xfail — a regression here (the construction call removed/renamed)
+    must fail CI, not silently pass as "expected broken".
     """
     assert _calls_named("DependencyHealthProber"), (
         "DependencyHealthProber is never constructed outside tests — every "
@@ -132,31 +127,21 @@ def test_the_prober_emits_the_event_its_consumer_waits_for() -> None:
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "KNOWN INERT — handle_dependency_health_payload routes every dependency "
-        "alert through route_event_with_explicit_channels (paging channels only); "
-        "nothing on the live path calls publish_kill_switch_event or "
-        "get_kill_switch_bus for a dependency-health alert, and no "
-        "DEPENDENCY_DEGRADED* rule_id is registered in LIVE_ALERT_RULES either. "
-        "Tracked in live_path_has_no_stale_producer_revocation_2026_08_14.md. "
-        "Remove this marker in the same change that wires a real actuator."
-    ),
-)
 def test_a_critical_dependency_alert_reaches_an_actuator_not_only_a_channel() -> None:
     """A CRITICAL dependency-health alert must change behaviour, not just page.
 
-    The gap this guards: even once the prober runs and emits, the consumer half
-    (``dependency_health_event_handler.py``) only routes to paging channels.
-    Nothing halts, flattens, or protects a live position when an internal
-    dependency (e.g. strategy-service) goes SEV0 — a human has to see the page
-    and act on it manually. Scoped to this ONE file deliberately, not a
-    whole-tree ``_calls_named`` search: ``get_kill_switch_bus`` /
-    ``publish_kill_switch_event`` are already called elsewhere in
+    Fixed 2026-08-22 (live_path_has_no_stale_producer_revocation_2026_08_14.md
+    item 1c): ``dependency_health_event_handler._maybe_arm_kill_switch`` calls
+    ``get_kill_switch_bus()`` for a CRITICAL alert whose policy carries a
+    ``kill_switch_scope`` (execution-service, strategy-service — see
+    ``dependency_health_policies.yaml``); every other registered dependency
+    stays alert-only (``kill_switch_scope=None``), unchanged. No longer xfail —
+    a regression back to alert-only must fail CI. Scoped to this ONE file
+    deliberately, not a whole-tree ``_calls_named`` search: ``get_kill_switch_bus``
+    / ``publish_kill_switch_event`` are already called elsewhere in
     alerting-service for OTHER alert families, so a tree-wide search would pass
-    today for the wrong reason — the exact false-negative shape the emit guard
-    above already learned from once.
+    for the wrong reason — the exact false-negative shape the emit guard above
+    already learned from once.
     """
     actuator_names = {"publish_kill_switch_event", "_publish_kill_switch_event", "get_kill_switch_bus"}
     source = (_SERVICE_ROOT / "dependency_health_event_handler.py").read_text(encoding="utf-8")
@@ -175,18 +160,18 @@ def test_a_critical_dependency_alert_reaches_an_actuator_not_only_a_channel() ->
 
 
 def test_all_guards_are_strict() -> None:
-    """The markers must stay ``strict``, or they stop being self-removing.
+    """The remaining marker(s) must stay ``strict``, or they stop being self-removing.
 
     A non-strict xfail silently absorbs a pass, so wiring the chain would leave
     the marker in place claiming the system is still broken — the doc-rot this
     whole guard family exists to prevent. This asserts the property directly
-    rather than trusting a comment.
+    rather than trusting a comment. ``test_the_prober_runs_in_production`` and
+    ``test_a_critical_dependency_alert_reaches_an_actuator_not_only_a_channel``
+    dropped out of this tuple 2026-08-22 once their xfail markers were removed
+    (the wiring they guarded now exists) — only the still-inert producer-emit
+    guard remains.
     """
-    guarded = (
-        test_the_prober_runs_in_production,
-        test_the_prober_emits_the_event_its_consumer_waits_for,
-        test_a_critical_dependency_alert_reaches_an_actuator_not_only_a_channel,
-    )
+    guarded = (test_the_prober_emits_the_event_its_consumer_waits_for,)
     for fn in guarded:
         marks = [m for m in fn.pytestmark if m.name == "xfail"]
         assert marks, f"{fn.__name__} lost its xfail marker"

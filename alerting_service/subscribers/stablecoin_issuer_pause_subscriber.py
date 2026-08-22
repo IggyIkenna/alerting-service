@@ -193,7 +193,7 @@ class MakerDAOPSMPoller:
                     self._psm_address,
                 )
                 return result
-            except Exception as exc:
+            except Exception as exc:  # noqa: broad-except — test-injected callable, arbitrary error shape; fail-safe (None) per this method's own contract
                 logger.warning("MakerDAOPSMPoller mock call error: %s", exc)
                 return None
 
@@ -218,7 +218,7 @@ class MakerDAOPSMPoller:
                 resp.raise_for_status()
                 result_hex = str(cast(dict[str, object], resp.json()).get("result", "0x1"))
                 return int(result_hex, 16)
-        except Exception as exc:
+        except Exception as exc:  # noqa: broad-except — httpx/JSON/int-parse errors all fold to the same fail-safe (None) contract; a probe failure must never false-positive a pause
             logger.warning("MakerDAOPSMPoller RPC call failed: %s", exc)
             return None
 
