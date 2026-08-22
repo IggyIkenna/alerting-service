@@ -168,6 +168,29 @@ class AlertingSystemConfig(UnifiedCloudConfig):
     google_oauth_domain: str = ""
     poll_interval_seconds: int = 10
     metrics_endpoints: ClassVar[dict[str, str]] = {}
+    execution_service_health_url: str = Field(
+        default="",
+        description=(
+            "Health-check URL for execution-service (e.g. "
+            "https://execution-service-xxx.a.run.app/health). Probed by "
+            "dependency_health_runner.py for the execution_service_health "
+            "dependency policy (kill_switch_scope=GLOBAL on SEV0). Env "
+            "EXECUTION_SERVICE_HEALTH_URL. Empty = probe fails open (reports "
+            "healthy) — same fail-open default as every unconfigured "
+            "dependency probe today."
+        ),
+    )
+    strategy_service_health_url: str = Field(
+        default="",
+        description=(
+            "Health-check URL for strategy-service (e.g. "
+            "https://strategy-service-xxx.a.run.app/health). Probed by "
+            "dependency_health_runner.py for the strategy_service_health "
+            "dependency policy (kill_switch_scope=STRATEGY on SEV0). Env "
+            "STRATEGY_SERVICE_HEALTH_URL. Empty = probe fails open (reports "
+            "healthy)."
+        ),
+    )
     run_subscriber_in_api: bool = Field(
         default=False,
         description=(

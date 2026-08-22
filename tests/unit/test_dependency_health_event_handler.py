@@ -9,8 +9,9 @@ and routed to the correct channels. Routing is asserted via a patched
 
 from __future__ import annotations
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from unified_api_contracts import KillSwitchScope
 from unified_api_contracts.dependency import DependencyClass, DependencyHealthPolicy
 
 from alerting_service.dependency_health_event_handler import (
@@ -29,6 +30,7 @@ def _policy(
     warning_buffer_seconds: int = 60,
     human_investigation_buffer_seconds: int = 900,
     hard_escalation_seconds: int = 1800,
+    kill_switch_scope: KillSwitchScope | None = None,
 ) -> DependencyHealthPolicy:
     return DependencyHealthPolicy(
         dependency_id=dependency_id,
@@ -40,6 +42,7 @@ def _policy(
         fallback_available=fallback_available,
         owner="platform",
         runbook_doc="codex/15-runbooks/incidents/rb_conn_001.md",
+        kill_switch_scope=kill_switch_scope,
     )
 
 
@@ -111,3 +114,69 @@ class TestHandleDependencyRecovered:
         with patch("alerting_service.dependency_health_event_handler.route_event_with_explicit_channels") as mock_route:
             handle_dependency_recovered_payload({"dependency_id": "binance_rest", "previous_outage_seconds": 0})
         mock_route.assert_not_called()
+
+
+class TestKillSwitchActuator:
+    """Item 1c of live_path_has_no_stale_producer_revocation_2026_08_14.md:
+    a CRITICAL alert on a dependency whose policy carries kill_switch_scope
+    ALSO arms the kill switch — every other (kill_switch_scope=None) policy
+    stays alert-only, unchanged."""
+
+    def test_critical_with_scope_arms_kill_switch(self) -> None:
+        set_dependency_policies([_policy(kill_switch_scope=KillSwitchScope.STRATEGY)])
+        mock_bus = MagicMock()
+        with (
+            patch("alerting_service.dependency_health_event_handler.route_event_with_explicit_channels"),
+            patch(
+                "alerting_service.dependency_health_event_handler.get_kill_switch_bus",
+                return_value=mock_bus,
+            ) as mock_get_bus,
+        ):
+            handle_dependency_health_payload({"dependency_id": "binance_rest", "current_outage_seconds": 1800.0})
+        mock_get_bus.assert_called_once()
+        mock_bus.fire.assert_called_once()
+        args, kwargs = mock_bus.fire.call_args
+        assert args[0] == KillSwitchScope.STRATEGY
+        assert args[1] is None  # scope_key — wildcard halt, this is a whole-service probe
+        assert kwargs["fired_by"] == "alerting-service:dependency_health"
+
+    def test_critical_without_scope_does_not_arm(self) -> None:
+        set_dependency_policies([_policy(kill_switch_scope=None)])
+        with (
+            patch("alerting_service.dependency_health_event_handler.route_event_with_explicit_channels"),
+            patch("alerting_service.dependency_health_event_handler.get_kill_switch_bus") as mock_get_bus,
+        ):
+            handle_dependency_health_payload({"dependency_id": "binance_rest", "current_outage_seconds": 1800.0})
+        mock_get_bus.assert_not_called()
+
+    def test_warn_tier_with_scope_does_not_arm(self) -> None:
+        set_dependency_policies([_policy(kill_switch_scope=KillSwitchScope.GLOBAL)])
+        with (
+            patch("alerting_service.dependency_health_event_handler.route_event_with_explicit_channels"),
+            patch("alerting_service.dependency_health_event_handler.get_kill_switch_bus") as mock_get_bus,
+        ):
+            handle_dependency_health_payload({"dependency_id": "binance_rest", "current_outage_seconds": 120.0})
+        mock_get_bus.assert_not_called()
+
+    def test_bus_failure_does_not_break_paging(self) -> None:
+        set_dependency_policies([_policy(kill_switch_scope=KillSwitchScope.GLOBAL)])
+        with (
+            patch("alerting_service.dependency_health_event_handler.route_event_with_explicit_channels") as mock_route,
+            patch(
+                "alerting_service.dependency_health_event_handler.get_kill_switch_bus",
+                side_effect=RuntimeError("bus down"),
+            ),
+            patch("alerting_service.dependency_health_event_handler.classify_and_emit_error") as mock_classify,
+        ):
+            handle_dependency_health_payload({"dependency_id": "binance_rest", "current_outage_seconds": 1800.0})
+        mock_route.assert_called_once()
+        mock_classify.assert_called_once()
+
+    def test_recovered_alert_never_arms(self) -> None:
+        set_dependency_policies([_policy(kill_switch_scope=KillSwitchScope.STRATEGY)])
+        with (
+            patch("alerting_service.dependency_health_event_handler.route_event_with_explicit_channels"),
+            patch("alerting_service.dependency_health_event_handler.get_kill_switch_bus") as mock_get_bus,
+        ):
+            handle_dependency_recovered_payload({"dependency_id": "binance_rest", "previous_outage_seconds": 300.0})
+        mock_get_bus.assert_not_called()
